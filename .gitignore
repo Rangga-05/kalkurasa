@@ -1,0 +1,33 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Vercel
+.vercel/
+
+# Go binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/backend/cmd/api/api
+/backend/cmd/migrate/migrate
+/backend/cmd/seed/seed
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
