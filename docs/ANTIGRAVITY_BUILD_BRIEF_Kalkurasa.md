@@ -585,6 +585,8 @@ README wajib memuat: deskripsi masalah dan solusi, fitur, tech stack beserta ala
 
 **Risiko Vercel yang perlu diwaspadai:** cold start membuat request pertama lebih lambat; koneksi database harus kecil dan dibuka per instance; tidak ada job terjadwal (kedaluwarsa DP sudah memakai pengecekan malas di Bagian 8.4).
 
+**Ketentuan guidebook GTNIC:** website live dan repository wajib publik hingga kompetisi berakhir; browser yang diuji mencakup Chrome, Firefox, Safari, dan Edge; proposal wajib memuat diagram database dan daftar teknologi beserta alasannya. Pastikan proyek Supabase dan Vercel tetap aktif selama kompetisi, termasuk Grand Final 14 November (live pitching via Zoom).
+
 ---
 
 ## 14. Urutan pengerjaan (kerjakan berurutan)

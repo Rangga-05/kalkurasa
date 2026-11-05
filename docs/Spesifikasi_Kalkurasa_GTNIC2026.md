@@ -19,9 +19,9 @@ Dokumen ini hanya memuat kebutuhan produk. Arsitektur, skema database, dan pemba
 |---|---|
 | Tema | Accelerating Digital Transformation for Business and SMEs (Business, UMKM, Digital Economy) |
 | Jadwal | Deadline 10 Nov 2026 pukul 23.59 WIB; pengumuman Top 5 pada 12 Nov; Grand Final dan Exhibition via Zoom pada 14 Nov |
-| Pengumpulan | Website live publik; repository GitHub publik; proposal PDF maks. 15 halaman (A4, Times New Roman 12 pt, spasi 1,5, margin kiri 4 cm dan lainnya 3 cm, logo GTNIC 2026 di cover); video demo 3–5 menit publik; Surat Pernyataan Keaslian Karya; nama file GTNIC2026_WebDev_NamaTim.pdf |
+| Pengumpulan (Google Form resmi, nama tim dicantumkan) | Tautan website live; tautan repository GitHub (akses publik); proposal PDF maks. 15 halaman (A4, Times New Roman 12 pt, spasi 1,5, margin kiri 4 cm dan lainnya 3 cm, logo GTNIC 2026 di cover, bahasa Indonesia atau Inggris); tautan video demo 3–5 menit (YouTube atau Google Drive, akses publik); Surat Pernyataan Keaslian Karya; nama file proposal GTNIC2026_WebDev_NamaTim.pdf. Website live dan repository wajib tetap publik hingga kompetisi berakhir |
 | Teknis | Bukan mockup; data tersimpan di database; form, validasi, tambah/ubah/hapus; alur utama end-to-end; responsif desktop, tablet, ponsel; uji browser utama; feedback, loading, dan pesan error; keamanan dasar; tanpa kredensial di repo; README lengkap; data seed realistis; akun demo untuk juri tanpa rahasia sensitif |
-| Orisinalitas | AI untuk membantu coding boleh jika tim memahami dan bisa mempertanggungjawabkan hasilnya; data simulasi harus ditandai jelas |
+| Orisinalitas | Karya 100% orisinal, buatan sendiri, belum pernah dipublikasikan atau memenangkan lomba lain; tidak menyalin kode repository lain tanpa modifikasi signifikan; library, framework, dan aset open-source boleh bila sesuai lisensi dan didokumentasikan di proposal. Aturan penggunaan AI coding assistant tidak disebut di guidebook, jadi perlu dikonfirmasi ke panitia. Data simulasi harus ditandai jelas |
 
 | Kriteria rubrik (bobot) | Cara spesifikasi ini menjawabnya |
 |---|---|
@@ -293,7 +293,7 @@ Prioritas: M Must, S Should, C Could, W Won't.
 | ID | Kebutuhan | P |
 |---|---|---|
 | NFR-01 | Responsif pada lebar 360, 768, dan 1280 px tanpa scroll horizontal untuk konten utama | M |
-| NFR-02 | Diuji di dua versi terbaru Chrome, Firefox, dan Edge (Safari bila memungkinkan); hasil didokumentasikan | M |
+| NFR-02 | Diuji di Chrome, Firefox, Edge, dan Safari (dua versi terbaru bila memungkinkan; Safari dapat diuji lewat iPhone atau Mac milik teman); hasil didokumentasikan | M |
 | NFR-03 | Status loading, kosong, error, dan sukses pada semua daftar dan aksi tulis | M |
 | NFR-04 | Validasi di klien dan server; pesan error spesifik berbahasa Indonesia | M |
 | NFR-05 | Keamanan dasar: kata sandi di-hash; hak akses di server; perlindungan XSS, injeksi, dan CSRF; tidak ada .env, token, atau API key di repository; variabel lingkungan didokumentasikan tanpa nilai rahasia | M |
@@ -305,6 +305,7 @@ Prioritas: M Must, S Should, C Could, W Won't.
 | NFR-11 | Aksesibilitas dasar: kontras memadai, label form, navigasi keyboard utama | S |
 | NFR-12 | Antarmuka berbahasa Indonesia; format Rp, tanggal, dan zona WIB | M |
 | NFR-13 | Kode terorganisasi, riwayat commit bermakna, repository publik | M |
+| NFR-14 | Website dan repository tetap publik dan dapat diakses hingga kompetisi berakhir; data demo dapat direset cepat sebelum live pitching | M |
 
 ## 12. Data demo dan objek data
 
@@ -335,8 +336,10 @@ Kapasitas awal: tenaga 4 × 420 × 0,85 = 1.428 menit; oven 2 × 8 × 0,85 = 13,
 ## 14. Kebutuhan dokumentasi dan demo
 
 - **README:** masalah, solusi, fitur, target pengguna, tech stack dan alasannya, arsitektur, cara menjalankan, variabel lingkungan tanpa nilai rahasia, link demo, screenshot, akun demo, dokumentasi API dan skema database bila relevan.
-- **Proposal (bagian yang diminta brief):** judul dan nama tim, latar belakang masalah, tujuan dan manfaat, solusi dan target pengguna, arsitektur sistem, diagram database, teknologi beserta alasan, fitur utama, keunikan, batasan, screenshot implementasi, rencana pengembangan.
-- **Video demo 3–5 menit:** memperlihatkan alur utama AU-1 dan skenario S1, S3, dan S5, bukan tur halaman.
+- **Proposal PDF (format wajib):** maks. 15 halaman, A4, Times New Roman 12 pt, spasi 1,5, margin kiri 4 cm dan lainnya 3 cm, logo GTNIC 2026 di cover, nama file GTNIC2026_WebDev_NamaTim.pdf. Isi: judul karya dan nama tim; latar belakang masalah operasional atau bisnis UMKM; tujuan, manfaat, dan solusi teknologi; target pengguna atau pasar; arsitektur sistem, skema basis data (diagram database), dan teknologi yang dipakai beserta alasannya; fitur utama dan keunikan dibanding sistem serupa; batasan sistem; tangkapan layar antarmuka yang sudah diimplementasikan; rencana pengembangan lanjutan. Dokumentasikan library dan aset pihak ketiga beserta lisensinya. Guidebook menyebut proposal sebagai UX Case Study dan memperbolehkan sub-bab desain tambahan selama tidak melebihi 15 halaman, jadi sertakan ringkasan persona, alur pengguna, dan alasan keputusan desain.
+- **Video demo 3–5 menit (YouTube atau Google Drive, akses publik):** perkenalan singkat anggota tim; penjelasan latar belakang masalah dan solusi (boleh berbentuk pitching); lalu demonstrasi alur utama AU-1 dan skenario S1, S3, dan S5, bukan tur halaman.
+- **Pengumpulan:** Google Form resmi paling lambat 10 November 2026 pukul 23.59 WIB, berisi nama tim, tautan website live, tautan repository publik, proposal PDF, tautan video demo, dan Surat Pernyataan Keaslian Karya (templat tidak ada di guidebook, tanyakan ke panitia).
+- **Grand Final 14 November 2026 (hanya Top 5):** live pitching dan demonstrasi langsung via Zoom. Siapkan skenario demo yang stabil dan data seed yang bisa direset cepat.
 
 ## 15. Asumsi, risiko, dan hal yang perlu dikonfirmasi
 
@@ -350,7 +353,7 @@ Kapasitas awal: tenaga 4 × 420 × 0,85 = 1.428 menit; oven 2 × 8 × 0,85 = 13,
 - Dampak bisnis hanya simulasi: selalu berlabel.
 - Empat dashboard memperbesar pekerjaan UI: batasi tiap dashboard pada maksimal lima elemen.
 
-**Perlu dikonfirmasi ke panitia (tidak disebut jelas di brief):** apakah demo dampak berbasis data simulasi berlabel dapat diterima; format dan tempat penyajian akun demo untuk juri; apakah ada persyaratan platform deployment tertentu (brief hanya menyebut platform publik).
+**Perlu dikonfirmasi ke panitia (tidak disebut jelas di guidebook):** kebijakan penggunaan AI coding assistant; templat Surat Pernyataan Keaslian Karya; apakah demo dampak berbasis data simulasi berlabel dapat diterima; format dan tempat penyajian akun demo untuk juri; apakah ada persyaratan platform deployment tertentu (guidebook hanya menyebut platform publik seperti Vercel, Netlify, Render, atau VPS).
 
 ## 16. Pertanyaan terbuka
 
