@@ -62,3 +62,51 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** `db.New()` mengembalikan pesan error generik tanpa menyertakan DSN asli. `/api/healthz` menyaring field `db_error` dari kata kunci sensitif (`password`, `postgres://`, `@`) dan memotong pesan panjang.
 **Alasan:** Mencegah kebocoran kredensial database melalui log server atau respons API. Sesuai NFR-05 di spesifikasi.
 
+
+---
+
+## Tahap 1A — Engine bisnis (fungsi murni)
+
+### A1-01: Cakupan Tahap 1A
+**Keputusan:** Hanya fungsi yang diminta: Capacity, DayLoads, Utilization, DayUtilization, DayStatus, UnitCost, Margin, MinPrice, MaxDiscount, ShoppingNeed, CancellationExposure, Deviation, ShouldRecalibrate. ProjectCash, MinDP, DPCharged, EvaluateOrder, dan TC-04 ditunda ke Tahap 1B.
+**Alasan:** Sesuai instruksi Tahap 1A; TC-04 bergantung pada ProjectCash/MinDP/DPCharged.
+
+### A1-02: Helper `Average` ditambahkan
+**Keputusan:** `engine.Average([]decimal.Decimal)` ditambahkan (tidak ada di daftar Bagian 7).
+**Alasan:** TC-07 menuntut "rata-rata 102" dan rumus BR-12 butuh rata-rata aktual; menaruhnya di engine mencegah rumus bocor ke lapisan lain.
+
+### A1-03: Pembagian memakai presisi eksplisit 18 digit
+**Keputusan:** Semua pembagian memakai `DivRound(x, 18)`, bukan `decimal.Div`.
+**Alasan:** `decimal.DivisionPrecision` adalah variabel global; presisi eksplisit membuat hasil deterministik. Sesuai BR-15, tidak ada pembulatan di dalam engine, pembulatan hanya untuk tampilan.
+
+### A1-04: Batas status hari inklusif ke status berikutnya
+**Keputusan:** util < 0,70 hijau; 0,70 ≤ util < 0,90 kuning; 0,90 ≤ util ≤ 1,00 merah; util > 1,00 penuh. Batas 1,00 tetap, hanya dua ambang lain yang dapat diatur.
+**Alasan:** Mengikuti BR-04 ("70% sampai di bawah 90%", "90% sampai 100%", "di atas 100%").
+
+### A1-05: Penghambat saat seri dipilih alfabetis
+**Keputusan:** Bila dua sumber daya punya utilisasi sama, kode yang lebih dulu secara alfabet jadi penghambat; iterasi memakai kunci terurut.
+**Alasan:** Iterasi map Go acak; hasil harus deterministik (NFR-08).
+
+### A1-06: Penjaga pembagi nol mengembalikan 0
+**Keputusan:** Utilization (kapasitas ≤ 0), Margin (harga ≤ 0), MinPrice (margin minimum ≥ 1), MaxDiscount (harga ≤ 0), Deviation (estimasi ≤ 0) mengembalikan 0 tanpa panic.
+**Alasan:** Fungsi murni tanpa error pada signature brief; skema database sudah menjamin kapasitas dan harga valid, jadi ini hanya pengaman.
+
+### A1-07: MaxDiscount dibatasi minimal 0
+**Keputusan:** Bila harga minimal melebihi harga normal, diskon maksimum 0, bukan angka negatif.
+**Alasan:** Diskon negatif tidak bermakna bagi pengguna; ini satu-satunya penyimpangan dari rumus mentah BR-06 `1 − min/harga`.
+
+### A1-08: ShoppingNeed — kasus tepi pembulatan
+**Keputusan:** `need = 0` memberi `buy = 0`. Rounding `pack` dengan `packSize ≤ 0`, atau nilai rounding tak dikenal, memakai pembulatan `loose`. `buy` dinyatakan dalam satuan pakai (kelipatan packSize untuk `pack`).
+**Alasan:** Menghindari pembagian nol dan nilai tak terdefinisi; TC-05 menunjukkan `pack 25 → buy 25` dalam satuan pakai (kg).
+
+### A1-09: Beban yang sudah ada dinyatakan sebagai LoadItem dengan Qty = 1
+**Keputusan:** Beban existing yang hanya diketahui totalnya (mis. tenaga 1.020 menit pada TC-01) dimasukkan sebagai `LoadItem{Qty: 1, Load: total}`.
+**Alasan:** BR-02 mendefinisikan beban sebagai Σ(qty × beban); satu tipe cukup untuk beban agregat dan beban per produk.
+
+### A1-10: Tanpa state global di engine
+**Keputusan:** Ambang BR-12 (0,10) berupa fungsi dan jumlah sampel minimum berupa konstanta, bukan variabel paket; engine tidak mengimpor time, database, maupun HTTP.
+**Alasan:** Aturan Bagian 1 butir 2 dan instruksi Tahap 1A.
+
+### A1-11: Perilaku `ShouldRecalibrate` pada tepat 10%
+**Keputusan:** |deviasi| tepat 0,10 tidak memicu saran (harus di atas 0,10); tepat 5 sampel sudah cukup.
+**Alasan:** BR-12 berbunyi "di atas 10%" dan "sampel minimal 5".
