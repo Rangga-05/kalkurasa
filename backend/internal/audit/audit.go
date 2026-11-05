@@ -11,8 +11,12 @@ import (
 
 // Nilai kolom action (sesuai komentar skema audit_logs).
 const (
-	ActionMaster  = "master"
-	ActionSetting = "setting"
+	ActionMaster   = "master"
+	ActionSetting  = "setting"
+	ActionDecision = "decision"
+	ActionOverride = "override"
+	ActionPayment  = "payment"
+	ActionStatus   = "status"
 )
 
 // Log menulis satu baris audit di dalam transaksi q yang sama dengan perubahan
@@ -24,6 +28,10 @@ func Log(ctx context.Context, q db.DBTX, actorID, action, entity, entityID strin
 		return fmt.Errorf("audit: marshal detail: %w", err)
 	}
 
+	var aid any
+	if actorID != "" {
+		aid = actorID
+	}
 	var eid any
 	if entityID != "" {
 		eid = entityID
@@ -31,7 +39,7 @@ func Log(ctx context.Context, q db.DBTX, actorID, action, entity, entityID strin
 	_, err = q.Exec(ctx,
 		`INSERT INTO audit_logs (actor_id, action, entity, entity_id, detail)
 		 VALUES ($1::uuid, $2, $3, $4::uuid, $5::jsonb)`,
-		actorID, action, entity, eid, string(b))
+		aid, action, entity, eid, string(b))
 	if err != nil {
 		return fmt.Errorf("audit: insert: %w", err)
 	}

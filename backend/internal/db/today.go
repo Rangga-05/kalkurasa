@@ -27,10 +27,18 @@ func init() {
 // or the demo_today row does not exist. Errors are silently ignored and
 // the real date is returned.
 func Today(ctx context.Context, pool *pgxpool.Pool) time.Time {
-	if pool != nil {
+	if pool == nil {
+		return TodayQ(ctx, nil)
+	}
+	return TodayQ(ctx, pool)
+}
+
+// TodayQ works with any DBTX (*pgxpool.Pool or pgx.Tx).
+func TodayQ(ctx context.Context, q DBTX) time.Time {
+	if q != nil {
 		var raw *string
-		err := pool.QueryRow(ctx,
-			`SELECT value#>>'{}'  FROM settings WHERE key = 'demo_today'`,
+		err := q.QueryRow(ctx,
+			`SELECT value#>>'{}' FROM settings WHERE key = 'demo_today'`,
 		).Scan(&raw)
 		if err == nil && raw != nil && *raw != "" && *raw != "null" {
 			if parsed, parseErr := time.ParseInLocation("2006-01-02", *raw, jakarta); parseErr == nil {
@@ -41,4 +49,10 @@ func Today(ctx context.Context, pool *pgxpool.Pool) time.Time {
 
 	return time.Now().In(jakarta).Truncate(24 * time.Hour)
 }
+
+// ParseDate parses a YYYY-MM-DD string in Asia/Jakarta timezone.
+func ParseDate(s string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", s, jakarta)
+}
+
 

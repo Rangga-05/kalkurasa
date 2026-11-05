@@ -181,7 +181,7 @@ Content-Type: application/json
   "email": "staf2@demo.test",
   "name": "Siti (Karyawan Dapur)",
   "role": "staff",
-  "password": "PasswordAman123!",
+  "password": "{{demoPassword}}",
   "is_active": true
 }
 
@@ -192,4 +192,71 @@ Content-Type: application/json
 ### 5.1 Karyawan mengakses proyeksi kas -> 403 Forbidden
 GET {{api}}/cash/projection
 Authorization: Bearer {{loginStaff.response.body.data.token}}
+
+### ============================================================================
+### 6. ALUR PESANAN INTI — TAHAP 3A (/public/* dan POST /orders)
+### ============================================================================
+
+### 6.1 Katalog Produk Aktif (Publik)
+GET {{api}}/public/products
+Accept: application/json
+
+### 6.2 Cek Ketersediaan Tanggal (Publik — G1 & G4)
+POST {{api}}/public/availability
+Content-Type: application/json
+
+{
+  "from": "2026-11-10",
+  "to": "2026-11-20",
+  "items": [
+    {
+      "product_id": "{{createProduct.response.body.data.id}}",
+      "qty": 20
+    }
+  ]
+}
+
+### 6.3 Buat Pesanan Publik (POST /public/orders)
+# @name createPublicOrder
+POST {{api}}/public/orders
+Content-Type: application/json
+
+{
+  "customer_name": "Bapak Hendra",
+  "customer_contact": "081234567890",
+  "delivery_type": "pickup",
+  "notes": "Ambil jam 09.00 pagi",
+  "event_date": "2026-11-15",
+  "items": [
+    {
+      "product_id": "{{createProduct.response.body.data.id}}",
+      "qty": 20
+    }
+  ]
+}
+
+### 6.4 Lacak Pesanan Publik (GET /public/orders/:code — hanya field aman)
+GET {{api}}/public/orders/{{createPublicOrder.response.body.data.code}}
+Accept: application/json
+
+### 6.5 Buat Pesanan Manual (Manager / Owner — mendukung negosiasi unit_price)
+POST {{api}}/orders
+Authorization: Bearer {{loginManager.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "customer_name": "PT Maju Bersama",
+  "customer_contact": "081122334455",
+  "delivery_type": "delivery",
+  "address": "Jl. Asia Afrika No. 88, Bandung",
+  "event_date": "2026-11-15",
+  "items": [
+    {
+      "product_id": "{{createProduct.response.body.data.id}}",
+      "qty": 100,
+      "unit_price": 21000
+    }
+  ]
+}
+
 

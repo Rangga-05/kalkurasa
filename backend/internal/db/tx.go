@@ -29,8 +29,8 @@ func WithTx(ctx context.Context, c Conn, fn func(tx pgx.Tx) error) error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := fn(tx); err != nil {
-		_ = tx.Rollback(ctx)
 		return err
 	}
 	return tx.Commit(ctx)

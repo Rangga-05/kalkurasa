@@ -16,6 +16,7 @@ import (
 	"kalkurasa/backend/internal/config"
 	"kalkurasa/backend/internal/db"
 	"kalkurasa/backend/internal/httpx"
+	"kalkurasa/backend/internal/orders"
 	"kalkurasa/backend/internal/settings"
 	"kalkurasa/backend/internal/users"
 )
@@ -33,6 +34,15 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 // NewWithStore creates and configures the Gin engine with a custom auth.UserStore
 // (used by unit tests to test authentication, RBAC, and validation without a DB).
 func NewWithStore(cfg *config.Config, pool *pgxpool.Pool, store auth.UserStore) *gin.Engine {
+	var dbConn db.Conn
+	if pool != nil {
+		dbConn = pool
+	}
+	return NewWithConn(cfg, pool, dbConn, store)
+}
+
+// NewWithConn creates and configures the Gin engine with custom db.Conn and auth.UserStore.
+func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store auth.UserStore) *gin.Engine {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -68,11 +78,6 @@ func NewWithStore(cfg *config.Config, pool *pgxpool.Pool, store auth.UserStore) 
 		c.JSON(http.StatusOK, resp)
 	})
 
-	var dbConn db.Conn
-	if pool != nil {
-		dbConn = pool
-	}
-
 	if store == nil {
 		store = auth.UnavailableStore{}
 	}
@@ -91,11 +96,13 @@ func NewWithStore(cfg *config.Config, pool *pgxpool.Pool, store auth.UserStore) 
 	settingsHandler := &settings.Handler{DB: dbConn}
 	catalogHandler := &catalog.Handler{DB: dbConn}
 	usersHandler := &users.Handler{DB: dbConn}
+	ordersHandler := &orders.Handler{DB: dbConn}
 
 	readMaster := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleAdmin)
 	writeMaster := auth.RequireRole(auth.RoleManager, auth.RoleAdmin)
 	readIngredients := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleAdmin, auth.RoleStaff)
 	adminOnly := auth.RequireRole(auth.RoleAdmin)
+	manageOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -103,11 +110,20 @@ func NewWithStore(cfg *config.Config, pool *pgxpool.Pool, store auth.UserStore) 
 		v1.POST("/auth/login", authHandler.Login)
 		v1.POST("/auth/logout", authHandler.Logout)
 
+		// Public order & catalog endpoints (Tahap 3A)
+		v1.GET("/public/products", ordersHandler.PublicProducts)
+		v1.POST("/public/availability", ordersHandler.PublicAvailability)
+		v1.POST("/public/orders", ordersHandler.CreatePublicOrder)
+		v1.GET("/public/orders/:code", ordersHandler.TrackPublicOrder)
+
 		// Protected endpoints (require valid session cookie or Bearer token)
 		protected := v1.Group("")
 		protected.Use(guard.Authenticate())
 		{
 			protected.GET("/auth/me", authHandler.Me)
+
+			// Internal orders (Tahap 3A: manual order creation by manager or owner)
+			protected.POST("/orders", manageOrders, ordersHandler.CreateManualOrder)
 
 			// Settings: owner full access; manager read-only without cash keys
 			protected.GET("/settings",

@@ -198,3 +198,28 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** `backend/cmd/seed` pada Tahap 2 mengisi secara idempoten (`ON CONFLICT DO UPDATE`): 4 pengguna demo (`owner@demo.test`, `manager@demo.test`, `staff@demo.test`, `admin@demo.test`) dengan kata sandi wajib dari variabel lingkungan `SEED_DEMO_PASSWORD`, 2 sumber daya (`oven` dan `labor`), serta seluruh 17 kunci `settings` sesuai tabel Bagian 5 brief. Seed produk, bahan, resep, dan pesanan demo lengkap ditunda ke Tahap 7 sesuai instruksi.
 **Alasan:** Menjaga agar tidak ada kata sandi yang ditulis di kode sumber (NFR-05) dan mengikuti pembagian tahap pada prompt Tahap 2.
 
+---
+
+## Tahap 3A — Alur Pesanan Inti (Publik, Availability, Kunci Hari, dan Evaluasi)
+
+### A3-01: Penguncian baris `day_locks` terurut untuk tanggal produksi dan jendela kandidat tawaran balik
+**Keputusan:** Di dalam transaksi `CreateOrder`, `LockDays` mengurutkan secara menaik (`YYYY-MM-DD`) tanggal produksi pesanan beserta 15 hari berikutnya (jendela pencarian tawaran balik), lalu menjalankan `INSERT INTO day_locks(day) VALUES ($1::date) ON CONFLICT DO NOTHING` diikuti `SELECT day FROM day_locks WHERE day = $1::date FOR UPDATE`. Tidak ada *advisory lock* yang dipakai.
+**Alasan:** Mengikuti Bagian 8.1 butir 2 secara persis, mencegah *deadlock* saat dua transaksi mengunci rentang tanggal yang beririsan, dan memastikan evaluasi kapasitas maupun tawaran balik melihat data beban yang konsisten.
+
+### A3-02: Penentuan status awal `accepted` vs `pending_decision`
+**Keputusan:** Pesanan baru berstatus `accepted` (kapasitas langsung direservasi karena kueri beban menghitung status `accepted`, `confirmed`, dan `in_production`) hanya bila keempat gerbang G1..G4 lolos (`recommendation == "accept"`) **dan** `total < big_order_total` **dan** total unit `< big_order_units`. Pada status `accepted`, `dp_required` diisi `DPCharged` dan `dp_deadline` diisi `now() + dp_deadline_hours`. Selain itu, pesanan berstatus `pending_decision` dengan `dp_deadline = null` (kapasitas belum direservasi sampai diputuskan pada Tahap 3B).
+**Alasan:** Mengikuti Bagian 8.1 butir 5 dan BR-11 (pesanan besar ≥ Rp 2.000.000 atau ≥ 50 unit wajib persetujuan manusia).
+
+### A3-03: Kode pesanan publik 10 karakter base32 tanpa karakter ambigu
+**Keputusan:** Kode pesanan (`orders.code`) dibangkitkan sepanjang 10 karakter acak menggunakan `crypto/rand` dari alfabet 32 karakter `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (tanpa `0`, `O`, `1`, `I`). `GET /api/v1/public/orders/:code` menormalisasi input ke huruf besar, menolak format tidak valid dengan `404 Not Found`, dan hanya mengembalikan field aman (tanpa `unit_cost`, `margin`, `snapshot`, atau proyeksi kas).
+**Alasan:** Memenuhi Bagian 6 brief dan TC-09 bagian pelanggan (menebak kode pesanan orang lain tidak mungkin dilakukan secara sekuensial dan selalu menghasilkan 404).
+
+### A3-04: Pembatasan laju berbasis tabel `rate_limits` dengan pembersihan malas (*lazy cleanup*)
+**Keputusan:** `POST /api/v1/public/orders` dibatasi 30 permintaan/menit/IP dan `POST /api/v1/public/availability` dibatasi 60 permintaan/menit/IP (IP diambil dari elemen pertama `X-Forwarded-For` atau `ClientIP()`). Setiap pemeriksaan menjalankan `DELETE FROM rate_limits WHERE window_start < date_trunc('minute', now()) - interval '10 minutes'` diikuti `INSERT ... ON CONFLICT (key, window_start) DO UPDATE SET count = rate_limits.count + 1 RETURNING count`.
+**Alasan:** Menjaga backend tetap *stateless* di fungsi serverless Vercel sesuai Bagian 6 brief.
+
+### A3-05: Isolasi test integrasi database dengan *in-memory mock* / skema sementara
+**Keputusan:** Test integrasi `orders_test.go` (TC-08, TC-10, dan TC-09 bagian pelanggan) membuat fixture data uji sendiri secara terisolasi tanpa menyentuh tabel pada skema `public` produksi.
+**Alasan:** Memenuhi instruksi Tahap 3A bahwa fixture data uji dibuat di dalam test dan tidak mengotori database produksi/demo.
+
+
