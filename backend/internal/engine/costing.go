@@ -41,4 +41,3 @@ func MaxDiscount(price, minPrice decimal.Decimal) decimal.Decimal {
 	}
 	return d
 }
-

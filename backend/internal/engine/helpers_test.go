@@ -48,4 +48,3 @@ func testCaps() map[string]decimal.Decimal {
 		"oven":  Capacity(testOven),
 	}
 }
-

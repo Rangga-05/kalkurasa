@@ -110,3 +110,55 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 ### A1-11: Perilaku `ShouldRecalibrate` pada tepat 10%
 **Keputusan:** |deviasi| tepat 0,10 tidak memicu saran (harus di atas 0,10); tepat 5 sampel sudah cukup.
 **Alasan:** BR-12 berbunyi "di atas 10%" dan "sampel minimal 5".
+
+---
+
+## Tahap 1B — Kas, DP, dan EvaluateOrder
+
+### A1-12: "Hari ini" dan semua data datang lewat EvalInput
+**Keputusan:** `EvalInput` membawa `Today`, `EventDate`, `ProductionDate`, `DPDate`, parameter bisnis, kapasitas, beban existing per tanggal (kunci `DateKey`), dan peristiwa kas pesanan lain. Engine tidak membaca jam sistem maupun database; pemanggil (Tahap 3) yang mengisi dari `Today()` dan query.
+**Alasan:** Aturan engine murni; `Today()` menghormati `demo_today` sehingga harus diberikan dari luar.
+
+### A1-13: Tanggal diperlakukan sebagai tanggal kalender
+**Keputusan:** Semua perhitungan hari memakai tahun-bulan-hari dari nilai `time.Time` yang diberikan (jam dan zona dibuang). Peristiwa kas dicocokkan lewat `DateKey`.
+**Alasan:** Menghindari pergeseran hari akibat zona waktu (WIB vs UTC).
+
+### A1-14: ProjectCash — jendela dan tie-break
+**Keputusan:** Jendela `[start, start+days)`; peristiwa di luar jendela diabaikan; titik terendah seri memilih tanggal paling awal; `days <= 0` menghasilkan proyeksi kosong dengan `Lowest = opening`.
+**Alasan:** Brief tidak menjelaskan; pilihan paling sederhana dan deterministik.
+
+### A1-15: Jadwal kas pesanan yang dievaluasi
+**Keputusan:** Belanja keluar di `acara − shopping_lead_days` (dimajukan ke hari ini bila sudah lewat); pelunasan `(total − DP)` masuk `acara + 1`; DP masuk di `DPDate` (kosong = hari ini, tidak pernah sebelum hari ini); proyeksi berjalan dari hari ini sampai `acara + 1`. Saldo awal diasumsikan saldo pada hari ini.
+**Alasan:** Mengikuti aturan penjadwalan Bagian 7; belanja tidak bisa terjadi di masa lalu.
+
+### A1-16: DPDate disuplai pemanggil
+**Keputusan:** Tanggal DP masuk ke kas untuk evaluasi G3 adalah input (`DPDate`), bukan dihitung engine dari `dp_deadline_hours`. Model BR-09 mengasumsikan DP menggeser seluruh lintasan saldo, jadi bila DP baru masuk setelah titik terendah, G3 bisa gagal walau DP sudah sebesar DP minimal. TC-04 memakai DP diterima di H-2 (= hari ini), sehingga pemanggil sebaiknya memberi `DPDate = Today` untuk evaluasi saat pesanan dibuat.
+**Alasan:** Tenggat DP default 24 jam jatuh sehari setelah pesanan dan akan membuat G3 TC-04 gagal karena waktu, bukan karena nominal; keputusan ini perlu dikonfirmasi saat Tahap 3.
+
+### A1-17: G3 gagal selalu berarti tanpa perbaikan DP
+**Keputusan:** DP yang dievaluasi adalah `DPCharged` (sudah dinaikkan ke DP minimal). Jika `MinDP > total`, G3 gagal tanpa perbaikan (BR-09). `DPCharged` tetap mengembalikan nilai mentah `max(...)` yang bisa melebihi total; dalam simulasi kas DP dibatasi sebesar total.
+**Alasan:** Mengikuti BR-09 secara harfiah; mencegah pelunasan negatif.
+
+### A1-18: Definisi "ada perbaikan" dan tawaran balik
+**Keputusan:** Rekomendasi: semua lolos → `accept`; G4 gagal → `reject`; G4 lolos dan ada tawaran balik terverifikasi → `accept_with_conditions`; selain itu `reject`. Tawaran balik terverifikasi = harga minimal per item (bila G2 gagal) pada tanggal yang lolos G1, G3, dan G4 setelah harga dinaikkan. Tanggal asli dicoba dulu; bila tidak lolos, dicari maju mulai hari setelah tanggal acara (atau tanggal lead time bila lebih lambat) selama 14 hari kalender. Tanggal sebelum tanggal acara tidak ditawarkan.
+**Alasan:** BR-10 dan Bagian 8.3 tidak mendefinisikan arah pencarian; maju saja paling sederhana dan cocok dengan TC-02 (Sabtu penuh → Minggu).
+
+### A1-19: Tawaran balik tetap dihitung saat G4 gagal
+**Keputusan:** Bila G4 gagal, rekomendasi tetap `reject` (BR-10), tetapi `CounterOffer` tetap diisi jika ada tanggal memenuhi lead time, agar Manajer dapat memilih aksi "tawar balik".
+**Alasan:** FR-DEC-03 meminta tawaran balik otomatis; keputusan akhir tetap manusia.
+
+### A1-20: DP pada tawaran balik adalah DP ditagih
+**Keputusan:** `CounterOffer.DP` berisi `DPCharged` pada syarat tawaran (tanggal dan harga baru), bukan `MinDP`.
+**Alasan:** Contoh respons Bagian 9 memakai 712.500, yaitu nilai DP ditagih (TC-04).
+
+### A1-21: Tanggal produksi mengikuti selisih terhadap tanggal acara
+**Keputusan:** Pada tanggal tawaran, tanggal produksi digeser dengan selisih yang sama terhadap tanggal acara seperti pesanan asli.
+**Alasan:** FR-CAP-05 menjadikan tanggal produksi default sama dengan tanggal acara; selisih dipertahankan bila Manajer pernah menggesernya.
+
+### A1-22: Penyesuaian harga hanya bila G2 gagal
+**Keputusan:** Harga item dinaikkan ke harga minimal hanya bila margin pesanan (total) gagal G2; `MinPricePerItem` selalu diisi untuk semua item. G2 dinilai pada margin tingkat pesanan, bukan per item.
+**Alasan:** BR-06 dan BR-10 mendefinisikan margin per pesanan.
+
+### A1-23: Teks alasan dibuat di engine
+**Keputusan:** `Reason` berbahasa Indonesia dibentuk di engine (persen satu desimal dengan koma, Rp dengan titik ribuan, tanggal "14 Nov").
+**Alasan:** FR-DEC-02 mewajibkan alasan terbaca manusia dan menyimpannya bersama keputusan; satu sumber mencegah duplikasi di frontend.

@@ -122,4 +122,3 @@ func TestDayUtilizationEdgeCases(t *testing.T) {
 		assertExact(t, "util", Utilization(d("10"), decimal.Zero), decimal.Zero)
 	})
 }
-

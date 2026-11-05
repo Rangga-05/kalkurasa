@@ -24,4 +24,3 @@ func ShoppingNeed(req, stock, bufferPct, packSize decimal.Decimal, rounding stri
 	}
 	return need, need.Ceil()
 }
-

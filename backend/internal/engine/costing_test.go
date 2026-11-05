@@ -43,4 +43,3 @@ func TestCostingGuards(t *testing.T) {
 	assertExact(t, "harga minimal margin 100%", MinPrice(d("100"), d("1")), d("0"))
 	assertExact(t, "diskon saat min > normal", MaxDiscount(d("20000"), d("23750")), d("0"))
 }
-

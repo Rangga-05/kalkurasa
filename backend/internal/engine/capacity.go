@@ -70,4 +70,3 @@ func DayStatus(util, greenBelow, yellowBelow decimal.Decimal) string {
 		return StatusRed
 	}
 }
-

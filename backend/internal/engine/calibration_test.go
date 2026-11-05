@@ -79,4 +79,3 @@ func TestCalibrationGuards(t *testing.T) {
 	assertExact(t, "rata-rata kosong", Average(nil), decimal.Zero)
 	assertExact(t, "deviasi estimasi 0", Deviation(d("10"), decimal.Zero), decimal.Zero)
 }
-

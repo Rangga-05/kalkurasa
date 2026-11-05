@@ -48,4 +48,3 @@ type CostInput struct {
 	LaborRate      decimal.Decimal // rupiah per menit
 	OverheadCost   decimal.Decimal
 }
-
