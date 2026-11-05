@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 
 	"kalkurasa/backend/internal/config"
 	"kalkurasa/backend/internal/db"
@@ -17,6 +18,10 @@ import (
 )
 
 func main() {
+	// Load .env if present (development only); never overwrite existing env vars.
+	// Silently ignored if file does not exist (e.g. production on Vercel).
+	_ = godotenv.Load() // looks for .env in working directory
+
 	cfg := config.Load()
 
 	pool := initDB(cfg)
@@ -26,8 +31,14 @@ func main() {
 
 	r := server.New(cfg, pool)
 
+	// In development, bind to loopback only; in production bind to all interfaces.
+	addr := ":" + cfg.Port
+	if cfg.AppEnv == "development" {
+		addr = "127.0.0.1:" + cfg.Port
+	}
+
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
+		Addr:    addr,
 		Handler: r,
 	}
 
@@ -45,7 +56,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("Kalkurasa API listening on :%s", cfg.Port)
+	log.Printf("Kalkurasa API listening on %s", addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("listen: %v", err)
 	}
@@ -62,6 +73,7 @@ func initDB(cfg *config.Config) *pgxpool.Pool {
 
 	pool, err := db.New(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
 	if err != nil {
+		// Log error without exposing the DSN or password.
 		log.Printf("WARNING: Could not connect to database: %v", err)
 		return nil
 	}

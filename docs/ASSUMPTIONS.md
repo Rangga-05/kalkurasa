@@ -50,3 +50,15 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** Semua tabel mengaktifkan RLS tanpa policy. Backend diharapkan terhubung dengan role `postgres` yang melewati (bypass) RLS.
 **Alasan:** Sesuai brief Bagian 2. Ini mencegah akses via Supabase Data API publik. Jika role koneksi Supabase bukan `postgres`, perlu ditambahkan policy atau dicatat di sini.
 
+### A0-12: godotenv untuk memuat `.env` di pengembangan lokal
+**Keputusan:** `cmd/api` dan `cmd/migrate` memanggil `godotenv.Load()` di awal `main()`. Panggilan ini tidak menghasilkan error jika file `.env` tidak ada, dan tidak menimpa variabel lingkungan yang sudah diatur di OS.
+**Alasan:** Memudahkan pengembangan lokal tanpa harus mengekspor variabel satu per satu. Di Vercel (produksi), file `.env` tidak ada — variabel diatur lewat Project Settings.
+
+### A0-13: Server development bind ke 127.0.0.1 saja
+**Keputusan:** Jika `APP_ENV=development`, server Gin listen di `127.0.0.1:PORT` (loopback). Jika `production`, listen di `:PORT` (semua interface).
+**Alasan:** Mencegah server development terekspos ke jaringan lokal secara tidak sengaja. Di Vercel, variabel `PORT` dan binding dikelola runtime.
+
+### A0-14: Error database tidak memuat DSN atau password
+**Keputusan:** `db.New()` mengembalikan pesan error generik tanpa menyertakan DSN asli. `/api/healthz` menyaring field `db_error` dari kata kunci sensitif (`password`, `postgres://`, `@`) dan memotong pesan panjang.
+**Alasan:** Mencegah kebocoran kredensial database melalui log server atau respons API. Sesuai NFR-05 di spesifikasi.
+

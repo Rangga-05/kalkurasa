@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 
 			if err := pool.Ping(dbCtx); err != nil {
 				resp["db"] = "error"
-				resp["db_error"] = err.Error()
+				resp["db_error"] = sanitizeDBError(err.Error())
 			} else {
 				resp["db"] = "ok"
 			}
@@ -51,3 +52,20 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	return r
 }
 
+// sanitizeDBError removes any connection string, hostname, or password that
+// might leak through a pgx error message. Returns a safe, short description.
+func sanitizeDBError(raw string) string {
+	// pgx errors may embed the DSN or hostname. Strip anything that looks
+	// like a connection URI or contains sensitive keywords.
+	lower := strings.ToLower(raw)
+	for _, keyword := range []string{"password", "postgres://", "postgresql://", "@"} {
+		if strings.Contains(lower, keyword) {
+			return "koneksi database gagal"
+		}
+	}
+	// Truncate to a reasonable length to avoid leaking internal details.
+	if len(raw) > 120 {
+		return raw[:120] + "…"
+	}
+	return raw
+}

@@ -11,10 +11,13 @@ import (
 // New creates a pgxpool configured for Supabase Transaction pooler.
 // Transaction pooler (port 6543) does not support prepared statements,
 // so we must use QueryExecModeSimpleProtocol.
+//
+// Error messages returned from this function never contain the DSN or password.
 func New(ctx context.Context, databaseURL string, maxConns int32) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("db: parse config: %w", err)
+		// ParseConfig errors may echo the DSN — return a safe message.
+		return nil, fmt.Errorf("db: invalid DATABASE_URL format")
 	}
 
 	cfg.MaxConns = maxConns
@@ -24,9 +27,10 @@ func New(ctx context.Context, databaseURL string, maxConns int32) (*pgxpool.Pool
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("db: connect: %w", err)
+		// Connect errors may contain the hostname but not the password.
+		// Still wrap generically to be safe.
+		return nil, fmt.Errorf("db: could not connect to database (check DATABASE_URL and network)")
 	}
 
 	return pool, nil
 }
-

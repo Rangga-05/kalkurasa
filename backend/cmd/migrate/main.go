@@ -14,9 +14,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env if present (development only); never overwrite existing env vars.
+	_ = godotenv.Load()
+
 	dsn := os.Getenv("DATABASE_URL_MIGRATE")
 	if dsn == "" {
 		dsn = os.Getenv("DATABASE_URL")
@@ -130,4 +134,3 @@ func findMigrationsDir() string {
 	log.Fatal("migrations directory not found (run from backend/ or repo root)")
 	return ""
 }
-
