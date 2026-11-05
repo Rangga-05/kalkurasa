@@ -1,0 +1,195 @@
+### ============================================================================
+### Kalkurasa Backend — Local HTTP Requests (Tahap 2: Auth, Settings, Master Data)
+### Gunakan ekstensi REST Client (VS Code) atau salin sebagai perintah curl.
+### ============================================================================
+
+@baseUrl = http://127.0.0.1:8080
+@api = {{baseUrl}}/api/v1
+@demoPassword = GantiDenganSeedDemoPasswordAnda
+
+### 0. Health Check (Publik)
+GET {{baseUrl}}/api/healthz
+Accept: application/json
+
+### ============================================================================
+### 1. AUTENTIKASI (/api/v1/auth)
+### ============================================================================
+
+### 1.1 Login sebagai Owner (Bu Sari)
+# @name loginOwner
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "owner@demo.test",
+  "password": "{{demoPassword}}"
+}
+
+### 1.2 Login sebagai Manager (Rina)
+# @name loginManager
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "manager@demo.test",
+  "password": "{{demoPassword}}"
+}
+
+### 1.3 Login sebagai Staff / Karyawan (Budi)
+# @name loginStaff
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "staff@demo.test",
+  "password": "{{demoPassword}}"
+}
+
+### 1.4 Login sebagai Admin
+# @name loginAdmin
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@demo.test",
+  "password": "{{demoPassword}}"
+}
+
+### 1.5 Cek Profil Pengguna Saat Ini (/auth/me)
+GET {{api}}/auth/me
+Authorization: Bearer {{loginOwner.response.body.data.token}}
+
+### 1.6 Logout
+POST {{api}}/auth/logout
+Authorization: Bearer {{loginOwner.response.body.data.token}}
+
+### ============================================================================
+### 2. PARAMETER USAHA (/api/v1/settings)
+### ============================================================================
+
+### 2.1 GET Settings sebagai Owner (memuat seluruh 17 kunci termasuk kas)
+GET {{api}}/settings
+Authorization: Bearer {{loginOwner.response.body.data.token}}
+
+### 2.2 GET Settings sebagai Manager (tanpa opening_cash, fixed_cost_daily, cash_buffer)
+GET {{api}}/settings
+Authorization: Bearer {{loginManager.response.body.data.token}}
+
+### 2.3 PUT Settings sebagai Owner (audit log tercatat otomatis)
+PUT {{api}}/settings
+Authorization: Bearer {{loginOwner.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "capacity_limit": 0.90,
+  "margin_min": 0.20,
+  "lead_time_days": 2,
+  "dp_pct": 0.30,
+  "cash_buffer": 400000
+}
+
+### ============================================================================
+### 3. SUMBER DAYA & KATALOG MASTER DATA (/api/v1/resources, /products, /ingredients)
+### ============================================================================
+
+### 3.1 Daftar Sumber Daya (oven & labor beserta daily_capacity)
+GET {{api}}/resources
+Authorization: Bearer {{loginManager.response.body.data.token}}
+
+### 3.2 Buat Bahan Baku Baru (Manager/Admin)
+# @name createIngredient
+POST {{api}}/ingredients
+Authorization: Bearer {{loginManager.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "name": "Tepung Terigu Protein Sedang",
+  "use_unit": "kg",
+  "buy_unit": "sak",
+  "buy_unit_size": 25,
+  "buy_price": 275000,
+  "stock": 3,
+  "min_stock": 5,
+  "rounding": "loose",
+  "is_active": true
+}
+
+### 3.3 Daftar Bahan Baku sebagai Manager (memuat buy_price)
+GET {{api}}/ingredients
+Authorization: Bearer {{loginManager.response.body.data.token}}
+
+### 3.4 Daftar Bahan Baku sebagai Staff (buy_price otomatis disembunyikan)
+GET {{api}}/ingredients
+Authorization: Bearer {{loginStaff.response.body.data.token}}
+
+### 3.5 Buat Produk Baru (Manager/Admin)
+# @name createProduct
+POST {{api}}/products
+Authorization: Bearer {{loginManager.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "name": "Snack Box Rapat",
+  "category": "snack_box",
+  "price": 25000,
+  "packaging_cost": 2000,
+  "overhead_cost": 1200,
+  "is_active": true
+}
+
+### 3.6 Daftar Produk
+GET {{api}}/products
+Authorization: Bearer {{loginManager.response.body.data.token}}
+
+### 3.7 Atur Resep Produk (recipe_items)
+PUT {{api}}/recipes
+Authorization: Bearer {{loginManager.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "product_id": "{{createProduct.response.body.data.id}}",
+  "items": [
+    {
+      "ingredient_id": "{{createIngredient.response.body.data.id}}",
+      "qty_per_unit": 0.12
+    }
+  ]
+}
+
+### 3.8 Lihat Resep Produk
+GET {{api}}/recipes?product_id={{createProduct.response.body.data.id}}
+Authorization: Bearer {{loginManager.response.body.data.token}}
+
+### 3.9 Lihat Beban Produk (product_loads)
+GET {{api}}/product-loads?product_id={{createProduct.response.body.data.id}}
+Authorization: Bearer {{loginManager.response.body.data.token}}
+
+### ============================================================================
+### 4. MANAJEMEN PENGGUNA (/api/v1/users — Khusus Admin)
+### ============================================================================
+
+### 4.1 Daftar Pengguna (Admin)
+GET {{api}}/users
+Authorization: Bearer {{loginAdmin.response.body.data.token}}
+
+### 4.2 Buat Pengguna Baru (Admin)
+POST {{api}}/users
+Authorization: Bearer {{loginAdmin.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "email": "staf2@demo.test",
+  "name": "Siti (Karyawan Dapur)",
+  "role": "staff",
+  "password": "PasswordAman123!",
+  "is_active": true
+}
+
+### ============================================================================
+### 5. PENGUJIAN HAK AKSES (TC-09 Bagian Karyawan)
+### ============================================================================
+
+### 5.1 Karyawan mengakses proyeksi kas -> 403 Forbidden
+GET {{api}}/cash/projection
+Authorization: Bearer {{loginStaff.response.body.data.token}}
+

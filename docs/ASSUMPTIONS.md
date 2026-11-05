@@ -162,3 +162,39 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 ### A1-23: Teks alasan dibuat di engine
 **Keputusan:** `Reason` berbahasa Indonesia dibentuk di engine (persen satu desimal dengan koma, Rp dengan titik ribuan, tanggal "14 Nov").
 **Alasan:** FR-DEC-02 mewajibkan alasan terbaca manusia dan menyimpannya bersama keputusan; satu sumber mencegah duplikasi di frontend.
+
+---
+
+## Tahap 2 — Autentikasi, Peran, Pengaturan, dan Data Master
+
+### A2-01: Sesi stateless dengan verifikasi ulang pengguna per permintaan
+**Keputusan:** JWT HS256 (masa berlaku 12 jam) disimpan di cookie `session` (`HttpOnly`, `SameSite=Lax`, `Secure` mengikuti `COOKIE_SECURE`) dan juga diterima lewat header `Authorization: Bearer <token>` untuk kemudahan pengujian API. Pada setiap permintaan terproteksi, middleware `Authenticate()` memuat ulang baris pengguna dari database berdasarkan `sub` sehingga penonaktifan akun (`is_active=false`) dan perubahan peran langsung berlaku tanpa daftar cabut in-memory. Untuk mode `development` (`APP_ENV != "production"`), body respons login juga menyertakan field `token`.
+**Alasan:** Backend harus stateless agar aman dijalankan di fungsi serverless Vercel namun tetap mematuhi pencabutan akses instan saat admin menonaktifkan pengguna.
+
+### A2-02: Anti-CSRF berlapis pada autentikasi berbasis cookie
+**Keputusan:** Selain `SameSite=Lax` pada cookie sesi, permintaan pengubah data (`POST`, `PUT`, `PATCH`, `DELETE`) yang mengandalkan cookie sesi memeriksa header `Origin` (bila dikirim browser) terhadap daftar `ALLOWED_ORIGINS`.
+**Alasan:** Memenuhi NFR-05 (perlindungan CSRF) tanpa memerlukan state token CSRF di memori server.
+
+### A2-03: Penyembunyian data kas dan harga beli menurut matriks peran
+**Keputusan:**
+- `GET /api/v1/settings` dapat diakses oleh `owner` dan `manager`, namun untuk `manager` tiga kunci kas (`opening_cash`, `fixed_cost_daily`, `cash_buffer`) dihapus dari respons; `PUT /api/v1/settings` hanya untuk `owner`.
+- `GET /api/v1/ingredients` dan `GET /api/v1/ingredients/:id` dapat diakses oleh `staff` untuk keperluan operasional/belanja, tetapi field `buy_price` dihilangkan sepenuhnya (`omitempty`) dari JSON respons ketika pemanggil berperan `staff`.
+- Rute `/api/v1/cash/projection` dan `/api/v1/cash/entries` sudah dipasangi penjaga `RequireRole` sehingga `staff` langsung ditolak dengan `403 Forbidden` berbahasa Indonesia (TC-09 bagian karyawan).
+**Alasan:** Menegakkan Bagian 4 spesifikasi dan Bagian 6/9 brief bahwa karyawan tidak boleh menerima informasi harga jual, margin, harga beli bahan, maupun saldo kas.
+
+### A2-04: Pengarsipan otomatis (`is_active=false`) saat menghapus data master yang sudah dipakai
+**Keputusan:**
+- `DELETE /api/v1/products/:id` memeriksa keterkaitan di `order_items`, `recipe_items`, dan `product_loads`. Bila sudah terpakai, produk tidak dihapus melainkan diarsipkan (`is_active=false`, `archived=true`). Bila belum pernah dipakai, baris dihapus.
+- `DELETE /api/v1/ingredients/:id` memeriksa keterkaitan di `recipe_items`, `purchases`, dan `stock_movements`; bila sudah terpakai, bahan diarsipkan (`is_active=false`, `archived=true`).
+- `DELETE /api/v1/resources/:id` menolak penghapusan dengan `409 Conflict` bila sumber daya sudah terhubung di `product_loads` (karena tabel `resources` tidak memiliki kolom `is_active` dan `product_loads` memakai `ON DELETE CASCADE`).
+- `DELETE /api/v1/users/:id` selalu menonaktifkan pengguna (`is_active=false`) dan melarang admin menonaktifkan atau menurunkan peran akunnya sendiri.
+**Alasan:** Memenuhi FR-MD-08 (data master yang sudah terpakai diarsipkan, bukan dihapus) serta menjaga integritas referensial dan jejak audit.
+
+### A2-05: Fleksibilitas endpoint `recipes` dan `product-loads`
+**Keputusan:** Endpoint `POST/PUT /api/v1/recipes` (serta `/api/v1/products/:id/recipes`) dan `POST/PUT /api/v1/product-loads` (serta `/api/v1/products/:id/loads`) menerima baik pembaruan satu item (`ingredient_id`/`resource_id` tunggal) maupun daftar `items` sekaligus untuk satu `product_id` (dengan opsi `replace_all: true`). Penghapusan per item disediakan di `DELETE /api/v1/recipes/:product_id/:ingredient_id` dan `DELETE /api/v1/product-loads/:product_id/:resource_id`.
+**Alasan:** Memudahkan pemakaian baik dari form produk terpadu di frontend maupun pengujian per baris lewat REST client.
+
+### A2-06: Cakupan `cmd/seed` pada Tahap 2
+**Keputusan:** `backend/cmd/seed` pada Tahap 2 mengisi secara idempoten (`ON CONFLICT DO UPDATE`): 4 pengguna demo (`owner@demo.test`, `manager@demo.test`, `staff@demo.test`, `admin@demo.test`) dengan kata sandi wajib dari variabel lingkungan `SEED_DEMO_PASSWORD`, 2 sumber daya (`oven` dan `labor`), serta seluruh 17 kunci `settings` sesuai tabel Bagian 5 brief. Seed produk, bahan, resep, dan pesanan demo lengkap ditunda ke Tahap 7 sesuai instruksi.
+**Alasan:** Menjaga agar tidak ada kata sandi yang ditulis di kode sumber (NFR-05) dan mengikuti pembagian tahap pada prompt Tahap 2.
+
