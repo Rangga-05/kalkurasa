@@ -1,9 +1,14 @@
 package httpx
 
 import (
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
+
+	"kalkurasa/backend/internal/db"
 )
 
 // ErrorResponse is the standard JSON error envelope.
@@ -19,9 +24,24 @@ type ErrorBody struct {
 	Message string `json:"message"`
 }
 
+// AppError adalah error bisnis yang membawa status HTTP. Fungsi di dalam
+// transaksi mengembalikannya agar handler dapat membalas dengan benar.
+type AppError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func (e *AppError) Error() string { return e.Message }
+
+// Err membuat AppError.
+func Err(status int, code, message string) *AppError {
+	return &AppError{Status: status, Code: code, Message: message}
+}
+
 // RespondError sends a JSON error response with the given HTTP status.
 func RespondError(c *gin.Context, status int, code, message string) {
-	c.JSON(status, ErrorResponse{
+	c.AbortWithStatusJSON(status, ErrorResponse{
 		Error: ErrorBody{
 			Code:    code,
 			Message: message,
@@ -64,3 +84,33 @@ func InternalError(c *gin.Context) {
 	RespondError(c, http.StatusInternalServerError, "internal_error", "Terjadi kesalahan pada server.")
 }
 
+// Unavailable sends a 503 error.
+func Unavailable(c *gin.Context, message string) {
+	RespondError(c, http.StatusServiceUnavailable, "unavailable", message)
+}
+
+// DBUnavailable membalas 503 saat database belum dikonfigurasi.
+func DBUnavailable(c *gin.Context) {
+	Unavailable(c, "Database belum dikonfigurasi atau tidak dapat dihubungi.")
+}
+
+// HandleError memetakan error dari lapisan data ke respons JSON seragam.
+// Pesan error database mentah tidak pernah dikirim ke klien.
+func HandleError(c *gin.Context, err error) {
+	var appErr *AppError
+	switch {
+	case errors.As(err, &appErr):
+		RespondError(c, appErr.Status, appErr.Code, appErr.Message)
+	case errors.Is(err, pgx.ErrNoRows):
+		NotFound(c, "Data tidak ditemukan.")
+	case db.IsUniqueViolation(err):
+		Conflict(c, "Data dengan nilai tersebut sudah ada.")
+	case db.IsForeignKeyViolation(err):
+		Conflict(c, "Data masih terhubung dengan data lain.")
+	case db.IsCheckViolation(err):
+		UnprocessableEntity(c, "validation_error", "Nilai tidak memenuhi batasan data.")
+	default:
+		log.Printf("ERROR %s %s: %v", c.Request.Method, c.FullPath(), err)
+		InternalError(c)
+	}
+}
