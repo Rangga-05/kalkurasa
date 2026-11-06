@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "@/components/providers";
+import { SimulationBanner } from "@/components/simulation-banner";
 
 export const metadata: Metadata = {
   title: "Kalkurasa — Kalkulasi + Rasa",
   description:
-    "Sistem manajemen pesanan untuk UMKM kuliner berbasis pre-order.",
+    "Sistem manajemen pesanan, kapasitas produksi, dan arus kas untuk UMKM kuliner berbasis pre-order.",
 };
 
 export default function RootLayout({
@@ -14,13 +16,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id">
-      <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
-        {children}
-        <footer className="py-4 text-center text-xs text-gray-400">
-          Data simulasi — proyek GTNIC 2026
-        </footer>
+      <body className="flex min-h-screen flex-col overflow-x-hidden bg-stone-50 text-stone-900 antialiased">
+        <Providers>
+          <SimulationBanner />
+          <div className="flex flex-1 flex-col">{children}</div>
+        </Providers>
       </body>
     </html>
   );
 }
-

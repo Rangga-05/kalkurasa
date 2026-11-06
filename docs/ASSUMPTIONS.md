@@ -258,6 +258,19 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** Di `internal/orders/lifecycle.go` (`ExpireOverdueOrders`, `deductStockForProduction`, `GetDecisionQueue`, `GetCapacityDay`, `ListOrders`, `loadOrderItemsAndEval`), `rows.Close()` dipanggil secara eksplisit tepat setelah loop `for rows.Next()` dan `rows.Err()` selesai, sebelum menjalankan query atau `Exec` berikutnya di dalam transaksi atau pool yang sama.
 **Alasan:** Mencegah penahanan koneksi/kursor pada pool dengan `DB_MAX_CONNS=3` dan `QueryExecModeSimpleProtocol`.
 
+---
+
+## Tahap 4A — Frontend Publik (`/`, `/pesan`, `/lacak/[kode]`), `/login`, dan Kerangka Internal
+
+### A4-01: Penanganan serialisasi `shopspring/decimal` di klien API TypeScript
+**Keputusan:** Di Go, `shopspring/decimal` men-serialisasi nilai desimal sebagai string JSON (mis. `"25000"` atau `"0.6000"`). Tipe `DecimalValue` di `frontend/src/lib/types.ts` didefinisikan sebagai `string | number` dan dikonversi hanya untuk tampilan melalui helper `toNumber()`, `formatRupiah()`, dan `formatPercent()` di `frontend/src/lib/format.ts`. Tidak ada rumus bisnis engine yang diduplikasi di frontend.
+**Alasan:** Menjamin kompatibilitas penuh terhadap kontrak JSON backend tanpa kehilangan tipe maupun membuat perhitungan ganda di sisi klien.
+
+### A4-02: Pemeriksaan rute per peran di Middleware Next.js dan verifikasi sesi di Layout Internal
+**Keputusan:** `frontend/src/middleware.ts` membaca cookie `session` (`HttpOnly`) dan mendekode klaim payload JWT (`sub`, `role`, `exp`) untuk mengarahkan pengguna yang belum masuk ke `/login?next=...`, mengarahkan pengguna yang sudah masuk dari `/login` atau `/app` ke dashboard peran masing-masing (`/app/owner`, `/app/manajer`, `/app/karyawan`, `/app/admin`), serta menjaga akses rute `/app/...` berdasarkan peran. Selain itu, `frontend/src/app/app/layout.tsx` tetap memanggil `GET /api/v1/auth/me` sehingga pencabutan sesi atau penonaktifan akun di database langsung mengarahkan pengguna kembali ke `/login`.
+**Alasan:** Mengikuti Bagian 10 brief bahwa akses halaman dijaga di middleware Next.js sekaligus di server API sebagai sumber otorisasi utama.
+
+
 
 
 
