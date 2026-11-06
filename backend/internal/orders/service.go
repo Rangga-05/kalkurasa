@@ -33,6 +33,9 @@ const (
 	StatusExpired         = "expired"
 )
 
+// LastCreateOrderTiming menyimpan ringkasan durasi per fase CreateOrder terakhir (untuk diagnostik/test).
+var LastCreateOrderTiming string
+
 // SettingsParams memuat seluruh parameter bisnis dari tabel settings.
 type SettingsParams struct {
 	EvalParams        engine.EvalParams
@@ -265,10 +268,10 @@ func LoadProductsMeta(ctx context.Context, q db.DBTX, ids []string, params Setti
 	return out, nil
 }
 
-// LockDays mengunci baris pada tabel day_locks sesuai Bagian 8.1:
-// INSERT INTO day_locks(day) VALUES ($1) ON CONFLICT DO NOTHING,
-// lalu SELECT day FROM day_locks WHERE day = $1 FOR UPDATE
-// dengan urutan tanggal menaik (ascending) untuk mencegah deadlock.
+// LockDays mengunci baris pada tabel day_locks sesuai Bagian 8.1 dengan dua
+// statement per transaksi (INSERT unnest ON CONFLICT DO NOTHING, lalu
+// SELECT ... WHERE day = ANY($1::date[]) ORDER BY day FOR UPDATE) dengan
+// urutan tanggal menaik (ascending) untuk mencegah deadlock.
 func LockDays(ctx context.Context, tx pgx.Tx, dates []time.Time) error {
 	seen := make(map[string]bool, len(dates))
 	keys := make([]string, 0, len(dates))
@@ -279,20 +282,28 @@ func LockDays(ctx context.Context, tx pgx.Tx, dates []time.Time) error {
 			keys = append(keys, k)
 		}
 	}
+	if len(keys) == 0 {
+		return nil
+	}
 	sort.Strings(keys)
 
-	for _, k := range keys {
-		if _, err := tx.Exec(ctx, `INSERT INTO day_locks(day) VALUES ($1::date) ON CONFLICT DO NOTHING`, k); err != nil {
-			return fmt.Errorf("lock days insert %s: %w", k, err)
-		}
+	if _, err := tx.Exec(ctx, `INSERT INTO day_locks(day) SELECT unnest($1::date[]) ON CONFLICT DO NOTHING`, keys); err != nil {
+		return fmt.Errorf("lock days insert: %w", err)
 	}
-	for _, k := range keys {
+
+	rows, err := tx.Query(ctx, `SELECT day FROM day_locks WHERE day = ANY($1::date[]) ORDER BY day FOR UPDATE`, keys)
+	if err != nil {
+		return fmt.Errorf("lock days for update: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
 		var locked time.Time
-		if err := tx.QueryRow(ctx, `SELECT day FROM day_locks WHERE day = $1::date FOR UPDATE`, k).Scan(&locked); err != nil {
-			return fmt.Errorf("lock days for update %s: %w", k, err)
+		if err := rows.Scan(&locked); err != nil {
+			return fmt.Errorf("lock days scan: %w", err)
 		}
 	}
-	return nil
+	return rows.Err()
 }
 
 // LoadCapacities memuat seluruh sumber daya dan menghitung kapasitas efektif harian via engine.Capacity.
@@ -737,6 +748,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 
 	var out *OrderDetail
 	err := db.WithTx(ctx, conn, func(tx pgx.Tx) error {
+		t0 := time.Now()
 		params, err := LoadSettingsParams(ctx, tx)
 		if err != nil {
 			return err
@@ -756,8 +768,10 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		if err != nil {
 			return err
 		}
+		dMeta := time.Since(t0)
 
 		// Susun tanggal yang perlu dikunci di day_locks (tanggal produksi + 14 hari kandidat tawaran balik)
+		tLock := time.Now()
 		lockDates := make([]time.Time, 0, 16)
 		lockDates = append(lockDates, req.ProductionDate, req.EventDate)
 		for i := 1; i <= 15; i++ {
@@ -766,8 +780,10 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		if err := LockDays(ctx, tx, lockDates); err != nil {
 			return err
 		}
+		dLock := time.Since(tLock)
 
 		// Bangun EvalItem untuk engine.EvaluateOrder
+		tEval := time.Now()
 		evalItems := make([]engine.EvalItem, 0, len(req.Items))
 		itemDetails := make([]OrderItemDetail, 0, len(req.Items))
 		totalUnits := 0
@@ -801,6 +817,9 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			return err
 		}
 		evalDTO := ToEvaluationDTO(evalRes)
+		dEval := time.Since(tEval)
+
+		tWrite := time.Now()
 
 		// Bagian 8.1 butir 5: Tentukan status awal
 		allGatesPassed := evalRes.Recommendation == engine.RecAccept
@@ -946,6 +965,10 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		}); err != nil {
 			return err
 		}
+		dWrite := time.Since(tWrite)
+		_ = fmt.Sprintf("meta=%s lock=%s eval=%s write=%s", dMeta, dLock, dEval, dWrite)
+		LastCreateOrderTiming = fmt.Sprintf("meta=%v lock_days=%v load_eval=%v write=%v total_tx=%v",
+			dMeta.Round(time.Millisecond), dLock.Round(time.Millisecond), dEval.Round(time.Millisecond), dWrite.Round(time.Millisecond), time.Since(t0).Round(time.Millisecond))
 
 		out = &OrderDetail{
 			ID:                   orderID,

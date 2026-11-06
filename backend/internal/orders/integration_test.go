@@ -106,11 +106,10 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 		for _, rid := range createdResourceIDs {
 			_, _ = pool.Exec(cleanCtx, `DELETE FROM resources WHERE id = $1::uuid`, rid)
 		}
-		// 6. Hapus day_locks di masa depan yang dibuat selama test & rate_limits uji
+		// 6. Hapus day_locks untuk tanggal-tanggal tes (H+60 s.d. H+100) & rate_limits uji
 		_, _ = pool.Exec(cleanCtx, `
 			DELETE FROM day_locks
 			WHERE day >= $1::date AND day <= $2::date
-			  AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.production_date = day_locks.day)
 		`, engine.DateKey(startDate), engine.DateKey(endLockCleanupDate))
 		_, _ = pool.Exec(cleanCtx, `DELETE FROM rate_limits WHERE key LIKE 'order:198.51.100.%'`)
 	}
@@ -251,6 +250,10 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 		close(startBarrier)
 		wg.Wait()
 
+		if r == 0 {
+			t.Logf("Timing per fase CreateOrder (putaran 1): %s", orders.LastCreateOrderTiming)
+		}
+
 		accepted := 0
 		pending := 0
 		for g := 0; g < 2; g++ {
@@ -297,10 +300,39 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 		}
 	}
 
+	// Sebelum cleanup: verifikasi baris audit_logs benar-benar tertulis untuk pesanan publik (actor_id IS NULL)
+	var auditCountBefore int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM audit_logs
+		WHERE entity = 'orders'
+		  AND actor_id IS NULL
+		  AND entity_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+	`).Scan(&auditCountBefore); err != nil {
+		t.Fatalf("count audit_logs before cleanup: %v", err)
+	}
+	if auditCountBefore != rounds*2 {
+		t.Fatalf("diharapkan %d baris audit_logs (actor_id IS NULL) sebelum cleanup, dapat %d", rounds*2, auditCountBefore)
+	}
+
+	var sampleAuditID, sampleAction, sampleEntity, sampleEntityID, sampleDetail string
+	var sampleActorID *string
+	var sampleCreatedAt time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT id::text, actor_id::text, action, entity, entity_id::text, detail::text, created_at
+		FROM audit_logs
+		WHERE entity = 'orders'
+		  AND entity_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+		ORDER BY created_at DESC LIMIT 1
+	`).Scan(&sampleAuditID, &sampleActorID, &sampleAction, &sampleEntity, &sampleEntityID, &sampleDetail, &sampleCreatedAt); err != nil {
+		t.Fatalf("read sample audit_log row: %v", err)
+	}
+	t.Logf("Bukti baris audit_logs sebelum cleanup (total=%d): id=%s actor_id=%v action=%s entity=%s entity_id=%s detail=%s created_at=%s",
+		auditCountBefore, sampleAuditID, sampleActorID, sampleAction, sampleEntity, sampleEntityID, sampleDetail, sampleCreatedAt.Format(time.RFC3339))
+
 	// Jalankan pembersihan eksplisit lalu pastikan jumlah baris ber-awalan "ittest-" di DB adalah 0
 	cleanup()
 
-	var remProducts, remLoads, remOrders, remItems, remEvals, remCash int
+	var remProducts, remLoads, remOrders, remItems, remEvals, remCash, remAudit, remDayLocks int
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE name LIKE 'ittest-%'`).Scan(&remProducts); err != nil {
 		t.Fatalf("count remaining products: %v", err)
 	}
@@ -331,12 +363,25 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM cash_entries WHERE note LIKE 'ittest-%'`).Scan(&remCash); err != nil {
 		t.Fatalf("count remaining cash_entries: %v", err)
 	}
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM audit_logs
+		WHERE detail::text LIKE '%ittest-%'
+		   OR entity_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+	`).Scan(&remAudit); err != nil {
+		t.Fatalf("count remaining audit_logs: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM day_locks
+		WHERE day >= $1::date AND day <= $2::date
+	`, engine.DateKey(startDate), engine.DateKey(endLockCleanupDate)).Scan(&remDayLocks); err != nil {
+		t.Fatalf("count remaining day_locks: %v", err)
+	}
 
-	t.Logf("Sisa baris ittest- setelah cleanup: products=%d, product_loads=%d, orders=%d, order_items=%d, order_evaluations=%d, cash_entries=%d",
-		remProducts, remLoads, remOrders, remItems, remEvals, remCash)
+	t.Logf("Sisa baris ittest- setelah cleanup: products=%d, product_loads=%d, orders=%d, order_items=%d, order_evaluations=%d, cash_entries=%d, audit_logs=%d, day_locks=%d",
+		remProducts, remLoads, remOrders, remItems, remEvals, remCash, remAudit, remDayLocks)
 
-	if remProducts != 0 || remLoads != 0 || remOrders != 0 || remItems != 0 || remEvals != 0 || remCash != 0 {
-		t.Fatalf("masih ada baris ittest- yang belum bersih: products=%d, loads=%d, orders=%d, items=%d, evals=%d, cash=%d",
-			remProducts, remLoads, remOrders, remItems, remEvals, remCash)
+	if remProducts != 0 || remLoads != 0 || remOrders != 0 || remItems != 0 || remEvals != 0 || remCash != 0 || remAudit != 0 || remDayLocks != 0 {
+		t.Fatalf("masih ada baris ittest- yang belum bersih: products=%d, loads=%d, orders=%d, items=%d, evals=%d, cash=%d, audit=%d, day_locks=%d",
+			remProducts, remLoads, remOrders, remItems, remEvals, remCash, remAudit, remDayLocks)
 	}
 }

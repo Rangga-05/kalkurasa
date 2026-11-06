@@ -196,8 +196,14 @@ func (tx *memTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.Comm
 		return pgconn.NewCommandTag("DELETE 0"), nil
 
 	case strings.HasPrefix(q, "insert into day_locks"):
-		dayKey := fmt.Sprint(args[0])[:10]
-		_ = tx.db.dayMutex(dayKey)
+		if keys, ok := args[0].([]string); ok {
+			for _, k := range keys {
+				_ = tx.db.dayMutex(k[:10])
+			}
+		} else {
+			dayKey := fmt.Sprint(args[0])[:10]
+			_ = tx.db.dayMutex(dayKey)
+		}
 		return pgconn.NewCommandTag("INSERT 0 1"), nil
 
 	case strings.HasPrefix(q, "insert into order_evaluations"):
@@ -372,6 +378,26 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 
 func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	q := normSQL(sql)
+	if strings.Contains(q, "from day_locks where day = any($1::date[]) order by day for update") {
+		keys := args[0].([]string)
+		if tx.heldDays == nil {
+			tx.heldDays = make(map[string]bool)
+		}
+		var rows [][]any
+		for _, k := range keys {
+			dayKey := k[:10]
+			if !tx.heldDays[dayKey] {
+				lk := tx.db.dayMutex(dayKey)
+				lk.Lock()
+				tx.heldDays[dayKey] = true
+				tx.heldLocks = append(tx.heldLocks, lk)
+			}
+			t, _ := time.Parse("2006-01-02", dayKey)
+			rows = append(rows, []any{t})
+		}
+		return &memRows{rows: rows}, nil
+	}
+
 	tx.db.mu.Lock()
 	defer tx.db.mu.Unlock()
 
