@@ -554,6 +554,9 @@ type AvailabilityDay struct {
 // berdasarkan G1 (utilisasi <= capacity_limit) dan G4 (lead time >= lead_time_days)
 // menggunakan internal/engine.
 func CheckAvailability(ctx context.Context, q db.DBTX, items []OrderItemInput, fromDate, toDate time.Time) ([]AvailabilityDay, error) {
+	if _, err := ExpireOverdueOrders(ctx, q, time.Now().UTC()); err != nil {
+		return nil, err
+	}
 	params, err := LoadSettingsParams(ctx, q)
 	if err != nil {
 		return nil, err
@@ -772,6 +775,9 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			lockDates = append(lockDates, req.ProductionDate.AddDate(0, 0, i))
 		}
 		if err := LockDays(ctx, tx, lockDates); err != nil {
+			return err
+		}
+		if _, err := ExpireOverdueOrders(ctx, tx, time.Now().UTC()); err != nil {
 			return err
 		}
 

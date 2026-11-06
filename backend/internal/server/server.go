@@ -103,6 +103,8 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 	readIngredients := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleAdmin, auth.RoleStaff)
 	adminOnly := auth.RequireRole(auth.RoleAdmin)
 	manageOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager)
+	readOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleStaff, auth.RoleAdmin)
+	transitionOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleStaff)
 
 	v1 := r.Group("/api/v1")
 	{
@@ -110,11 +112,12 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 		v1.POST("/auth/login", authHandler.Login)
 		v1.POST("/auth/logout", authHandler.Logout)
 
-		// Public order & catalog endpoints (Tahap 3A)
+		// Public order & catalog endpoints (Tahap 3A & 3B)
 		v1.GET("/public/products", ordersHandler.PublicProducts)
 		v1.POST("/public/availability", ordersHandler.PublicAvailability)
 		v1.POST("/public/orders", ordersHandler.CreatePublicOrder)
 		v1.GET("/public/orders/:code", ordersHandler.TrackPublicOrder)
+		v1.POST("/public/orders/:code/counter-response", ordersHandler.CounterResponse)
 
 		// Protected endpoints (require valid session cookie or Bearer token)
 		protected := v1.Group("")
@@ -122,8 +125,18 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 		{
 			protected.GET("/auth/me", authHandler.Me)
 
-			// Internal orders (Tahap 3A: manual order creation by manager or owner)
+			// Internal orders, decision queue & capacity (Tahap 3A & 3B)
+			protected.GET("/orders", readOrders, ordersHandler.ListOrders)
+			protected.GET("/orders/:id", readOrders, ordersHandler.GetOrder)
 			protected.POST("/orders", manageOrders, ordersHandler.CreateManualOrder)
+			protected.POST("/orders/:id/decision", manageOrders, ordersHandler.DecideOrder)
+			protected.POST("/orders/:id/payments", manageOrders, ordersHandler.RecordPayment)
+			protected.POST("/orders/:id/cancel", manageOrders, ordersHandler.CancelOrder)
+			protected.POST("/orders/:id/transition", transitionOrders, ordersHandler.TransitionOrder)
+
+			protected.GET("/decision-queue", manageOrders, ordersHandler.DecisionQueue)
+			protected.GET("/capacity/calendar", manageOrders, ordersHandler.CapacityCalendar)
+			protected.GET("/capacity/day/:date", manageOrders, ordersHandler.CapacityDay)
 
 			// Settings: owner full access; manager read-only without cash keys
 			protected.GET("/settings",

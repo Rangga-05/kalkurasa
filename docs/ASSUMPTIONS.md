@@ -222,4 +222,29 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** Test integrasi `orders_test.go` (TC-08, TC-10, dan TC-09 bagian pelanggan) membuat fixture data uji sendiri secara terisolasi tanpa menyentuh tabel pada skema `public` produksi.
 **Alasan:** Memenuhi instruksi Tahap 3A bahwa fixture data uji dibuat di dalam test dan tidak mengotori database produksi/demo.
 
+---
+
+## Tahap 3B — Keputusan, Tawaran Balik, Pembayaran, Transisi, Pembatalan, dan Kapasitas
+
+### A3-06: Penolakan langsung (`403 Forbidden`) saat `manager` mencoba memutuskan pesanan besar
+**Keputusan:** Pada `POST /api/v1/orders/:id/decision`, hanya `owner` yang berhak memutuskan pesanan besar (`total >= big_order_total` atau `total_units >= big_order_units`); permintaan keputusan oleh `manager` pada pesanan besar ditolak dengan `403 Forbidden` (dan `GET /api/v1/decision-queue` menyertakan flag `is_big_order` serta `can_decide` per pesanan).
+**Alasan:** Mengikuti instruksi eksplisit Tahap 3B bahwa `owner` berhak untuk semua pesanan, `manager` hanya untuk pesanan di bawah ambang pesanan besar, dan keputusan oleh peran yang tidak berhak wajib ditolak.
+
+### A3-07: Kewajiban `override_reason` berdasarkan rekomendasi awal maupun evaluasi ulang di dalam kunci hari
+**Keputusan:** Saat `POST /api/v1/orders/:id/decision` dengan `action = "accept"` dijalankan, sistem mengunci `day_locks` terlebih dahulu lalu menjalankan ulang `EvaluateOrder`. Jika rekomendasi awal (`initial_recommendation`) maupun rekomendasi hasil evaluasi ulang (`reevaluated_recommendation`) bukan `"accept"`, permintaan wajib menyertakan `override_reason` (bila kosong ditolak dengan `422 Unprocessable Entity`) dan dicatat di `audit_logs` dengan `action = "override"` beserta identitas pemutus, waktu, rekomendasi awal, rekomendasi hasil evaluasi ulang, dan alasan override.
+**Alasan:** Memenuhi TC-12 sekaligus mencegah *overbooking* saat dua goroutine memanggil `accept` secara serentak pada slot kapasitas terakhir.
+
+### A3-08: Pengecekan malas (*lazy check*) kedaluwarsa DP sebelum operasi baca dan tulis kapasitas/pesanan
+**Keputusan:** `ExpireOverdueOrders` dijalankan secara malas sebelum kueri ketersediaan, pembuatan pesanan, keputusan, pelacakan pesanan, pencatatan pembayaran, antrian keputusan, dan kalender kapasitas. Pesanan berstatus `accepted` dengan `dp_deadline <= now()` dan `paid < dp_required` diubah secara atomik menjadi `expired` dan dicatat di `audit_logs`.
+**Alasan:** Sesuai Bagian 8.4 brief (tidak memerlukan *background scheduler* di lingkungan serverless Vercel) dan memastikan kapasitas langsung terlepas untuk pesanan baru (TC-11).
+
+### A3-09: Pembatalan tugas yang belum selesai saat pesanan dibatalkan
+**Keputusan:** Pada `POST /api/v1/orders/:id/cancel`, tugas (`tasks`) milik pesanan tersebut yang belum berstatus `done` dihapus (`DELETE FROM tasks WHERE order_id = $1 AND status != 'done'`) dari antrian tugas aktif.
+**Alasan:** Skema `001_init.sql` membatasi `tasks.status` pada `CHECK (status IN ('todo','doing','done'))` tanpa nilai `'cancelled'`, sehingga penghapusan tugas yang belum selesai menjaga kepatuhan terhadap skema tanpa mengubah `001_init.sql`.
+
+### A3-10: Pengurangan stok bahan idempoten saat transisi `in_production → ready`
+**Keputusan:** Saat pesanan bertransisi dari `in_production` ke `ready` (`POST /api/v1/orders/:id/transition`), sistem menandai tugas `produce` menjadi `done`, memeriksa apakah `stock_movements` (`ref_type = 'order'`, `reason = 'production'`) untuk pesanan tersebut sudah pernah tercatat, lalu mengurangi `ingredients.stock` (dibatasi minimal 0) sesuai `recipe_items` dan menulis baris `stock_movements`.
+**Alasan:** Memenuhi Bagian 8.5 brief bahwa penyelesaian produksi mengurangi stok bahan sesuai resep secara atomik dan aman dari pengurangan ganda.
+
+
 

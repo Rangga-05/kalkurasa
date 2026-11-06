@@ -368,6 +368,11 @@ func (h *Handler) TrackPublicOrder(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ExpireOverdueOrders(ctx, h.DB, time.Now().UTC()); err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
 	var (
 		orderID      string
 		out          PublicTrackResponse
@@ -441,5 +446,348 @@ func (h *Handler) TrackPublicOrder(c *gin.Context) {
 	out.Items = items
 
 	httpx.OK(c, out)
+}
+
+type counterResponseRequest struct {
+	Accept *bool `json:"accept"`
+}
+
+// CounterResponse menangani POST /api/v1/public/orders/:code/counter-response (Bagian 8.3 & 9).
+func (h *Handler) CounterResponse(c *gin.Context) {
+	var req counterResponseRequest
+	if !httpx.BindJSON(c, &req) {
+		return
+	}
+	v := httpx.NewValidation()
+	if req.Accept == nil {
+		v.Add("Field accept (true atau false) wajib diisi.")
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	if !EnforceRateLimit(c, h.DB, "order", PublicOrderRateLimitPerMin) {
+		return
+	}
+
+	out, err := RespondCounterOffer(c.Request.Context(), h.DB, c.Param("code"), *req.Accept)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, out)
+}
+
+// ListOrders menangani GET /api/v1/orders.
+func (h *Handler) ListOrders(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	actor := auth.CurrentUser(c)
+	role := ""
+	if actor != nil {
+		role = actor.Role
+	}
+	statusFilter := strings.TrimSpace(c.Query("status"))
+	items, err := ListOrders(c.Request.Context(), h.DB, statusFilter, role)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, items)
+}
+
+// GetOrder menangani GET /api/v1/orders/:id.
+func (h *Handler) GetOrder(c *gin.Context) {
+	id, ok := httpx.ParamUUID(c, "id")
+	if !ok {
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	actor := auth.CurrentUser(c)
+	role := ""
+	if actor != nil {
+		role = actor.Role
+	}
+	detail, err := GetOrderByID(c.Request.Context(), h.DB, id, role)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, detail)
+}
+
+type decisionRequest struct {
+	Action         string           `json:"action"`
+	OverrideReason string           `json:"override_reason"`
+	Counter        *CounterOfferDTO `json:"counter,omitempty"`
+}
+
+// DecideOrder menangani POST /api/v1/orders/:id/decision (Bagian 8.2 & 9).
+func (h *Handler) DecideOrder(c *gin.Context) {
+	id, ok := httpx.ParamUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req decisionRequest
+	if !httpx.BindJSON(c, &req) {
+		return
+	}
+	v := httpx.NewValidation()
+	action := v.OneOf("Aksi keputusan (action)", strings.TrimSpace(req.Action), "accept", "counter", "reject")
+	overrideReason := v.OptStr("Alasan override (override_reason)", req.OverrideReason, 500)
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Sesi login tidak ditemukan.")
+		return
+	}
+
+	detail, err := DecideOrder(c.Request.Context(), h.DB, DecideOrderInput{
+		OrderID:        id,
+		ActorID:        actor.ID,
+		ActorName:      actor.Name,
+		ActorRole:      actor.Role,
+		Action:         action,
+		OverrideReason: overrideReason,
+		Counter:        req.Counter,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, detail)
+}
+
+type paymentRequest struct {
+	Amount *decimal.Decimal `json:"amount"`
+	Method string           `json:"method"`
+	Note   string           `json:"note"`
+}
+
+// RecordPayment menangani POST /api/v1/orders/:id/payments (Bagian 8.4 & 9).
+func (h *Handler) RecordPayment(c *gin.Context) {
+	id, ok := httpx.ParamUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req paymentRequest
+	if !httpx.BindJSON(c, &req) {
+		return
+	}
+	v := httpx.NewValidation()
+	amount := v.Dec("Jumlah pembayaran (amount)", req.Amount, httpx.MoneyOpts(false, false))
+	method := strings.TrimSpace(req.Method)
+	if method == "" {
+		method = "transfer"
+	} else {
+		method = v.Str("Metode pembayaran (method)", method, 50)
+	}
+	note := v.OptStr("Catatan pembayaran (note)", req.Note, 500)
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+
+	actor := auth.CurrentUser(c)
+	actorID := ""
+	if actor != nil {
+		actorID = actor.ID
+	}
+
+	res, err := RecordPayment(c.Request.Context(), h.DB, RecordPaymentInput{
+		OrderID: id,
+		ActorID: actorID,
+		Amount:  amount,
+		Method:  method,
+		Note:    note,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.Created(c, res)
+}
+
+type transitionRequest struct {
+	ToStatus      string `json:"to_status"`
+	Status        string `json:"status"`
+	ActualMinutes *int   `json:"actual_minutes,omitempty"`
+}
+
+// TransitionOrder menangani POST /api/v1/orders/:id/transition (Bagian 8.5 & 9).
+func (h *Handler) TransitionOrder(c *gin.Context) {
+	id, ok := httpx.ParamUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req transitionRequest
+	if !httpx.BindJSON(c, &req) {
+		return
+	}
+	target := strings.TrimSpace(req.ToStatus)
+	if target == "" {
+		target = strings.TrimSpace(req.Status)
+	}
+	v := httpx.NewValidation()
+	toStatus := v.OneOf("Status tujuan (to_status)", target,
+		StatusInProduction, StatusReady, StatusDelivering, StatusCompleted)
+	if req.ActualMinutes != nil && *req.ActualMinutes <= 0 {
+		v.Add("Durasi aktual (actual_minutes) harus lebih dari 0 menit.")
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Sesi login tidak ditemukan.")
+		return
+	}
+
+	detail, err := TransitionOrder(c.Request.Context(), h.DB, TransitionOrderInput{
+		OrderID:       id,
+		ActorID:       actor.ID,
+		ActorRole:     actor.Role,
+		ToStatus:      toStatus,
+		ActualMinutes: req.ActualMinutes,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, detail)
+}
+
+type cancelOrderRequest struct {
+	Reason        string `json:"reason"`
+	DPDisposition string `json:"dp_disposition"`
+	Note          string `json:"note"`
+}
+
+// CancelOrder menangani POST /api/v1/orders/:id/cancel (Bagian 8.6 & 9).
+func (h *Handler) CancelOrder(c *gin.Context) {
+	id, ok := httpx.ParamUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req cancelOrderRequest
+	if c.Request.ContentLength != 0 {
+		if !httpx.BindJSON(c, &req) {
+			return
+		}
+	}
+	v := httpx.NewValidation()
+	reason := v.OptStr("Alasan pembatalan (reason)", req.Reason, 500)
+	note := v.OptStr("Catatan pembatalan (note)", req.Note, 500)
+	dpDisp := strings.TrimSpace(req.DPDisposition)
+	if dpDisp != "" {
+		dpDisp = v.OneOf("Keputusan DP (dp_disposition)", dpDisp, "forfeited", "refunded", "pending")
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+
+	actor := auth.CurrentUser(c)
+	actorID := ""
+	if actor != nil {
+		actorID = actor.ID
+	}
+
+	res, err := CancelOrder(c.Request.Context(), h.DB, CancelOrderInput{
+		OrderID:       id,
+		ActorID:       actorID,
+		Reason:        reason,
+		DPDisposition: dpDisp,
+		Note:          note,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, res)
+}
+
+// DecisionQueue menangani GET /api/v1/decision-queue (Bagian 9).
+func (h *Handler) DecisionQueue(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	actor := auth.CurrentUser(c)
+	role := ""
+	if actor != nil {
+		role = actor.Role
+	}
+	items, err := GetDecisionQueue(c.Request.Context(), h.DB, role)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, items)
+}
+
+// CapacityCalendar menangani GET /api/v1/capacity/calendar?month=YYYY-MM (Bagian 9).
+func (h *Handler) CapacityCalendar(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	days, err := GetCapacityCalendar(c.Request.Context(), h.DB, c.Query("month"))
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, days)
+}
+
+// CapacityDay menangani GET /api/v1/capacity/day/:date (Bagian 9).
+func (h *Handler) CapacityDay(c *gin.Context) {
+	dateStr := strings.TrimSpace(c.Param("date"))
+	parsed, err := db.ParseDate(dateStr)
+	if err != nil {
+		httpx.UnprocessableEntity(c, "validation_error", "Tanggal (date) harus berformat YYYY-MM-DD.")
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	detail, err := GetCapacityDay(c.Request.Context(), h.DB, parsed)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, detail)
 }
 
