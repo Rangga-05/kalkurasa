@@ -246,5 +246,18 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** Saat pesanan bertransisi dari `in_production` ke `ready` (`POST /api/v1/orders/:id/transition`), sistem menandai tugas `produce` menjadi `done`, memeriksa apakah `stock_movements` (`ref_type = 'order'`, `reason = 'production'`) untuk pesanan tersebut sudah pernah tercatat, lalu mengurangi `ingredients.stock` (dibatasi minimal 0) sesuai `recipe_items` dan menulis baris `stock_movements`.
 **Alasan:** Memenuhi Bagian 8.5 brief bahwa penyelesaian produksi mengurangi stok bahan sesuai resep secara atomik dan aman dari pengurangan ganda.
 
+---
+
+## Tahap 3C — Seed Katalog Dasar dan Uji Alur Lengkap AU-1 pada Postgres
+
+### A3-11: Idempotensi seed katalog dasar (`products`, `ingredients`, `recipe_items`, `product_loads`)
+**Keputusan:** Skema `001_init.sql` tidak mendefinisikan constraint `UNIQUE(name)` maupun kolom `description` pada tabel `products` dan `ingredients`. Agar `cmd/seed` tetap 100% idempoten tanpa mengubah `001_init.sql`, seeder memakai UUID deterministik untuk setiap bahan (`10000000-0000-4000-8000-000000000001` s.d. `0015`) dan produk (`20000000-0000-4000-8000-000000000001` s.d. `0006`), disertai pengecekan `SELECT id FROM ... WHERE name = $1 LIMIT 1` (jika sudah ada maka di-`UPDATE`, jika belum maka di-`INSERT ... ON CONFLICT (id) DO UPDATE`). Untuk `recipe_items` dan `product_loads`, baris milik produk seed dihapus lalu diisi ulang di dalam transaksi yang sama.
+**Alasan:** Menjamin `go run ./cmd/seed` aman dijalankan berulang kali tanpa menggandakan baris dan menghasilkan `engine.UnitCost` Snack Box tepat `Rp 19.000` (`11.025 + 2.000 + 4.800 + 1.175`).
+
+### A3-12: Penutupan eksplisit `rows.Close()` sebelum eksekusi statement berikutnya pada transaksi/pool yang sama
+**Keputusan:** Di `internal/orders/lifecycle.go` (`ExpireOverdueOrders`, `deductStockForProduction`, `GetDecisionQueue`, `GetCapacityDay`, `ListOrders`, `loadOrderItemsAndEval`), `rows.Close()` dipanggil secara eksplisit tepat setelah loop `for rows.Next()` dan `rows.Err()` selesai, sebelum menjalankan query atau `Exec` berikutnya di dalam transaksi atau pool yang sama.
+**Alasan:** Mencegah penahanan koneksi/kursor pada pool dengan `DB_MAX_CONNS=3` dan `QueryExecModeSimpleProtocol`.
+
+
 
 

@@ -56,6 +56,7 @@ func ExpireOverdueOrders(ctx context.Context, q db.DBTX, now time.Time) (int, er
 	if err := rows.Err(); err != nil {
 		return 0, err
 	}
+	rows.Close()
 
 	for _, it := range expired {
 		if err := audit.Log(ctx, q, "", audit.ActionStatus, "orders", it.ID, map[string]any{
@@ -1080,6 +1081,7 @@ func deductStockForProduction(ctx context.Context, tx pgx.Tx, orderID string, no
 	if err := rows.Err(); err != nil {
 		return err
 	}
+	rows.Close()
 
 	for _, u := range usages {
 		if _, err := tx.Exec(ctx, `
@@ -1349,6 +1351,7 @@ func GetDecisionQueue(ctx context.Context, conn db.Conn, actorRole string) ([]De
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
 
 	out := make([]DecisionQueueItem, 0, len(pending))
 	for _, r := range pending {
@@ -1549,6 +1552,7 @@ func GetCapacityDay(ctx context.Context, conn db.Conn, date time.Time) (*Capacit
 	if err := resRows.Err(); err != nil {
 		return nil, err
 	}
+	resRows.Close()
 	sort.Slice(resList, func(i, j int) bool { return resList[i].Code < resList[j].Code })
 
 	loadItems := make([]engine.LoadItem, 0, len(resList))
@@ -1652,6 +1656,7 @@ func ListOrders(ctx context.Context, conn db.Conn, statusFilter, actorRole strin
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
 
 	out := make([]OrderDetail, 0, len(ids))
 	for _, id := range ids {
@@ -1820,6 +1825,7 @@ func loadOrderItemsAndEval(ctx context.Context, q db.DBTX, orderID string, param
 	if err := rows.Err(); err != nil {
 		return nil, nil, 0, err
 	}
+	rows.Close()
 
 	prodMeta, err := LoadProductsMeta(ctx, q, pids, params)
 	if err != nil {
