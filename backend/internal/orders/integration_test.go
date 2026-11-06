@@ -250,10 +250,6 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 		close(startBarrier)
 		wg.Wait()
 
-		if r == 0 {
-			t.Logf("Timing per fase CreateOrder (putaran 1): %s", orders.LastCreateOrderTiming)
-		}
-
 		accepted := 0
 		pending := 0
 		for g := 0; g < 2; g++ {
