@@ -20,6 +20,7 @@ import (
 
 	"kalkurasa/backend/internal/auth"
 	"kalkurasa/backend/internal/engine"
+	"kalkurasa/backend/internal/orders"
 )
 
 type ingredientSeed struct {
@@ -74,7 +75,7 @@ func main() {
 		log.Fatalf("hash SEED_DEMO_PASSWORD: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	cfg, err := pgx.ParseConfig(dsn)
@@ -563,4 +564,20 @@ func main() {
 	fmt.Printf("  Overhead                 : Rp %s\n", sbOverhead.StringFixed(0))
 	fmt.Printf("  UnitCost (engine)        : Rp %s\n", sbUnitCost.StringFixed(0))
 	fmt.Println("✓ Seed katalog dasar selesai.")
+
+	// Seed pesanan demo (idempoten): ~40 pesanan, skenario S1..S5, pembayaran, tugas, stok, kas, audit.
+	summary, err := orders.SeedDemoData(ctx, conn, demoPassword)
+	if err != nil {
+		log.Fatalf("seed data demo: %v", err)
+	}
+	fmt.Printf("=== Seed Pesanan Demo (today=%s) ===\n", summary.Today)
+	for _, tbl := range []string{"users", "orders", "order_items", "order_evaluations", "payments", "tasks", "purchases", "stock_movements", "cash_entries", "audit_logs"} {
+		fmt.Printf("  %-18s : %d\n", tbl, summary.TableCounts[tbl])
+	}
+	fmt.Printf("  Status pesanan           : %v\n", summary.StatusCounts)
+	fmt.Printf("  UnitCost Snack Box       : Rp %s\n", summary.SnackBoxUnitCost)
+	for _, k := range []string{"S1", "S2", "S3", "S4", "S5"} {
+		fmt.Printf("  %s: %v\n", k, summary.Scenarios[k])
+	}
+	fmt.Println("✓ Seed demo selesai.")
 }
