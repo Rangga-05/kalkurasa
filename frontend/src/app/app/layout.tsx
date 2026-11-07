@@ -22,13 +22,18 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { getMe, logout, getErrorMessage } from "@/lib/api";
-import { getDashboardPathForRole, ROLE_LABELS } from "@/lib/format";
+import { ApiError, getMe, logout, getErrorMessage } from "@/lib/api";
+import {
+  canRoleAccessInternalPath,
+  getDashboardPathForRole,
+  ROLE_LABELS,
+} from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/states";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -142,15 +147,26 @@ export default function InternalAppLayout({
     retry: false,
   });
 
+  const isAuthError =
+    meQuery.error instanceof ApiError &&
+    (meQuery.error.isUnauthorized || meQuery.error.isForbidden);
+
   useEffect(() => {
-    if (meQuery.isError) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    if (meQuery.isError && isAuthError) {
+      void logout().catch(() => undefined);
+      router.replace(`/login?next=${encodeURIComponent(pathname)}&reauth=1`);
       return;
     }
-    if (meQuery.data?.role === "customer") {
+    const role = meQuery.data?.role;
+    if (!role) return;
+    if (role === "customer") {
       router.replace("/pesanan-saya");
+      return;
     }
-  }, [meQuery.isError, meQuery.data?.role, pathname, router]);
+    if (pathname === "/app" || !canRoleAccessInternalPath(role, pathname)) {
+      router.replace(getDashboardPathForRole(role));
+    }
+  }, [meQuery.isError, isAuthError, meQuery.data?.role, pathname, router]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -355,13 +371,38 @@ export default function InternalAppLayout({
         ) : null}
 
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
-          {meQuery.isLoading ? (
+          {meQuery.isLoading || (meQuery.isError && isAuthError) ? (
             <div className="space-y-4">
               <Skeleton className="h-8 w-64" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Skeleton className="h-36 w-full rounded-xl" />
                 <Skeleton className="h-36 w-full rounded-xl" />
                 <Skeleton className="h-36 w-full rounded-xl" />
+              </div>
+            </div>
+          ) : meQuery.isError ? (
+            <div className="space-y-4">
+              <ErrorState
+                title="Tidak Dapat Terhubung ke Server Backend"
+                message={getErrorMessage(
+                  meQuery.error,
+                  "Pastikan server API Go sedang berjalan dan koneksi database tersedia."
+                )}
+                onRetry={() => void meQuery.refetch()}
+              />
+              <div className="text-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void logout().catch(() => undefined);
+                    router.replace(
+                      `/login?next=${encodeURIComponent(pathname)}&reauth=1`
+                    );
+                  }}
+                >
+                  Masuk Ulang dengan Akun Lain
+                </Button>
               </div>
             </div>
           ) : (

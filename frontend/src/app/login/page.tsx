@@ -17,7 +17,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { login, getErrorMessage } from "@/lib/api";
-import { getDashboardPathForRole, ROLE_LABELS } from "@/lib/format";
+import { resolvePostLoginRedirect, ROLE_LABELS } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 import { PublicNavbar } from "@/components/public-navbar";
 import { useToast } from "@/components/providers";
@@ -81,21 +81,7 @@ function LoginFormContent() {
         `Selamat datang, ${res.user.name}`,
         `Masuk sebagai ${ROLE_LABELS[res.user.role]}`
       );
-      if (res.user.role === "customer") {
-        const customerTarget =
-          nextPath &&
-          (nextPath.startsWith("/pesan") ||
-            nextPath.startsWith("/pesanan-saya") ||
-            nextPath.startsWith("/lacak"))
-            ? nextPath
-            : "/pesanan-saya";
-        router.push(customerTarget);
-        router.refresh();
-        return;
-      }
-      const defaultTarget = getDashboardPathForRole(res.user.role);
-      const target =
-        nextPath && nextPath.startsWith("/app") ? nextPath : defaultTarget;
+      const target = resolvePostLoginRedirect(res.user.role, nextPath);
       router.push(target);
       router.refresh();
     },

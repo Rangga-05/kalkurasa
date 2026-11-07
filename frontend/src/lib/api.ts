@@ -1,6 +1,9 @@
 import type {
   ApiEnvelope,
   ApiErrorEnvelope,
+  ApiListEnvelope,
+  AuditLogFilterParams,
+  AuditLogItem,
   AvailabilityDay,
   AvailabilityRequest,
   CancelOrderRequest,
@@ -15,14 +18,18 @@ import type {
   CreateManualOrderRequest,
   CreateProductRequest,
   CreatePublicOrderRequest,
+  CreateUserRequest,
   DecideOrderRequest,
   DecisionQueueItem,
   Ingredient,
+  KPIResult,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
+  ManagerDashboardResult,
   OrderDetail,
   OrderFilterParams,
+  OwnerDashboardResult,
   PaymentResult,
   Product,
   ProductCostingDTO,
@@ -38,6 +45,7 @@ import type {
   Resource,
   SettingsMap,
   ShoppingListResult,
+  StaffDashboardResult,
   StockAdjustRequest,
   StockAdjustResult,
   TaskFilterParams,
@@ -46,6 +54,7 @@ import type {
   UpdateIngredientRequest,
   UpdateProductRequest,
   UpdateTaskRequest,
+  UpdateUserRequest,
   UpsertProductLoadsRequest,
   UpsertProductRecipesRequest,
   User,
@@ -160,6 +169,59 @@ async function requestJson<T>(
 
   const envelope = parsed as ApiEnvelope<T>;
   return envelope.data;
+}
+
+async function requestListJson<T>(
+  path: string,
+  init: RequestInit = {}
+): Promise<ApiListEnvelope<T>> {
+  const headers = new Headers(init.headers);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.set("Accept", "application/json");
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "network_error",
+      "Tidak dapat terhubung ke server. Periksa koneksi jaringan Anda."
+    );
+  }
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (!response.ok) {
+    const errEnv = parsed as Partial<ApiErrorEnvelope> | null;
+    const code = errEnv?.error?.code || `http_${response.status}`;
+    const message =
+      errEnv?.error?.message ||
+      (response.status === 404
+        ? "Data yang diminta tidak ditemukan."
+        : response.status === 422
+          ? "Data masukan belum sesuai ketentuan."
+          : response.status === 429
+            ? "Terlalu banyak permintaan. Silakan tunggu sebentar."
+            : "Terjadi kesalahan pada server.");
+    throw new ApiError(response.status, code, message);
+  }
+
+  return parsed as ApiListEnvelope<T>;
 }
 
 // ============================================================================
@@ -810,5 +872,142 @@ export async function updateSettings(
     body: JSON.stringify(payload),
   });
 }
+
+// ============================================================================
+// Endpoint Dashboard per Peran, KPI, Pengguna, dan Audit Log (Tahap 6)
+// ============================================================================
+
+/**
+ * GET /api/v1/dashboard/owner
+ * Mengambil ringkasan Dashboard Pemilik Usaha (khusus Owner).
+ */
+export async function getOwnerDashboard(
+  signal?: AbortSignal
+): Promise<OwnerDashboardResult> {
+  return requestJson<OwnerDashboardResult>("/dashboard/owner", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/dashboard/manager
+ * Mengambil ringkasan Dashboard Manajer Operasional (Manager & Owner).
+ */
+export async function getManagerDashboard(
+  signal?: AbortSignal
+): Promise<ManagerDashboardResult> {
+  return requestJson<ManagerDashboardResult>("/dashboard/manager", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/dashboard/staff
+ * Mengambil ringkasan Dashboard Karyawan tanpa harga/margin/kas (Staff, Manager, Owner).
+ */
+export async function getStaffDashboard(
+  signal?: AbortSignal
+): Promise<StaffDashboardResult> {
+  return requestJson<StaffDashboardResult>("/dashboard/staff", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/kpi
+ * Mengambil 7 indikator kinerja utama (Owner, Manager, Admin).
+ */
+export async function getKPI(signal?: AbortSignal): Promise<KPIResult> {
+  return requestJson<KPIResult>("/kpi", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/audit-logs
+ * Mengambil daftar log audit dengan filter dan paginasi (khusus Owner & Admin).
+ */
+export async function getAuditLogs(
+  params: AuditLogFilterParams = {},
+  signal?: AbortSignal
+): Promise<ApiListEnvelope<AuditLogItem>> {
+  const qs = new URLSearchParams();
+  if (params.action) qs.set("action", params.action);
+  if (params.entity) qs.set("entity", params.entity);
+  if (params.actor_id) qs.set("actor_id", params.actor_id);
+  if (params.entity_id) qs.set("entity_id", params.entity_id);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return requestListJson<AuditLogItem>(`/audit-logs${query}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/users
+ * Mengambil daftar pengguna dengan paginasi (khusus Admin).
+ */
+export async function getUsers(
+  params: { page?: number; limit?: number } = {},
+  signal?: AbortSignal
+): Promise<ApiListEnvelope<User>> {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return requestListJson<User>(`/users${query}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/users
+ * Membuat akun pengguna baru (khusus Admin).
+ */
+export async function createUser(payload: CreateUserRequest): Promise<User> {
+  return requestJson<User>("/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * PUT /api/v1/users/:id
+ * Memperbarui data pengguna (khusus Admin).
+ */
+export async function updateUser(
+  userId: string,
+  payload: UpdateUserRequest
+): Promise<User> {
+  return requestJson<User>(`/users/${encodeURIComponent(userId)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * DELETE /api/v1/users/:id
+ * Menonaktifkan (mengarsipkan) akun pengguna (khusus Admin).
+ */
+export async function deleteUser(
+  userId: string
+): Promise<{ id: string; archived: boolean; is_active: boolean }> {
+  return requestJson<{ id: string; archived: boolean; is_active: boolean }>(
+    `/users/${encodeURIComponent(userId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
 
 

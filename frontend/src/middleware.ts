@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getDashboardPathForRole } from "@/lib/format";
+import {
+  canRoleAccessInternalPath,
+  getDashboardPathForRole,
+  resolvePostLoginRedirect,
+} from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 
 interface DecodedJwtPayload {
@@ -28,46 +32,23 @@ function decodeSessionCookie(token: string | undefined): DecodedJwtPayload | nul
   }
 }
 
-const ROUTE_ROLE_RULES: { prefix: string; roles: UserRole[] }[] = [
-  { prefix: "/app/owner", roles: ["owner"] },
-  { prefix: "/app/manajer", roles: ["manager", "owner"] },
-  { prefix: "/app/karyawan", roles: ["staff", "manager", "owner"] },
-  { prefix: "/app/admin", roles: ["admin"] },
-  { prefix: "/app/keputusan", roles: ["owner", "manager"] },
-  { prefix: "/app/kapasitas", roles: ["owner", "manager"] },
-  { prefix: "/app/kas", roles: ["owner", "manager"] },
-  { prefix: "/app/pengaturan", roles: ["owner"] },
-  { prefix: "/app/belanja", roles: ["owner", "manager", "staff"] },
-  { prefix: "/app/produk", roles: ["owner", "manager", "admin"] },
-  { prefix: "/app/bahan", roles: ["owner", "manager", "admin", "staff"] },
-  { prefix: "/app/pengguna", roles: ["admin"] },
-  { prefix: "/app/audit", roles: ["owner", "admin"] },
-  { prefix: "/app/pesanan", roles: ["owner", "manager", "staff", "admin"] },
-];
-
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
   const sessionToken = request.cookies.get("session")?.value;
   const session = decodeSessionCookie(sessionToken);
 
-  // Jika pengguna sudah masuk dan membuka /login atau /daftar, arahkan sesuai peran
+  // Jika pengguna sudah masuk dan membuka /login atau /daftar, arahkan sesuai peran.
+  // Pengecualian: bila reauth=1 dikirim (karena GET /api/v1/auth/me ditolak backend),
+  // hapus cookie session yang basi dan biarkan halaman /login terbuka agar tidak terjadi redirect loop.
   if (pathname === "/login" || pathname === "/daftar") {
+    if (searchParams.get("reauth") === "1") {
+      const response = NextResponse.next();
+      response.cookies.delete("session");
+      return response;
+    }
     if (session?.role) {
       const nextParam = searchParams.get("next");
-      if (session.role === "customer") {
-        const safeCustomerTarget =
-          nextParam &&
-          (nextParam.startsWith("/pesan") ||
-            nextParam.startsWith("/pesanan-saya") ||
-            nextParam.startsWith("/lacak"))
-            ? nextParam
-            : "/pesanan-saya";
-        return NextResponse.redirect(new URL(safeCustomerTarget, request.url));
-      }
-      const target =
-        nextParam && nextParam.startsWith("/app")
-          ? nextParam
-          : getDashboardPathForRole(session.role);
+      const target = resolvePostLoginRedirect(session.role, nextParam);
       return NextResponse.redirect(new URL(target, request.url));
     }
     return NextResponse.next();
@@ -107,16 +88,8 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL(userDashboard, request.url));
     }
 
-    for (const rule of ROUTE_ROLE_RULES) {
-      if (
-        pathname === rule.prefix ||
-        pathname.startsWith(`${rule.prefix}/`)
-      ) {
-        if (!rule.roles.includes(session.role)) {
-          return NextResponse.redirect(new URL(userDashboard, request.url));
-        }
-        break;
-      }
+    if (!canRoleAccessInternalPath(session.role, pathname)) {
+      return NextResponse.redirect(new URL(userDashboard, request.url));
     }
   }
 
@@ -126,4 +99,5 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ["/login", "/daftar", "/pesanan-saya", "/app", "/app/:path*"],
 };
+
 

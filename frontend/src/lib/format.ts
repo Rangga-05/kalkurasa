@@ -310,3 +310,87 @@ export const RESOURCE_LABELS: Record<string, string> = {
   labor: "Tenaga Kerja Dapur",
 };
 
+export const INTERNAL_ROUTE_ROLE_RULES: { prefix: string; roles: UserRole[] }[] = [
+  { prefix: "/app/owner", roles: ["owner"] },
+  { prefix: "/app/manajer", roles: ["manager", "owner"] },
+  { prefix: "/app/karyawan", roles: ["staff", "manager", "owner"] },
+  { prefix: "/app/admin", roles: ["admin"] },
+  { prefix: "/app/keputusan", roles: ["owner", "manager"] },
+  { prefix: "/app/kapasitas", roles: ["owner", "manager"] },
+  { prefix: "/app/kas", roles: ["owner", "manager"] },
+  { prefix: "/app/pengaturan", roles: ["owner"] },
+  { prefix: "/app/belanja", roles: ["owner", "manager", "staff"] },
+  { prefix: "/app/produk", roles: ["owner", "manager", "admin"] },
+  { prefix: "/app/bahan", roles: ["owner", "manager", "admin", "staff"] },
+  { prefix: "/app/pengguna", roles: ["admin"] },
+  { prefix: "/app/audit", roles: ["owner", "admin"] },
+  { prefix: "/app/pesanan", roles: ["owner", "manager", "staff", "admin"] },
+];
+
+export function canRoleAccessInternalPath(
+  role: UserRole,
+  pathname: string
+): boolean {
+  if (role === "customer") return false;
+  if (!pathname.startsWith("/app/")) return false;
+  for (const rule of INTERNAL_ROUTE_ROLE_RULES) {
+    if (pathname === rule.prefix || pathname.startsWith(`${rule.prefix}/`)) {
+      return rule.roles.includes(role);
+    }
+  }
+  return false;
+}
+
+export function resolvePostLoginRedirect(
+  role: UserRole,
+  nextPath?: string | null
+): string {
+  if (role === "customer") {
+    if (
+      nextPath &&
+      (nextPath.startsWith("/pesan") ||
+        nextPath.startsWith("/pesanan-saya") ||
+        nextPath.startsWith("/lacak"))
+    ) {
+      return nextPath;
+    }
+    return "/pesanan-saya";
+  }
+  const defaultTarget = getDashboardPathForRole(role);
+  if (nextPath && canRoleAccessInternalPath(role, nextPath)) {
+    return nextPath;
+  }
+  return defaultTarget;
+}
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  create: "Pembuatan",
+  decision: "Keputusan Pesanan",
+  override: "Override Rekomendasi",
+  counter_response: "Respons Tawaran Balik",
+  payment: "Pencatatan Pembayaran",
+  status_change: "Transisi Status",
+  cancel: "Pembatalan Pesanan",
+  expire: "Kedaluwarsa DP",
+  purchase: "Pembelian Bahan",
+  stock_adjust: "Koreksi Stok",
+  cash_entry: "Entri Kas Manual",
+  settings_update: "Pembaruan Parameter",
+  master_change: "Perubahan Master Data",
+};
+
+export const AUDIT_ENTITY_LABELS: Record<string, string> = {
+  orders: "Pesanan",
+  tasks: "Tugas Operasional",
+  ingredients: "Bahan Baku",
+  products: "Produk",
+  recipe_items: "Resep Produk",
+  product_loads: "Beban Produksi",
+  resources: "Sumber Daya",
+  settings: "Parameter Usaha",
+  users: "Akun Pengguna",
+  cash_entries: "Arus Kas",
+  purchases: "Pembelian Bahan",
+};
+
+

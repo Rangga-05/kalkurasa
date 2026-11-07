@@ -350,6 +350,18 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Alasan:** Memenuhi Bagian 6 & 10 brief bahwa dashboard `staff` bebas dari informasi harga, margin, dan kas, sekaligus menyediakan seluruh data agregat yang dibutuhkan halaman dashboard tiap peran dalam satu panggilan API.
 
 ### A6-03: Filter dan Paginasi `GET /api/v1/audit-logs`
-**Keputusan:** Endpoint `GET /api/v1/audit-logs` hanya dapat diakses oleh `owner` dan `admin` (`403 Forbidden` untuk `manager`, `staff`, dan `customer`), mendukung parameter kueri `action`, `entity`, `actor_id`, `entity_id`, `from` (`YYYY-MM-DD` WIB), `to` (`YYYY-MM-DD` WIB), serta paginasi `page` (default `1`) dan `limit` (default `25`, maks `100`), dengan struktur respons `{ items, page, limit, total, total_pages }`.
+**Keputusan:** Endpoint `GET /api/v1/audit-logs` hanya dapat diakses oleh `owner` dan `admin` (`403 Forbidden` untuk `manager`, `staff`, dan `customer`), mendukung parameter kueri `action`, `entity`, `actor_id`, `entity_id`, `from` (`YYYY-MM-DD` WIB), `to` (`YYYY-MM-DD` WIB), serta paginasi `page` (default `1`) dan `limit` (default `50`, maks `200`), dengan struktur respons `{ data: [...], meta: { page, limit, total } }`.
 **Alasan:** Memudahkan audit jejak perubahan keputusan, override, pembayaran, pembatalan, koreksi stok, dan pengaturan oleh `owner` maupun `admin`.
+
+### A6-04: Validasi Tujuan Redirect Pasca-Login Berdasarkan Matriks Hak Akses Rute
+**Keputusan:** Fungsi `resolvePostLoginRedirect(role, nextPath)` dan `canRoleAccessInternalPath(role, pathname)` di `frontend/src/lib/format.ts` digunakan secara seragam di `frontend/src/middleware.ts`, `frontend/src/app/login/page.tsx`, dan `frontend/src/app/app/layout.tsx`. Setelah login berhasil, pengguna selalu diarahkan ke dashboard perannya (`/app/owner`, `/app/manajer`, `/app/karyawan`, `/app/admin`) kecuali parameter `?next=` menunjuk ke rute internal yang memang diizinkan bagi peran tersebut; akun `customer` selalu diarahkan ke `/pesanan-saya` (atau `/pesan`, `/lacak`) dan dilarang masuk ke `/app`.
+**Alasan:** Mencegah pengguna yang masuk dengan peran berbeda diarahkan ke halaman peran sebelumnya yang tersimpan di `?next=`.
+
+### A6-05: Komposisi Dashboard per Peran dan Filter Peran pada Halaman `/app/audit`
+**Keputusan:**
+- Dashboard Pemilik (`/app/owner`), Manajer (`/app/manajer`), dan Karyawan (`/app/karyawan`) menggunakan kembali komponen `DecisionCard`, `CapacityCalendar`, `CashProjectionChart`, dan `OrderStatusBadge` serta memakan langsung payload `GET /api/v1/dashboard/{owner,manager,staff}` tanpa rumus perhitungan di sisi klien.
+- Dashboard Admin (`/app/admin`) menggabungkan data `GET /api/v1/users`, `GET /api/v1/products`, `GET /api/v1/ingredients`, `GET /api/v1/resources`, dan `GET /api/v1/audit-logs?page=1&limit=10` untuk menampilkan ringkasan akun pengguna aktif per peran, metrik master data, dan 10 baris audit terakhir.
+- Halaman `/app/audit` meneruskan filter `action`, `entity`, `from`, `to`, `page`, dan `limit` ke `GET /api/v1/audit-logs`, serta menyaring `actor_role` ketika filter Peran (Role) dipilih.
+**Alasan:** Menjaga tata letak setiap dashboard tetap fokus (maksimal 5 elemen kunci per halaman) dan memenuhi kebutuhan filter Action & Role beserta paginasi pada tabel Audit Log tanpa mengubah kontrak backend yang sudah di-commit.
+
 

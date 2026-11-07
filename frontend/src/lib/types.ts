@@ -729,4 +729,173 @@ export interface ProductCostingDTO {
 
 export type SettingsMap = Record<string, string>;
 
+// ============================================================================
+// Tipe Data Dashboard per Peran, KPI, Pengguna, dan Audit Log (Tahap 6)
+// ============================================================================
+
+export interface CounteredOrRejectedStats {
+  total_countered: number;
+  counter_pending: number;
+  counter_accepted: number;
+  counter_rejected: number;
+  direct_rejected: number;
+  total_rejected: number;
+  total_countered_or_rejected: number;
+}
+
+export interface OrderMarginKPI {
+  order_id: string;
+  code: string;
+  customer_name: string;
+  event_date: string;
+  status: OrderStatus;
+  total: DecimalValue;
+  estimated_cost: DecimalValue;
+  actual_cost: DecimalValue;
+  estimated_margin: DecimalValue;
+  realized_margin: DecimalValue;
+}
+
+export interface CalibrationSuggestion {
+  order_count: number;
+  estimated_minutes: DecimalValue;
+  avg_actual_minutes: DecimalValue;
+  deviation: DecimalValue;
+  should_recalibrate: boolean;
+}
+
+export interface KPIResult {
+  on_time_rate: DecimalValue;
+  completed_orders: number;
+  on_time_orders: number;
+
+  avg_utilization: DecimalValue;
+  peak_utilization: DecimalValue;
+  peak_utilization_date?: string;
+  active_production_days: number;
+
+  ingredient_cost_variance: DecimalValue;
+  estimated_ingredient_cost: DecimalValue;
+  actual_ingredient_cost: DecimalValue;
+
+  cancellation_rate: DecimalValue;
+  cancelled_orders: number;
+  expired_orders: number;
+  cancelled_or_expired_orders: number;
+  accepted_orders_total: number;
+
+  countered_or_rejected: CounteredOrRejectedStats;
+
+  estimated_margin: DecimalValue;
+  realized_margin: DecimalValue;
+  total_revenue: DecimalValue;
+  total_estimated_cost: DecimalValue;
+  total_actual_cost: DecimalValue;
+  orders_margin: OrderMarginKPI[];
+
+  vulnerable_cash_days: number;
+  vulnerable_cash_dates: string[];
+  cash_lowest: DecimalValue;
+  cash_lowest_date: string;
+  cash_buffer: DecimalValue;
+  cash_passed: boolean;
+
+  calibration: CalibrationSuggestion;
+}
+
+export interface OwnerDashboardResult {
+  today: string;
+  decision_queue: DecisionQueueItem[];
+  cash_projection: CashProjectionResult;
+  kpi: KPIResult;
+  capacity_calendar: CapacityCalendarDay[];
+}
+
+export interface DPDueAlertItem {
+  order_id: string;
+  code: string;
+  customer_name: string;
+  event_date: string;
+  total: DecimalValue;
+  dp_required: DecimalValue;
+  paid: DecimalValue;
+  dp_deadline?: string | null;
+}
+
+export interface ManagerDashboardResult {
+  today: string;
+  capacity_calendar: CapacityCalendarDay[];
+  decision_queue: DecisionQueueItem[];
+  production_schedule: OrderDetail[];
+  shopping_list: ShoppingListResult;
+  low_stock_alerts: LowStockAlertItem[];
+  dp_due_alerts: DPDueAlertItem[];
+  cash_status: CashProjectionResult;
+  kpi: KPIResult;
+}
+
+export interface StaffDeliveryItem {
+  order_id: string;
+  order_code: string;
+  customer_name: string;
+  customer_contact: string;
+  delivery_type: DeliveryType;
+  address?: string;
+  notes?: string;
+  event_date: string;
+  production_date: string;
+  order_status: OrderStatus;
+  task_id?: string;
+  task_status?: TaskStatus;
+  items: TaskOrderItem[];
+}
+
+export interface StaffDashboardResult {
+  today: string;
+  today_tasks: TaskItem[];
+  active_tasks: TaskItem[];
+  deliveries: StaffDeliveryItem[];
+  low_stock_alerts: LowStockAlertItem[];
+}
+
+export interface AuditLogItem {
+  id: string;
+  actor_id: string | null;
+  actor_name?: string;
+  actor_role?: string;
+  action: string;
+  entity: string;
+  entity_id: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AuditLogFilterParams {
+  action?: string;
+  entity?: string;
+  actor_id?: string;
+  entity_id?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  name: string;
+  role: UserRole;
+  password: string;
+  is_active?: boolean;
+}
+
+export interface UpdateUserRequest {
+  email?: string;
+  name: string;
+  role: UserRole;
+  password?: string;
+  is_active?: boolean;
+}
+
+
 
