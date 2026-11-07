@@ -277,8 +277,11 @@ export default function OrderDetailPage({
 
   const totalNum = toNumber(order.total);
   const paidNum = toNumber(order.paid);
+  const dpNum = toNumber(order.dp_required);
   const remainingNum = Math.max(0, totalNum - paidNum);
-  const isFullyPaid = paidNum >= totalNum && totalNum > 0;
+  const isFullyPaid = remainingNum <= 0 || (paidNum >= totalNum && totalNum > 0);
+  const dpRemainingNum = Math.max(0, Math.round(dpNum - paidNum));
+  const isDpUnpaid = paidNum < dpNum && dpRemainingNum > 0;
 
   const canRecordPayment =
     canManage &&
@@ -872,69 +875,105 @@ export default function OrderDetailPage({
               )}
             </div>
 
-            {/* Form Catat Pembayaran Baru */}
-            {canRecordPayment && (
-              <form
-                onSubmit={handleRecordPayment}
-                className="rounded-xl border border-stone-200 bg-stone-50/60 p-4"
-              >
-                <h3 className="text-xs font-bold tracking-wider text-stone-700 uppercase">
-                  Catat Pembayaran Baru
-                </h3>
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
+            {/* Form Catat Pembayaran Baru / Indikator Lunas */}
+            {isFullyPaid ? (
+              <div className="flex flex-col justify-center rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-emerald-900">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <p className="text-xs font-bold">Pesanan ini sudah lunas</p>
+                </div>
+                <p className="mt-1 text-xs text-emerald-700">
+                  Seluruh tagihan pesanan sebesar {formatRupiah(order.total)} telah
+                  dibayar penuh (Sisa Pelunasan Rp 0).
+                </p>
+              </div>
+            ) : (
+              canRecordPayment && (
+                <form
+                  onSubmit={handleRecordPayment}
+                  className="rounded-xl border border-stone-200 bg-stone-50/60 p-4"
+                >
+                  <h3 className="text-xs font-bold tracking-wider text-stone-700 uppercase">
+                    Catat Pembayaran Baru
+                  </h3>
+
+                  {/* Quick Fill Buttons */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPayAmount(String(Math.round(remainingNum)))
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                    >
+                      Bayar Sisa Tagihan (Lunas) ({formatRupiah(remainingNum)})
+                    </button>
+                    {isDpUnpaid && (
+                      <button
+                        type="button"
+                        onClick={() => setPayAmount(String(dpRemainingNum))}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        Uang Muka/Nyicil ({formatRupiah(dpRemainingNum)})
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-700">
+                        Nominal Pembayaran (Rp) *
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        required
+                        value={payAmount}
+                        onChange={(e) => setPayAmount(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-stone-700">
+                        Metode Pembayaran
+                      </label>
+                      <select
+                        value={payMethod}
+                        onChange={(e) => setPayMethod(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                      >
+                        <option value="transfer">Transfer Bank</option>
+                        <option value="qris">QRIS</option>
+                        <option value="cash">Tunai (Cash)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-2.5">
                     <label className="block text-xs font-semibold text-stone-700">
-                      Nominal Pembayaran (Rp) *
+                      Catatan Pembayaran (Opsional)
                     </label>
                     <input
-                      type="number"
-                      min={1}
-                      required
-                      value={payAmount}
-                      onChange={(e) => setPayAmount(e.target.value)}
+                      type="text"
+                      value={payNote}
+                      onChange={(e) => setPayNote(e.target.value)}
+                      placeholder="Mis. DP 30% via BCA / Pelunasan"
                       className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-stone-700">
-                      Metode Pembayaran
-                    </label>
-                    <select
-                      value={payMethod}
-                      onChange={(e) => setPayMethod(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={submittingPay}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
                     >
-                      <option value="transfer">Transfer Bank</option>
-                      <option value="qris">QRIS</option>
-                      <option value="cash">Tunai (Cash)</option>
-                    </select>
+                      {submittingPay && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      Simpan Pembayaran
+                    </button>
                   </div>
-                </div>
-                <div className="mt-2.5">
-                  <label className="block text-xs font-semibold text-stone-700">
-                    Catatan Pembayaran (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={payNote}
-                    onChange={(e) => setPayNote(e.target.value)}
-                    placeholder="Mis. DP 30% via BCA / Pelunasan"
-                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
-                  />
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={submittingPay}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
-                  >
-                    {submittingPay && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    )}
-                    Simpan Pembayaran
-                  </button>
-                </div>
-              </form>
+                </form>
+              )
             )}
           </div>
         </div>
