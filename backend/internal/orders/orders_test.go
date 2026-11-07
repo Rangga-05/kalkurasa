@@ -1340,11 +1340,174 @@ func TestTahap4APlus_CustomerAuthOrdersAndActiveLimit(t *testing.T) {
 		{http.MethodGet, "/api/v1/products"},
 		{http.MethodGet, "/api/v1/ingredients"},
 		{http.MethodGet, "/api/v1/users"},
+		{http.MethodGet, "/api/v1/tasks"},
 	}
 	for _, ep := range internalEndpoints {
 		w := performJSON(env.router, ep.method, ep.path, nil, sitiHdr)
 		if w.Code != http.StatusForbidden {
 			t.Fatalf("customer accessing internal %s %s expected 403, got %d (%s)", ep.method, ep.path, w.Code, w.Body.String())
 		}
+	}
+}
+
+// TestTahap4B_TasksAndOrderDetailStaffRedaction menguji endpoint Tahap 4B:
+//  1. GET /api/v1/orders dengan filter status dan date.
+//  2. GET /api/v1/orders/:id untuk manager/owner memuat items, evaluation.gates, payments, tasks, dan audits.
+//  3. GET /api/v1/orders dan GET /api/v1/orders/:id untuk staff membuang seluruh field sensitif
+//     (unit_price, unit_cost, subtotal, total, dp_required, paid, evaluation, margin, cash_lowest, payments).
+//  4. GET /api/v1/tasks (filter mine, status, date) dan PATCH /api/v1/tasks/:id (status & actual_minutes);
+//     respons untuk staff tidak memuat harga, margin, atau kas; customer ditolak 403.
+func TestTahap4B_TasksAndOrderDetailStaffRedaction(t *testing.T) {
+	env := setupIsolatedTestEnv(t)
+
+	// Buat pesanan manual pada 2026-11-18 -> otomatis accepted
+	wCreate := performJSON(env.router, http.MethodPost, "/api/v1/orders", map[string]any{
+		"customer_name":    "Dinas Pendidikan Kota",
+		"customer_contact": "081233334444",
+		"delivery_type":    "delivery",
+		"address":          "Jl. Merdeka No. 10",
+		"notes":            "Antar pagi jam 08.00",
+		"event_date":       "2026-11-18",
+		"items": []map[string]any{
+			{"product_id": env.snackBoxID, "qty": 20},
+		},
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("create manual order: expected 201, got %d (%s)", wCreate.Code, wCreate.Body.String())
+	}
+	var ord struct {
+		Data orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wCreate.Body.Bytes(), &ord)
+
+	// Catat pembayaran DP -> status confirmed + 3 tugas (shop, produce, deliver) dibuat
+	wPay := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+ord.Data.ID+"/payments", map[string]any{
+		"amount": 150000,
+		"method": "transfer",
+		"note":   "DP 30%",
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wPay.Code != http.StatusCreated {
+		t.Fatalf("record payment: expected 201, got %d (%s)", wPay.Code, wPay.Body.String())
+	}
+
+	// 1. GET /api/v1/orders?status=confirmed&date=2026-11-18 oleh manager
+	wListMgr := performJSON(env.router, http.MethodGet, "/api/v1/orders?status=confirmed&date=2026-11-18", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wListMgr.Code != http.StatusOK {
+		t.Fatalf("GET /orders by manager: expected 200, got %d (%s)", wListMgr.Code, wListMgr.Body.String())
+	}
+	var listMgr struct {
+		Data []orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wListMgr.Body.Bytes(), &listMgr)
+	if len(listMgr.Data) != 1 || listMgr.Data[0].ID != ord.Data.ID {
+		t.Fatalf("expected 1 filtered order on 2026-11-18, got %d", len(listMgr.Data))
+	}
+
+	// Filter tanggal lain harus kosong
+	wListOther := performJSON(env.router, http.MethodGet, "/api/v1/orders?date=2026-11-25", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	var listOther struct {
+		Data []orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wListOther.Body.Bytes(), &listOther)
+	if len(listOther.Data) != 0 {
+		t.Fatalf("expected 0 orders on 2026-11-25, got %d", len(listOther.Data))
+	}
+
+	// 2. GET /api/v1/orders/:id oleh manager -> wajib memuat items, evaluation.gates, payments, tasks, audits
+	wDetMgr := performJSON(env.router, http.MethodGet, "/api/v1/orders/"+ord.Data.ID, nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wDetMgr.Code != http.StatusOK {
+		t.Fatalf("GET /orders/:id by manager: expected 200, got %d (%s)", wDetMgr.Code, wDetMgr.Body.String())
+	}
+	var detMgr struct {
+		Data orders.OrderDetail `json:"data"`
+	}
+	if err := json.Unmarshal(wDetMgr.Body.Bytes(), &detMgr); err != nil {
+		t.Fatalf("unmarshal manager order detail: %v", err)
+	}
+	if len(detMgr.Data.Items) != 1 || len(detMgr.Data.Evaluation.Gates) != 4 ||
+		len(detMgr.Data.Payments) != 1 || len(detMgr.Data.Tasks) != 3 || len(detMgr.Data.Audits) == 0 {
+		t.Fatalf("manager order detail incomplete: items=%d gates=%d payments=%d tasks=%d audits=%d",
+			len(detMgr.Data.Items), len(detMgr.Data.Evaluation.Gates),
+			len(detMgr.Data.Payments), len(detMgr.Data.Tasks), len(detMgr.Data.Audits))
+	}
+
+	// 3. GET /api/v1/orders/:id dan GET /api/v1/orders oleh staff -> TIDAK BOLEH memuat field harga/margin/kas/pembayaran
+	wDetStaff := performJSON(env.router, http.MethodGet, "/api/v1/orders/"+ord.Data.ID, nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wDetStaff.Code != http.StatusOK {
+		t.Fatalf("GET /orders/:id by staff: expected 200, got %d (%s)", wDetStaff.Code, wDetStaff.Body.String())
+	}
+	rawStaffBody := wDetStaff.Body.String()
+	for _, forbidden := range []string{
+		"unit_price", "unit_cost", "subtotal", `"total"`, "dp_required", `"paid"`,
+		"margin", "cash_lowest", "payments", "evaluation", "counter_offer",
+	} {
+		if strings.Contains(rawStaffBody, forbidden) {
+			t.Errorf("staff GET /orders/:id leaked sensitive field %s: %s", forbidden, rawStaffBody)
+		}
+	}
+
+	// 4. GET /api/v1/tasks oleh staff (filter mine=true, status=todo, date=2026-11-18)
+	wTasksStaff := performJSON(env.router, http.MethodGet, "/api/v1/tasks?mine=true&status=todo&date=2026-11-18", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wTasksStaff.Code != http.StatusOK {
+		t.Fatalf("GET /tasks by staff: expected 200, got %d (%s)", wTasksStaff.Code, wTasksStaff.Body.String())
+	}
+	rawTasksStaff := wTasksStaff.Body.String()
+	for _, forbidden := range []string{"unit_price", "unit_cost", "margin", "cash", "dp_required", `"total"`} {
+		if strings.Contains(rawTasksStaff, forbidden) {
+			t.Errorf("staff GET /tasks leaked sensitive field %s: %s", forbidden, rawTasksStaff)
+		}
+	}
+	var tasksResp struct {
+		Data []orders.TaskItem `json:"data"`
+	}
+	_ = json.Unmarshal(wTasksStaff.Body.Bytes(), &tasksResp)
+	// Pada tanggal 2026-11-18 terdapat tugas produce dan deliver (tugas shop jatuh pada H-2 = 2026-11-16)
+	if len(tasksResp.Data) != 2 {
+		t.Fatalf("expected 2 tasks due on 2026-11-18 (produce & deliver), got %d", len(tasksResp.Data))
+	}
+	var produceTaskID string
+	for _, tk := range tasksResp.Data {
+		if tk.Type == "produce" {
+			produceTaskID = tk.ID
+		}
+	}
+	if produceTaskID == "" {
+		t.Fatalf("produce task not found on 2026-11-18")
+	}
+
+	// 5. PATCH /api/v1/tasks/:id oleh staff (ubah status ke doing lalu done dengan actual_minutes = 230)
+	wPatchDoing := performJSON(env.router, http.MethodPatch, "/api/v1/tasks/"+produceTaskID, map[string]any{
+		"status": "doing",
+	}, map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wPatchDoing.Code != http.StatusOK {
+		t.Fatalf("PATCH /tasks/:id doing: expected 200, got %d (%s)", wPatchDoing.Code, wPatchDoing.Body.String())
+	}
+
+	wPatchDone := performJSON(env.router, http.MethodPatch, "/api/v1/tasks/"+produceTaskID, map[string]any{
+		"status":         "done",
+		"actual_minutes": 230,
+	}, map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wPatchDone.Code != http.StatusOK {
+		t.Fatalf("PATCH /tasks/:id done: expected 200, got %d (%s)", wPatchDone.Code, wPatchDone.Body.String())
+	}
+	var patchedTask struct {
+		Data orders.TaskItem `json:"data"`
+	}
+	_ = json.Unmarshal(wPatchDone.Body.Bytes(), &patchedTask)
+	if patchedTask.Data.Status != "done" || patchedTask.Data.ActualMinutes == nil || *patchedTask.Data.ActualMinutes != 230 {
+		t.Fatalf("unexpected patched task: %+v", patchedTask.Data)
+	}
+
+	// 6. Customer ditolak 403 saat mencoba PATCH /api/v1/tasks/:id
+	wCustPatch := performJSON(env.router, http.MethodPatch, "/api/v1/tasks/"+produceTaskID, map[string]any{
+		"status": "todo",
+	}, map[string]string{"Authorization": "Bearer " + env.customerToken})
+	if wCustPatch.Code != http.StatusForbidden {
+		t.Fatalf("customer PATCH /tasks/:id expected 403, got %d (%s)", wCustPatch.Code, wCustPatch.Body.String())
 	}
 }

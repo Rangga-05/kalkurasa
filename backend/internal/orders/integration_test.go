@@ -1022,13 +1022,14 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	router := server.New(cfg, pool)
 
 	// =========================================================================
-	// 0. Registrasi Akun Pelanggan (POST /api/v1/auth/register) & Cek 401
+	// 0. Registrasi Akun Pelanggan (POST /api/v1/auth/register), Injeksi Role, Rate Limit & Cek 401
 	// =========================================================================
 	wReg := performJSON(router, http.MethodPost, "/api/v1/auth/register", map[string]any{
 		"name":     runPrefix + "Pelanggan Uji",
 		"email":    runPrefix + "customer@demo.test",
 		"contact":  "081200001234",
 		"password": "PasswordUji123!",
+		"role":     "owner", // harus diabaikan dan dipaksa menjadi 'customer'
 	}, map[string]string{"X-Forwarded-For": "198.51.100.200"})
 	if wReg.Code != http.StatusCreated {
 		t.Fatalf("POST /auth/register: diharapkan 201, dapat %d (%s)", wReg.Code, wReg.Body.String())
@@ -1044,6 +1045,20 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	customerID := regResp.Data.User.ID
 	if customerToken == "" || customerID == "" {
 		t.Fatalf("registrasi customer tidak mengembalikan token/id: %+v", regResp.Data)
+	}
+	if regResp.Data.User.Role != auth.RoleCustomer {
+		t.Fatalf("injeksi role pada POST /auth/register harus dipaksa menjadi 'customer', dapat %q", regResp.Data.User.Role)
+	}
+
+	// Verifikasi tabel rate_limits benar-benar mencatat key 'register:198.51.100.200'
+	var regRateCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(count), 0) FROM rate_limits WHERE key = 'register:198.51.100.200'
+	`).Scan(&regRateCount); err != nil {
+		t.Fatalf("cek rate_limits register: %v", err)
+	}
+	if regRateCount < 1 {
+		t.Fatalf("diharapkan rate_limits mencatat minimal 1 baris untuk register:198.51.100.200, dapat %d", regRateCount)
 	}
 
 	// Pastikan POST /public/orders tanpa login ditolak 401
@@ -1364,6 +1379,78 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	_ = json.Unmarshal(wTr4.Body.Bytes(), &tr4Resp)
 	if tr4Resp.Data.Status != orders.StatusCompleted {
 		t.Fatalf("setelah delivering -> completed: diharapkan status completed, dapat %q", tr4Resp.Data.Status)
+	}
+
+	// 6f. Verifikasi Tahap 4B pada Postgres: GET /orders/:id (manager vs staff), GET /tasks, dan PATCH /tasks/:id
+	wGetMgr := performJSON(router, http.MethodGet, "/api/v1/orders/"+order2ID, nil, map[string]string{
+		"Authorization": "Bearer " + managerToken,
+	})
+	if wGetMgr.Code != http.StatusOK {
+		t.Fatalf("GET /orders/:id oleh manager: diharapkan 200, dapat %d (%s)", wGetMgr.Code, wGetMgr.Body.String())
+	}
+	var mgrDetail struct {
+		Data orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wGetMgr.Body.Bytes(), &mgrDetail)
+	if len(mgrDetail.Data.Evaluation.Gates) != 4 || len(mgrDetail.Data.Payments) != 2 ||
+		len(mgrDetail.Data.Tasks) != 3 || len(mgrDetail.Data.Audits) == 0 {
+		t.Fatalf("GET /orders/:id manager tidak lengkap: gates=%d payments=%d tasks=%d audits=%d",
+			len(mgrDetail.Data.Evaluation.Gates), len(mgrDetail.Data.Payments), len(mgrDetail.Data.Tasks), len(mgrDetail.Data.Audits))
+	}
+
+	wGetStaff := performJSON(router, http.MethodGet, "/api/v1/orders/"+order2ID, nil, map[string]string{
+		"Authorization": "Bearer " + staffToken,
+	})
+	if wGetStaff.Code != http.StatusOK {
+		t.Fatalf("GET /orders/:id oleh staff: diharapkan 200, dapat %d (%s)", wGetStaff.Code, wGetStaff.Body.String())
+	}
+	rawStaffDetail := wGetStaff.Body.String()
+	for _, secret := range []string{"unit_price", "unit_cost", "subtotal", `"total"`, "dp_required", `"paid"`, "margin", "cash_lowest", "payments", "evaluation"} {
+		if strings.Contains(rawStaffDetail, secret) {
+			t.Fatalf("GET /orders/:id oleh staff membocorkan field sensitif %s: %s", secret, rawStaffDetail)
+		}
+	}
+
+	wTasksList := performJSON(router, http.MethodGet, "/api/v1/tasks?date="+dateBStr, nil, map[string]string{
+		"Authorization": "Bearer " + staffToken,
+	})
+	if wTasksList.Code != http.StatusOK {
+		t.Fatalf("GET /tasks oleh staff: diharapkan 200, dapat %d (%s)", wTasksList.Code, wTasksList.Body.String())
+	}
+	var tasksListResp struct {
+		Data []orders.TaskItem `json:"data"`
+	}
+	_ = json.Unmarshal(wTasksList.Body.Bytes(), &tasksListResp)
+	if len(tasksListResp.Data) < 2 {
+		t.Fatalf("GET /tasks pada %s: diharapkan minimal 2 tugas (produce & deliver), dapat %d", dateBStr, len(tasksListResp.Data))
+	}
+
+	// Cari tugas shop dari Order 2 dan uji PATCH /api/v1/tasks/:id oleh staff
+	var shopTaskID string
+	for _, tk := range mgrDetail.Data.Tasks {
+		if tk.Type == "shop" {
+			shopTaskID = tk.ID
+		}
+	}
+	if shopTaskID == "" {
+		t.Fatalf("tugas shop Order 2 tidak ditemukan")
+	}
+	wPatchTask := performJSON(router, http.MethodPatch, "/api/v1/tasks/"+shopTaskID, map[string]any{
+		"status":         "done",
+		"actual_minutes": 45,
+	}, map[string]string{
+		"Authorization": "Bearer " + staffToken,
+	})
+	if wPatchTask.Code != http.StatusOK {
+		t.Fatalf("PATCH /tasks/:id oleh staff: diharapkan 200, dapat %d (%s)", wPatchTask.Code, wPatchTask.Body.String())
+	}
+
+	// Customer ditolak 403 pada GET /api/v1/tasks
+	wCustTasks := performJSON(router, http.MethodGet, "/api/v1/tasks", nil, map[string]string{
+		"Authorization": "Bearer " + customerToken,
+	})
+	if wCustTasks.Code != http.StatusForbidden {
+		t.Fatalf("GET /tasks oleh customer: diharapkan 403, dapat %d (%s)", wCustTasks.Code, wCustTasks.Body.String())
 	}
 
 	// =========================================================================

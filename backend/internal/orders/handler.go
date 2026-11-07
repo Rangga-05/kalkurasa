@@ -525,7 +525,7 @@ func (h *Handler) CounterResponse(c *gin.Context) {
 	httpx.OK(c, out)
 }
 
-// ListOrders menangani GET /api/v1/orders.
+// ListOrders menangani GET /api/v1/orders (filter: status, date, event_date, from, to).
 func (h *Handler) ListOrders(c *gin.Context) {
 	if h.DB == nil {
 		httpx.DBUnavailable(c)
@@ -536,8 +536,47 @@ func (h *Handler) ListOrders(c *gin.Context) {
 	if actor != nil {
 		role = actor.Role
 	}
+
+	v := httpx.NewValidation()
 	statusFilter := strings.TrimSpace(c.Query("status"))
-	items, err := ListOrders(c.Request.Context(), h.DB, statusFilter, role)
+	dateFilter := strings.TrimSpace(c.Query("date"))
+	eventDateFilter := strings.TrimSpace(c.Query("event_date"))
+	fromFilter := strings.TrimSpace(c.Query("from"))
+	toFilter := strings.TrimSpace(c.Query("to"))
+
+	if dateFilter != "" {
+		if _, err := db.ParseDate(dateFilter); err != nil {
+			v.Add("Parameter date harus berformat YYYY-MM-DD.")
+		}
+	}
+	if eventDateFilter != "" {
+		if _, err := db.ParseDate(eventDateFilter); err != nil {
+			v.Add("Parameter event_date harus berformat YYYY-MM-DD.")
+		}
+	}
+	if fromFilter != "" {
+		if _, err := db.ParseDate(fromFilter); err != nil {
+			v.Add("Parameter from harus berformat YYYY-MM-DD.")
+		}
+	}
+	if toFilter != "" {
+		if _, err := db.ParseDate(toFilter); err != nil {
+			v.Add("Parameter to harus berformat YYYY-MM-DD.")
+		}
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+
+	items, err := ListOrders(c.Request.Context(), h.DB, OrderListFilter{
+		Status:    statusFilter,
+		Date:      dateFilter,
+		EventDate: eventDateFilter,
+		From:      fromFilter,
+		To:        toFilter,
+		ActorRole: role,
+	})
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
@@ -832,5 +871,128 @@ func (h *Handler) CapacityDay(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, detail)
+}
+
+// ListTasks menangani GET /api/v1/tasks (filter: mine, status, type, date/due_date, from, to).
+func (h *Handler) ListTasks(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Sesi login tidak ditemukan.")
+		return
+	}
+
+	v := httpx.NewValidation()
+	statusFilter := strings.TrimSpace(c.Query("status"))
+	if statusFilter != "" {
+		statusFilter = v.OneOf("Status tugas (status)", statusFilter, "todo", "doing", "done")
+	}
+	typeFilter := strings.TrimSpace(c.Query("type"))
+	if typeFilter != "" {
+		typeFilter = v.OneOf("Tipe tugas (type)", typeFilter, "produce", "shop", "deliver")
+	}
+	dateFilter := strings.TrimSpace(c.Query("date"))
+	if dateFilter == "" {
+		dateFilter = strings.TrimSpace(c.Query("due_date"))
+	}
+	if dateFilter != "" {
+		if _, err := db.ParseDate(dateFilter); err != nil {
+			v.Add("Parameter tanggal (date) harus berformat YYYY-MM-DD.")
+		}
+	}
+	fromFilter := strings.TrimSpace(c.Query("from"))
+	if fromFilter != "" {
+		if _, err := db.ParseDate(fromFilter); err != nil {
+			v.Add("Parameter from harus berformat YYYY-MM-DD.")
+		}
+	}
+	toFilter := strings.TrimSpace(c.Query("to"))
+	if toFilter != "" {
+		if _, err := db.ParseDate(toFilter); err != nil {
+			v.Add("Parameter to harus berformat YYYY-MM-DD.")
+		}
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+
+	mineStr := strings.ToLower(strings.TrimSpace(c.Query("mine")))
+	mine := mineStr == "true" || mineStr == "1"
+
+	items, err := ListTasks(c.Request.Context(), h.DB, TaskFilter{
+		Mine:      mine,
+		Status:    statusFilter,
+		Type:      typeFilter,
+		Date:      dateFilter,
+		From:      fromFilter,
+		To:        toFilter,
+		ActorID:   actor.ID,
+		ActorRole: actor.Role,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, items)
+}
+
+type updateTaskRequest struct {
+	Status        string `json:"status"`
+	ActualMinutes *int   `json:"actual_minutes,omitempty"`
+}
+
+// UpdateTask menangani PATCH /api/v1/tasks/:id (status todo|doing|done dan actual_minutes).
+func (h *Handler) UpdateTask(c *gin.Context) {
+	id, ok := httpx.ParamUUID(c, "id")
+	if !ok {
+		return
+	}
+	var req updateTaskRequest
+	if !httpx.BindJSON(c, &req) {
+		return
+	}
+
+	v := httpx.NewValidation()
+	statusVal := strings.TrimSpace(req.Status)
+	if statusVal == "" && req.ActualMinutes == nil {
+		v.Add("Minimal salah satu dari status atau actual_minutes wajib diisi.")
+	}
+	if statusVal != "" {
+		statusVal = v.OneOf("Status tugas (status)", statusVal, "todo", "doing", "done")
+	}
+	if req.ActualMinutes != nil && *req.ActualMinutes <= 0 {
+		v.Add("Durasi aktual (actual_minutes) harus lebih dari 0 menit.")
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Sesi login tidak ditemukan.")
+		return
+	}
+
+	updated, err := UpdateTask(c.Request.Context(), h.DB, UpdateTaskInput{
+		TaskID:        id,
+		ActorID:       actor.ID,
+		ActorRole:     actor.Role,
+		Status:        statusVal,
+		ActualMinutes: req.ActualMinutes,
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, updated)
 }
 

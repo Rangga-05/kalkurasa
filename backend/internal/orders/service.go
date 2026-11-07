@@ -666,7 +666,17 @@ type OrderItemDetail struct {
 	Subtotal    decimal.Decimal `json:"subtotal"`
 }
 
-// OrderDetail adalah representasi lengkap pesanan setelah dibuat.
+// OrderAuditItem adalah ringkasan catatan audit pada pesanan (GET /api/v1/orders/:id).
+type OrderAuditItem struct {
+	ID        string         `json:"id"`
+	ActorID   *string        `json:"actor_id,omitempty"`
+	ActorName string         `json:"actor_name,omitempty"`
+	Action    string         `json:"action"`
+	Detail    map[string]any `json:"detail,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+}
+
+// OrderDetail adalah representasi lengkap pesanan setelah dibuat atau dimuat.
 type OrderDetail struct {
 	ID                   string            `json:"id"`
 	Code                 string            `json:"code"`
@@ -681,16 +691,114 @@ type OrderDetail struct {
 	ProductionDate       string            `json:"production_date"`
 	Status               string            `json:"status"`
 	Total                decimal.Decimal   `json:"total"`
+	TotalUnits           int               `json:"total_units"`
+	IsBigOrder           bool              `json:"is_big_order"`
+	CanDecide            bool              `json:"can_decide"`
 	DPRequired           decimal.Decimal   `json:"dp_required"`
 	DPDeadline           *time.Time        `json:"dp_deadline"`
 	Paid                 decimal.Decimal   `json:"paid"`
 	Recommendation       string            `json:"recommendation"`
 	RecommendationReason string            `json:"recommendation_reason"`
 	CounterOffer         *CounterOfferDTO  `json:"counter_offer"`
+	DecidedBy            *string           `json:"decided_by,omitempty"`
+	DecidedAt            *time.Time        `json:"decided_at,omitempty"`
+	OverrideReason       string            `json:"override_reason,omitempty"`
 	Evaluation           EvaluationDTO     `json:"evaluation"`
 	Items                []OrderItemDetail `json:"items"`
+	Payments             []PaymentItem     `json:"payments"`
+	Tasks                []TaskItem        `json:"tasks"`
+	Audits               []OrderAuditItem  `json:"audits"`
 	CreatedAt            time.Time         `json:"created_at"`
 	UpdatedAt            time.Time         `json:"updated_at"`
+
+	staffRedacted bool
+}
+
+type staffOrderItemView struct {
+	ID          string `json:"id"`
+	ProductID   string `json:"product_id"`
+	ProductName string `json:"product_name"`
+	Qty         int    `json:"qty"`
+}
+
+type staffOrderDetailView struct {
+	ID              string               `json:"id"`
+	Code            string               `json:"code"`
+	Source          string               `json:"source"`
+	CustomerID      *string              `json:"customer_id,omitempty"`
+	CustomerName    string               `json:"customer_name"`
+	CustomerContact string               `json:"customer_contact"`
+	DeliveryType    string               `json:"delivery_type"`
+	Address         string               `json:"address,omitempty"`
+	Notes           string               `json:"notes,omitempty"`
+	EventDate       string               `json:"event_date"`
+	ProductionDate  string               `json:"production_date"`
+	Status          string               `json:"status"`
+	TotalUnits      int                  `json:"total_units"`
+	Items           []staffOrderItemView `json:"items"`
+	Tasks           []TaskItem           `json:"tasks"`
+	Audits          []OrderAuditItem     `json:"audits"`
+	CreatedAt       time.Time            `json:"created_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
+}
+
+// MarshalJSON membuang seluruh field harga, biaya, margin, kas, pembayaran, dan evaluasi
+// ketika OrderDetail dimuat oleh peran staff (staffRedacted == true).
+func (d OrderDetail) MarshalJSON() ([]byte, error) {
+	if d.staffRedacted {
+		safeItems := make([]staffOrderItemView, 0, len(d.Items))
+		for _, it := range d.Items {
+			safeItems = append(safeItems, staffOrderItemView{
+				ID:          it.ID,
+				ProductID:   it.ProductID,
+				ProductName: it.ProductName,
+				Qty:         it.Qty,
+			})
+		}
+		tasks := d.Tasks
+		if tasks == nil {
+			tasks = []TaskItem{}
+		}
+		audits := d.Audits
+		if audits == nil {
+			audits = []OrderAuditItem{}
+		}
+		return json.Marshal(staffOrderDetailView{
+			ID:              d.ID,
+			Code:            d.Code,
+			Source:          d.Source,
+			CustomerID:      d.CustomerID,
+			CustomerName:    d.CustomerName,
+			CustomerContact: d.CustomerContact,
+			DeliveryType:    d.DeliveryType,
+			Address:         d.Address,
+			Notes:           d.Notes,
+			EventDate:       d.EventDate,
+			ProductionDate:  d.ProductionDate,
+			Status:          d.Status,
+			TotalUnits:      d.TotalUnits,
+			Items:           safeItems,
+			Tasks:           tasks,
+			Audits:          audits,
+			CreatedAt:       d.CreatedAt,
+			UpdatedAt:       d.UpdatedAt,
+		})
+	}
+	type plainOrderDetail OrderDetail
+	p := plainOrderDetail(d)
+	if p.Items == nil {
+		p.Items = []OrderItemDetail{}
+	}
+	if p.Payments == nil {
+		p.Payments = []PaymentItem{}
+	}
+	if p.Tasks == nil {
+		p.Tasks = []TaskItem{}
+	}
+	if p.Audits == nil {
+		p.Audits = []OrderAuditItem{}
+	}
+	return json.Marshal(p)
 }
 
 // EvaluateOrder di lapisan layanan merangkai EvalInput dari database dan
@@ -1013,6 +1121,9 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			ProductionDate:       prodDateKey,
 			Status:               status,
 			Total:                evalRes.Total.Round(2),
+			TotalUnits:           totalUnits,
+			IsBigOrder:           !underBigOrder,
+			CanDecide:            true,
 			DPRequired:           dpRequired.Round(2),
 			DPDeadline:           dpDeadline,
 			Paid:                 decimal.Zero,
@@ -1021,6 +1132,9 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			CounterOffer:         evalDTO.CounterOffer,
 			Evaluation:           evalDTO,
 			Items:                itemDetails,
+			Payments:             []PaymentItem{},
+			Tasks:                []TaskItem{},
+			Audits:               []OrderAuditItem{},
 			CreatedAt:            createdAt,
 			UpdatedAt:            updatedAt,
 		}

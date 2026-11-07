@@ -74,17 +74,34 @@ func ExpireOverdueOrders(ctx context.Context, q db.DBTX, now time.Time) (int, er
 	return len(expired), nil
 }
 
-// TaskItem adalah representasi tugas operasional (produce, shop, deliver).
+// TaskOrderItem adalah ringkasan item produk tanpa harga/margin untuk tampilan tugas operasional.
+type TaskOrderItem struct {
+	ProductID   string `json:"product_id"`
+	ProductName string `json:"product_name"`
+	Qty         int    `json:"qty"`
+}
+
+// TaskItem adalah representasi tugas operasional (produce, shop, deliver) tanpa field harga/margin/kas.
 type TaskItem struct {
-	ID            string    `json:"id"`
-	OrderID       string    `json:"order_id"`
-	Type          string    `json:"type"`
-	Title         string    `json:"title"`
-	DueDate       string    `json:"due_date"`
-	AssigneeID    *string   `json:"assignee_id,omitempty"`
-	Status        string    `json:"status"`
-	ActualMinutes *int      `json:"actual_minutes,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID              string          `json:"id"`
+	OrderID         string          `json:"order_id"`
+	OrderCode       string          `json:"order_code,omitempty"`
+	CustomerName    string          `json:"customer_name,omitempty"`
+	CustomerContact string          `json:"customer_contact,omitempty"`
+	DeliveryType    string          `json:"delivery_type,omitempty"`
+	Address         string          `json:"address,omitempty"`
+	Notes           string          `json:"notes,omitempty"`
+	EventDate       string          `json:"event_date,omitempty"`
+	ProductionDate  string          `json:"production_date,omitempty"`
+	OrderStatus     string          `json:"order_status,omitempty"`
+	Type            string          `json:"type"`
+	Title           string          `json:"title"`
+	DueDate         string          `json:"due_date"`
+	AssigneeID      *string         `json:"assignee_id,omitempty"`
+	Status          string          `json:"status"`
+	ActualMinutes   *int            `json:"actual_minutes,omitempty"`
+	Items           []TaskOrderItem `json:"items,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 // PaymentItem adalah representasi pembayaran pesanan.
@@ -1620,6 +1637,16 @@ func GetCapacityDay(ctx context.Context, conn db.Conn, date time.Time) (*Capacit
 	}, nil
 }
 
+// OrderListFilter adalah filter pencarian untuk GET /api/v1/orders.
+type OrderListFilter struct {
+	Status    string
+	Date      string // YYYY-MM-DD (cocokkan event_date atau production_date)
+	EventDate string // YYYY-MM-DD
+	From      string // YYYY-MM-DD (event_date >= From)
+	To        string // YYYY-MM-DD (event_date <= To)
+	ActorRole string
+}
+
 // GetOrderByID memuat detail pesanan berdasarkan ID dan menyaring informasi harga/margin/kas
 // bila pemanggil berperan staff.
 func GetOrderByID(ctx context.Context, conn db.Conn, orderID, actorRole string) (*OrderDetail, error) {
@@ -1629,8 +1656,8 @@ func GetOrderByID(ctx context.Context, conn db.Conn, orderID, actorRole string) 
 	return loadOrderDetailTx(ctx, conn, orderID, actorRole)
 }
 
-// ListOrders memuat daftar pesanan internal (disaring bila peran staff).
-func ListOrders(ctx context.Context, conn db.Conn, statusFilter, actorRole string) ([]OrderDetail, error) {
+// ListOrders memuat daftar pesanan internal dengan filter status & tanggal (disaring bila peran staff).
+func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]OrderDetail, error) {
 	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
 		return nil, err
 	}
@@ -1660,11 +1687,23 @@ func ListOrders(ctx context.Context, conn db.Conn, statusFilter, actorRole strin
 
 	out := make([]OrderDetail, 0, len(ids))
 	for _, id := range ids {
-		d, err := loadOrderDetailTx(ctx, conn, id, actorRole)
+		d, err := loadOrderDetailTx(ctx, conn, id, filter.ActorRole)
 		if err != nil {
 			return nil, err
 		}
-		if statusFilter != "" && d.Status != statusFilter {
+		if filter.Status != "" && d.Status != filter.Status {
+			continue
+		}
+		if filter.Date != "" && d.EventDate != filter.Date && d.ProductionDate != filter.Date {
+			continue
+		}
+		if filter.EventDate != "" && d.EventDate != filter.EventDate {
+			continue
+		}
+		if filter.From != "" && d.EventDate < filter.From {
+			continue
+		}
+		if filter.To != "" && d.EventDate > filter.To {
 			continue
 		}
 		out = append(out, *d)
@@ -1673,21 +1712,29 @@ func ListOrders(ctx context.Context, conn db.Conn, statusFilter, actorRole strin
 }
 
 func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string) (*OrderDetail, error) {
+	params, err := LoadSettingsParams(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+
 	var (
-		id, code, source, custName, custContact, deliveryType string
-		custIDPtr, addrPtr, notesPtr, recPtr, recReasonPtr    *string
-		eventDate, prodDate                                   time.Time
-		status                                                string
-		total, dpRequired, paid                               decimal.Decimal
-		dpDeadline                                            *time.Time
-		counterBytes                                          []byte
-		createdAt, updatedAt                                  time.Time
+		id, code, source, custName, custContact, deliveryType          string
+		custIDPtr, addrPtr, notesPtr, recPtr, recReasonPtr             *string
+		decidedByPtr, overrideReasonPtr                                *string
+		eventDate, prodDate                                            time.Time
+		decidedAt                                                      *time.Time
+		status                                                         string
+		total, dpRequired, paid                                        decimal.Decimal
+		dpDeadline                                                     *time.Time
+		counterBytes, snapshotBytes                                    []byte
+		createdAt, updatedAt                                           time.Time
 	)
-	err := q.QueryRow(ctx, `
+	err = q.QueryRow(ctx, `
 		SELECT id::text, code, source, customer_id::text, customer_name, customer_contact, delivery_type,
 		       address, notes, event_date, production_date,
 		       status, total, dp_required, dp_deadline, paid,
 		       recommendation, recommendation_reason, counter_offer,
+		       decided_by::text, decided_at, override_reason, snapshot,
 		       created_at, updated_at
 		FROM orders
 		WHERE id = $1::uuid
@@ -1696,6 +1743,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		&addrPtr, &notesPtr, &eventDate, &prodDate,
 		&status, &total, &dpRequired, &dpDeadline, &paid,
 		&recPtr, &recReasonPtr, &counterBytes,
+		&decidedByPtr, &decidedAt, &overrideReasonPtr, &snapshotBytes,
 		&createdAt, &updatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -1718,11 +1766,13 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	defer rows.Close()
 
 	items := make([]OrderItemDetail, 0)
+	totalUnits := 0
 	for rows.Next() {
 		var it OrderItemDetail
 		if err := rows.Scan(&it.ID, &it.ProductID, &it.ProductName, &it.Qty, &it.UnitPrice, &it.UnitCost); err != nil {
 			return nil, err
 		}
+		totalUnits += it.Qty
 		if actorRole == auth.RoleStaff {
 			it.UnitPrice = decimal.Zero
 			it.UnitCost = decimal.Zero
@@ -1737,8 +1787,9 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
 
-	var addrStr, notesStr, recStr, recReasonStr string
+	var addrStr, notesStr, recStr, recReasonStr, overrideReasonStr string
 	if addrPtr != nil {
 		addrStr = *addrPtr
 	}
@@ -1751,6 +1802,9 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	if recReasonPtr != nil {
 		recReasonStr = *recReasonPtr
 	}
+	if overrideReasonPtr != nil {
+		overrideReasonStr = *overrideReasonPtr
+	}
 
 	var co *CounterOfferDTO
 	if actorRole != auth.RoleStaff && len(counterBytes) > 0 && string(counterBytes) != "null" {
@@ -1759,6 +1813,170 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 			co = &parsed
 		}
 	}
+
+	// Muat evaluasi dari snapshot + order_evaluations (hanya untuk non-staff)
+	var evalDTO EvaluationDTO
+	if actorRole != auth.RoleStaff {
+		if len(snapshotBytes) > 0 && string(snapshotBytes) != "null" {
+			var snap struct {
+				Evaluation EvaluationDTO `json:"evaluation"`
+			}
+			if err := json.Unmarshal(snapshotBytes, &snap); err == nil {
+				evalDTO = snap.Evaluation
+			}
+		}
+		if evalDTO.Recommendation == "" {
+			evalDTO.Recommendation = recStr
+		}
+		if evalDTO.Reason == "" {
+			evalDTO.Reason = recReasonStr
+		}
+		if co != nil && evalDTO.CounterOffer == nil {
+			evalDTO.CounterOffer = co
+		}
+
+		evRows, err := q.Query(ctx, `
+			SELECT gate, value, threshold, passed
+			FROM order_evaluations
+			WHERE order_id = $1::uuid
+			ORDER BY gate ASC
+		`, orderID)
+		if err != nil {
+			return nil, err
+		}
+		var gates []GateDTO
+		for evRows.Next() {
+			var g GateDTO
+			if err := evRows.Scan(&g.Gate, &g.Value, &g.Threshold, &g.Passed); err != nil {
+				evRows.Close()
+				return nil, err
+			}
+			g.Value = g.Value.Round(4)
+			g.Threshold = g.Threshold.Round(4)
+			gates = append(gates, g)
+		}
+		if err := evRows.Err(); err != nil {
+			evRows.Close()
+			return nil, err
+		}
+		evRows.Close()
+		if len(gates) > 0 {
+			evalDTO.Gates = gates
+		}
+	}
+
+	// Muat pembayaran (hanya untuk non-staff)
+	payments := make([]PaymentItem, 0)
+	if actorRole != auth.RoleStaff {
+		payRows, err := q.Query(ctx, `
+			SELECT id::text, order_id::text, amount, method, paid_at, COALESCE(note, ''), recorded_by::text
+			FROM payments
+			WHERE order_id = $1::uuid
+			ORDER BY paid_at ASC, id ASC
+		`, orderID)
+		if err != nil {
+			return nil, err
+		}
+		for payRows.Next() {
+			var pm PaymentItem
+			if err := payRows.Scan(&pm.ID, &pm.OrderID, &pm.Amount, &pm.Method, &pm.PaidAt, &pm.Note, &pm.RecordedBy); err != nil {
+				payRows.Close()
+				return nil, err
+			}
+			pm.Amount = pm.Amount.Round(2)
+			payments = append(payments, pm)
+		}
+		if err := payRows.Err(); err != nil {
+			payRows.Close()
+			return nil, err
+		}
+		payRows.Close()
+	}
+
+	// Muat tugas operasional (produce, shop, deliver)
+	taskRows, err := q.Query(ctx, `
+		SELECT id::text, order_id::text, type, title, due_date, assignee_id::text, status, actual_minutes, created_at
+		FROM tasks
+		WHERE order_id = $1::uuid
+		ORDER BY due_date ASC, created_at ASC, id ASC
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	tasks := make([]TaskItem, 0)
+	for taskRows.Next() {
+		var tk TaskItem
+		var dueTime time.Time
+		if err := taskRows.Scan(&tk.ID, &tk.OrderID, &tk.Type, &tk.Title, &dueTime, &tk.AssigneeID, &tk.Status, &tk.ActualMinutes, &tk.CreatedAt); err != nil {
+			taskRows.Close()
+			return nil, err
+		}
+		tk.OrderCode = code
+		tk.CustomerName = custName
+		tk.CustomerContact = custContact
+		tk.DeliveryType = deliveryType
+		tk.Address = addrStr
+		tk.Notes = notesStr
+		tk.EventDate = engine.DateKey(eventDate)
+		tk.ProductionDate = engine.DateKey(prodDate)
+		tk.OrderStatus = status
+		tk.DueDate = engine.DateKey(dueTime)
+		tasks = append(tasks, tk)
+	}
+	if err := taskRows.Err(); err != nil {
+		taskRows.Close()
+		return nil, err
+	}
+	taskRows.Close()
+
+	// Muat riwayat audit ringkas untuk pesanan ini
+	audRows, err := q.Query(ctx, `
+		SELECT a.id::text, a.actor_id::text, COALESCE(u.name, ''), a.action, COALESCE(a.detail::text, '{}'), a.created_at
+		FROM audit_logs a
+		LEFT JOIN users u ON u.id = a.actor_id
+		WHERE a.entity = 'orders' AND a.entity_id = $1::uuid
+		ORDER BY a.created_at DESC, a.id DESC
+		LIMIT 50
+	`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	audits := make([]OrderAuditItem, 0)
+	for audRows.Next() {
+		var au OrderAuditItem
+		var detailRaw string
+		if err := audRows.Scan(&au.ID, &au.ActorID, &au.ActorName, &au.Action, &detailRaw, &au.CreatedAt); err != nil {
+			audRows.Close()
+			return nil, err
+		}
+		if detailRaw != "" {
+			var det map[string]any
+			if err := json.Unmarshal([]byte(detailRaw), &det); err == nil {
+				if actorRole == auth.RoleStaff {
+					for _, k := range []string{
+						"total", "dp_required", "amount", "paid_before", "paid_after",
+						"shopping_cost", "dp_received", "cancellation_exposure",
+						"margin", "cash_lowest", "cash_lowest_before", "cash_lowest_after",
+					} {
+						delete(det, k)
+					}
+				}
+				au.Detail = det
+			}
+		}
+		if actorRole == auth.RoleStaff && au.Action == "payment" {
+			continue
+		}
+		audits = append(audits, au)
+	}
+	if err := audRows.Err(); err != nil {
+		audRows.Close()
+		return nil, err
+	}
+	audRows.Close()
+
+	isBig := total.GreaterThanOrEqual(params.BigOrderTotal) || totalUnits >= params.BigOrderUnits
+	canDecide := actorRole == auth.RoleOwner || (actorRole == auth.RoleManager && !isBig)
 
 	detail := &OrderDetail{
 		ID:                   id,
@@ -1774,13 +1992,23 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		ProductionDate:       engine.DateKey(prodDate),
 		Status:               status,
 		Total:                total.Round(2),
+		TotalUnits:           totalUnits,
+		IsBigOrder:           isBig,
+		CanDecide:            canDecide,
 		DPRequired:           dpRequired.Round(2),
 		DPDeadline:           dpDeadline,
 		Paid:                 paid.Round(2),
 		Recommendation:       recStr,
 		RecommendationReason: recReasonStr,
 		CounterOffer:         co,
+		DecidedBy:            decidedByPtr,
+		DecidedAt:            decidedAt,
+		OverrideReason:       overrideReasonStr,
+		Evaluation:           evalDTO,
 		Items:                items,
+		Payments:             payments,
+		Tasks:                tasks,
+		Audits:               audits,
 		CreatedAt:            createdAt,
 		UpdatedAt:            updatedAt,
 	}
@@ -1791,8 +2019,290 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		detail.Paid = decimal.Zero
 		detail.Recommendation = ""
 		detail.RecommendationReason = ""
+		detail.CounterOffer = nil
+		detail.Evaluation = EvaluationDTO{}
+		detail.Payments = nil
+		detail.staffRedacted = true
 	}
 	return detail, nil
+}
+
+// TaskFilter adalah filter untuk GET /api/v1/tasks.
+type TaskFilter struct {
+	Mine      bool
+	Status    string
+	Type      string
+	Date      string // YYYY-MM-DD (due_date)
+	From      string // YYYY-MM-DD
+	To        string // YYYY-MM-DD
+	ActorID   string
+	ActorRole string
+}
+
+// ListTasks memuat daftar tugas operasional (produce, shop, deliver) beserta konteks pesanan
+// tanpa memuat harga, margin, atau kas sama sekali (aman untuk staff, manager, dan owner).
+func ListTasks(ctx context.Context, conn db.Conn, filter TaskFilter) ([]TaskItem, error) {
+	if filter.ActorRole != auth.RoleOwner && filter.ActorRole != auth.RoleManager && filter.ActorRole != auth.RoleStaff {
+		return nil, httpx.Err(http.StatusForbidden, "forbidden", "Anda tidak memiliki izin untuk mengakses daftar tugas.")
+	}
+	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+
+	rows, err := conn.Query(ctx, `
+		SELECT t.id::text, t.order_id::text, t.type, t.title, t.due_date, t.assignee_id::text,
+		       t.status, t.actual_minutes, t.created_at,
+		       o.code, o.customer_name, o.customer_contact, o.delivery_type,
+		       COALESCE(o.address, ''), COALESCE(o.notes, ''),
+		       o.event_date, o.production_date, o.status
+		FROM tasks t
+		JOIN orders o ON o.id = t.order_id
+		ORDER BY t.due_date ASC, t.created_at ASC, t.id ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]TaskItem, 0)
+	orderIDs := make([]string, 0)
+	seenOrder := make(map[string]bool)
+
+	for rows.Next() {
+		var (
+			tk                         TaskItem
+			dueTime, evDate, prodDate  time.Time
+		)
+		if err := rows.Scan(
+			&tk.ID, &tk.OrderID, &tk.Type, &tk.Title, &dueTime, &tk.AssigneeID,
+			&tk.Status, &tk.ActualMinutes, &tk.CreatedAt,
+			&tk.OrderCode, &tk.CustomerName, &tk.CustomerContact, &tk.DeliveryType,
+			&tk.Address, &tk.Notes,
+			&evDate, &prodDate, &tk.OrderStatus,
+		); err != nil {
+			return nil, err
+		}
+		tk.DueDate = engine.DateKey(dueTime)
+		tk.EventDate = engine.DateKey(evDate)
+		tk.ProductionDate = engine.DateKey(prodDate)
+
+		// Staff hanya melihat tugas operasional untuk perannya (produce, shop, deliver)
+		// yang belum ditugaskan ke orang lain atau ditugaskan ke dirinya.
+		if filter.ActorRole == auth.RoleStaff {
+			if tk.Type != "produce" && tk.Type != "shop" && tk.Type != "deliver" {
+				continue
+			}
+			if tk.AssigneeID != nil && *tk.AssigneeID != "" && *tk.AssigneeID != filter.ActorID {
+				continue
+			}
+		} else if filter.Mine && filter.ActorID != "" {
+			if tk.AssigneeID != nil && *tk.AssigneeID != "" && *tk.AssigneeID != filter.ActorID {
+				continue
+			}
+		}
+
+		if filter.Status != "" && tk.Status != filter.Status {
+			continue
+		}
+		if filter.Type != "" && tk.Type != filter.Type {
+			continue
+		}
+		if filter.Date != "" && tk.DueDate != filter.Date {
+			continue
+		}
+		if filter.From != "" && tk.DueDate < filter.From {
+			continue
+		}
+		if filter.To != "" && tk.DueDate > filter.To {
+			continue
+		}
+
+		out = append(out, tk)
+		if !seenOrder[tk.OrderID] {
+			seenOrder[tk.OrderID] = true
+			orderIDs = append(orderIDs, tk.OrderID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	// Muat item pesanan (hanya product_id, product_name, qty — TANPA harga/biaya)
+	itemsByOrder := make(map[string][]TaskOrderItem, len(orderIDs))
+	for _, oid := range orderIDs {
+		itRows, err := conn.Query(ctx, `
+			SELECT oi.product_id::text, p.name, oi.qty
+			FROM order_items oi
+			JOIN products p ON p.id = oi.product_id
+			WHERE oi.order_id = $1::uuid
+			ORDER BY oi.id ASC
+		`, oid)
+		if err != nil {
+			return nil, err
+		}
+		var list []TaskOrderItem
+		for itRows.Next() {
+			var it TaskOrderItem
+			if err := itRows.Scan(&it.ProductID, &it.ProductName, &it.Qty); err != nil {
+				itRows.Close()
+				return nil, err
+			}
+			list = append(list, it)
+		}
+		if err := itRows.Err(); err != nil {
+			itRows.Close()
+			return nil, err
+		}
+		itRows.Close()
+		itemsByOrder[oid] = list
+	}
+
+	for i := range out {
+		out[i].Items = itemsByOrder[out[i].OrderID]
+		if out[i].Items == nil {
+			out[i].Items = []TaskOrderItem{}
+		}
+	}
+
+	return out, nil
+}
+
+// UpdateTaskInput adalah masukan untuk PATCH /api/v1/tasks/:id.
+type UpdateTaskInput struct {
+	TaskID        string
+	ActorID       string
+	ActorRole     string
+	Status        string // opsional: "todo" | "doing" | "done"
+	ActualMinutes *int   // opsional: > 0
+}
+
+// UpdateTask memperbarui status tugas (todo|doing|done) dan/atau actual_minutes.
+// Staff hanya dapat mengubah tugas operasional untuk perannya.
+func UpdateTask(ctx context.Context, conn db.Conn, req UpdateTaskInput) (*TaskItem, error) {
+	if req.ActorRole != auth.RoleOwner && req.ActorRole != auth.RoleManager && req.ActorRole != auth.RoleStaff {
+		return nil, httpx.Err(http.StatusForbidden, "forbidden", "Anda tidak memiliki izin untuk mengubah tugas.")
+	}
+
+	var out *TaskItem
+	err := db.WithTx(ctx, conn, func(tx pgx.Tx) error {
+		now := time.Now().UTC()
+		var (
+			tk                         TaskItem
+			dueTime, evDate, prodDate  time.Time
+		)
+		err := tx.QueryRow(ctx, `
+			SELECT t.id::text, t.order_id::text, t.type, t.title, t.due_date, t.assignee_id::text,
+			       t.status, t.actual_minutes, t.created_at,
+			       o.code, o.customer_name, o.customer_contact, o.delivery_type,
+			       COALESCE(o.address, ''), COALESCE(o.notes, ''),
+			       o.event_date, o.production_date, o.status
+			FROM tasks t
+			JOIN orders o ON o.id = t.order_id
+			WHERE t.id = $1::uuid
+			FOR UPDATE OF t
+		`, req.TaskID).Scan(
+			&tk.ID, &tk.OrderID, &tk.Type, &tk.Title, &dueTime, &tk.AssigneeID,
+			&tk.Status, &tk.ActualMinutes, &tk.CreatedAt,
+			&tk.OrderCode, &tk.CustomerName, &tk.CustomerContact, &tk.DeliveryType,
+			&tk.Address, &tk.Notes,
+			&evDate, &prodDate, &tk.OrderStatus,
+		)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return httpx.Err(http.StatusNotFound, "not_found", "Tugas tidak ditemukan.")
+		}
+		if err != nil {
+			return err
+		}
+
+		if req.ActorRole == auth.RoleStaff {
+			if tk.Type != "produce" && tk.Type != "shop" && tk.Type != "deliver" {
+				return httpx.Err(http.StatusForbidden, "forbidden", "Karyawan hanya dapat mengubah tugas operasional untuk perannya.")
+			}
+			if tk.AssigneeID != nil && *tk.AssigneeID != "" && *tk.AssigneeID != req.ActorID {
+				return httpx.Err(http.StatusForbidden, "forbidden", "Tugas ini ditugaskan kepada pengguna lain.")
+			}
+		}
+
+		prevStatus := tk.Status
+		newStatus := tk.Status
+		if req.Status != "" {
+			newStatus = req.Status
+		}
+		newActual := tk.ActualMinutes
+		if req.ActualMinutes != nil {
+			m := *req.ActualMinutes
+			newActual = &m
+		}
+
+		if _, err := tx.Exec(ctx, `
+			UPDATE tasks
+			SET status = $1, actual_minutes = $2
+			WHERE id = $3::uuid
+		`, newStatus, newActual, req.TaskID); err != nil {
+			return err
+		}
+
+		// Bila tugas produksi selesai (done), pastikan stok bahan dikurangi secara idempoten
+		if tk.Type == "produce" && newStatus == "done" {
+			if err := deductStockForProduction(ctx, tx, tk.OrderID, now); err != nil {
+				return err
+			}
+		}
+
+		auditDetail := map[string]any{
+			"op":          "update_task",
+			"task_id":     tk.ID,
+			"task_type":   tk.Type,
+			"from_status": prevStatus,
+			"to_status":   newStatus,
+		}
+		if newActual != nil {
+			auditDetail["actual_minutes"] = *newActual
+		}
+		if err := audit.Log(ctx, tx, req.ActorID, audit.ActionStatus, "orders", tk.OrderID, auditDetail); err != nil {
+			return err
+		}
+
+		tk.Status = newStatus
+		tk.ActualMinutes = newActual
+		tk.DueDate = engine.DateKey(dueTime)
+		tk.EventDate = engine.DateKey(evDate)
+		tk.ProductionDate = engine.DateKey(prodDate)
+
+		itRows, err := tx.Query(ctx, `
+			SELECT oi.product_id::text, p.name, oi.qty
+			FROM order_items oi
+			JOIN products p ON p.id = oi.product_id
+			WHERE oi.order_id = $1::uuid
+			ORDER BY oi.id ASC
+		`, tk.OrderID)
+		if err != nil {
+			return err
+		}
+		items := make([]TaskOrderItem, 0)
+		for itRows.Next() {
+			var it TaskOrderItem
+			if err := itRows.Scan(&it.ProductID, &it.ProductName, &it.Qty); err != nil {
+				itRows.Close()
+				return err
+			}
+			items = append(items, it)
+		}
+		if err := itRows.Err(); err != nil {
+			itRows.Close()
+			return err
+		}
+		itRows.Close()
+		tk.Items = items
+
+		out = &tk
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // ListCustomerOrders memuat daftar pesanan milik pelanggan tertentu (GET /api/v1/me/orders)

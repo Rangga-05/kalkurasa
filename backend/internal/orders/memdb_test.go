@@ -43,6 +43,7 @@ type memDB struct {
 }
 
 type memAuditEntry struct {
+	ID        string
 	ActorID   string
 	Action    string
 	Entity    string
@@ -67,6 +68,7 @@ type memTask struct {
 	Type          string
 	Title         string
 	DueDate       string
+	AssigneeID    string
 	Status        string
 	ActualMinutes *int
 	CreatedAt     time.Time
@@ -306,6 +308,7 @@ func (tx *memTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.Comm
 		return pgconn.NewCommandTag("INSERT 0 1"), nil
 
 	case strings.HasPrefix(q, "insert into audit_logs"):
+		id := tx.db.nextUUID()
 		tx.db.mu.Lock()
 		tx.db.auditLogs++
 		actorID := ""
@@ -317,6 +320,7 @@ func (tx *memTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.Comm
 			entityID = fmt.Sprint(args[3])
 		}
 		tx.db.auditEntries = append(tx.db.auditEntries, memAuditEntry{
+			ID:        id,
 			ActorID:   actorID,
 			Action:    fmt.Sprint(args[1]),
 			Entity:    fmt.Sprint(args[2]),
@@ -511,6 +515,32 @@ func (tx *memTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.Comm
 		tx.db.mu.Unlock()
 		return pgconn.NewCommandTag("UPDATE 1"), nil
 
+	case strings.HasPrefix(q, "update tasks set status = $1, actual_minutes = $2 where id = $3::uuid"):
+		tid := fmt.Sprint(args[2])
+		var minsPtr *int
+		if args[1] != nil {
+			switch v := args[1].(type) {
+			case *int:
+				if v != nil {
+					m := *v
+					minsPtr = &m
+				}
+			case int:
+				m := v
+				minsPtr = &m
+			}
+		}
+		tx.db.mu.Lock()
+		for i := range tx.db.tasks {
+			if tx.db.tasks[i].ID == tid {
+				tx.db.tasks[i].Status = fmt.Sprint(args[0])
+				tx.db.tasks[i].ActualMinutes = minsPtr
+				break
+			}
+		}
+		tx.db.mu.Unlock()
+		return pgconn.NewCommandTag("UPDATE 1"), nil
+
 	case strings.HasPrefix(q, "delete from tasks where order_id = $1::uuid and status != 'done'"):
 		oid := fmt.Sprint(args[0])
 		tx.db.mu.Lock()
@@ -646,13 +676,39 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 				notes := strPtrOrNil(o.Notes)
 				rec := strPtrOrNil(o.Recommendation)
 				reason := strPtrOrNil(o.RecommendationReason)
+				decidedBy := strPtrOrNil(o.DecidedBy)
+				overrideReason := strPtrOrNil(o.OverrideReason)
 				return &memRow{vals: []any{
 					o.ID, o.Code, o.Source, custID, o.CustomerName, o.CustomerContact, o.DeliveryType,
 					addr, notes, o.EventDate, o.ProductionDate,
 					o.Status, o.Total, o.DPRequired, o.DPDeadline, o.Paid,
 					rec, reason, o.CounterOfferJSON,
+					decidedBy, o.DecidedAt, overrideReason, o.SnapshotJSON,
 					o.CreatedAt, o.UpdatedAt,
 				}}
+			}
+		}
+		return &memRow{err: pgx.ErrNoRows}
+
+	case strings.HasPrefix(q, "select t.id::text, t.order_id::text, t.type, t.title, t.due_date"):
+		tid := fmt.Sprint(args[0])
+		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
+		for _, tk := range tx.db.tasks {
+			if tk.ID == tid {
+				for _, o := range tx.db.orders {
+					if o.ID == tk.OrderID {
+						dueTime, _ := time.Parse("2006-01-02", tk.DueDate[:10])
+						assigneePtr := strPtrOrNil(tk.AssigneeID)
+						return &memRow{vals: []any{
+							tk.ID, tk.OrderID, tk.Type, tk.Title, dueTime, assigneePtr,
+							tk.Status, tk.ActualMinutes, tk.CreatedAt,
+							o.Code, o.CustomerName, o.CustomerContact, o.DeliveryType,
+							o.Address, o.Notes,
+							o.EventDate, o.ProductionDate, o.Status,
+						}}
+					}
+				}
 			}
 		}
 		return &memRow{err: pgx.ErrNoRows}
@@ -1070,6 +1126,17 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		}
 		return &memRows{rows: rows}, nil
 
+	case strings.HasPrefix(q, "select oi.product_id::text, p.name, oi.qty from order_items oi join products p"):
+		oid := fmt.Sprint(args[0])
+		var rows [][]any
+		for _, it := range tx.db.orderItems {
+			if it.OrderID == oid {
+				p := tx.db.products[it.ProductID]
+				rows = append(rows, []any{it.ProductID, p.Name, it.Qty})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
 	case strings.Contains(q, "from order_items oi join products p"):
 		oid := fmt.Sprint(args[0])
 		var rows [][]any
@@ -1077,6 +1144,79 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 			if it.OrderID == oid {
 				p := tx.db.products[it.ProductID]
 				rows = append(rows, []any{it.ProductID, p.Name, it.Qty, it.UnitPrice})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from order_evaluations where order_id = $1::uuid"):
+		oid := fmt.Sprint(args[0])
+		var rows [][]any
+		for _, ev := range tx.db.evaluations {
+			if ev.OrderID == oid {
+				rows = append(rows, []any{ev.Gate, ev.Value, ev.Threshold, ev.Passed})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from payments where order_id = $1::uuid"):
+		oid := fmt.Sprint(args[0])
+		var rows [][]any
+		for _, pm := range tx.db.payments {
+			if pm.OrderID == oid {
+				recBy := strPtrOrNil(pm.RecordedBy)
+				rows = append(rows, []any{pm.ID, pm.OrderID, pm.Amount, pm.Method, pm.PaidAt, pm.Note, recBy})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.HasPrefix(q, "select id::text, order_id::text, type, title, due_date, assignee_id::text, status, actual_minutes, created_at from tasks where order_id = $1::uuid"):
+		oid := fmt.Sprint(args[0])
+		var rows [][]any
+		for _, tk := range tx.db.tasks {
+			if tk.OrderID == oid {
+				dueTime, _ := time.Parse("2006-01-02", tk.DueDate[:10])
+				assigneePtr := strPtrOrNil(tk.AssigneeID)
+				rows = append(rows, []any{tk.ID, tk.OrderID, tk.Type, tk.Title, dueTime, assigneePtr, tk.Status, tk.ActualMinutes, tk.CreatedAt})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.HasPrefix(q, "select t.id::text, t.order_id::text, t.type, t.title, t.due_date"):
+		var rows [][]any
+		for _, tk := range tx.db.tasks {
+			for _, o := range tx.db.orders {
+				if o.ID == tk.OrderID {
+					dueTime, _ := time.Parse("2006-01-02", tk.DueDate[:10])
+					assigneePtr := strPtrOrNil(tk.AssigneeID)
+					rows = append(rows, []any{
+						tk.ID, tk.OrderID, tk.Type, tk.Title, dueTime, assigneePtr,
+						tk.Status, tk.ActualMinutes, tk.CreatedAt,
+						o.Code, o.CustomerName, o.CustomerContact, o.DeliveryType,
+						o.Address, o.Notes,
+						o.EventDate, o.ProductionDate, o.Status,
+					})
+					break
+				}
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from audit_logs a left join users u"):
+		oid := fmt.Sprint(args[0])
+		var rows [][]any
+		for i := len(tx.db.auditEntries) - 1; i >= 0; i-- {
+			ae := tx.db.auditEntries[i]
+			if ae.Entity == "orders" && ae.EntityID == oid {
+				id := ae.ID
+				if id == "" {
+					id = fmt.Sprintf("00000000-0000-4000-8000-%012d", i+1)
+				}
+				actorPtr := strPtrOrNil(ae.ActorID)
+				actorName := ""
+				if ae.ActorID != "" {
+					actorName = "Pengguna Internal"
+				}
+				rows = append(rows, []any{id, actorPtr, actorName, ae.Action, ae.Detail, ae.CreatedAt})
 			}
 		}
 		return &memRows{rows: rows}, nil

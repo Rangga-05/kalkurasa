@@ -286,6 +286,19 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** Pengaturan `max_active_unpaid_orders` (nilai bawaan `2`, dapat diubah oleh `owner` melalui `PUT /api/v1/settings`) diperiksa di dalam transaksi `CreateOrder` ketika `customer_id` terisi. Sistem menghitung jumlah pesanan milik `customer_id` yang berstatus `IN ('pending_decision', 'countered', 'accepted')` dan `paid < dp_required` (setelah menjalankan `ExpireOverdueOrders` terlebih dahulu agar pesanan yang sudah melewati tenggat DP tidak lagi dihitung). Bila jumlahnya sudah mencapai `max_active_unpaid_orders`, pesanan baru ditolak dengan `422 Unprocessable Entity` (`code: "active_order_limit"`).
 **Alasan:** Mencegah pemblokiran kapasitas dapur oleh pesanan fiktif yang belum membayar DP, sambil memastikan pelanggan yang pesanannya sudah kedaluwarsa atau sudah melunasi DP dapat kembali memesan.
 
+---
+
+## Tahap 4B — Frontend Internal Alur Inti & Endpoint Tugas Operasional
+
+### A4-06: Kontrak endpoint `GET /api/v1/tasks` dan `PATCH /api/v1/tasks/:id`
+**Keputusan:** Endpoint `GET /api/v1/tasks` mendukung filter query `mine` (`true`/`1`), `status` (`todo|doing|done`), `type` (`produce|shop|deliver`), `date`/`due_date` (`YYYY-MM-DD`), serta rentang `from` dan `to`. Untuk peran `staff`, server selalu membatasi hasil pada tugas operasional (`produce`, `shop`, `deliver`) yang `assignee_id IS NULL OR assignee_id = actor.ID`. Struktur `TaskItem` disertakan konteks pesanan yang aman (`order_code`, `customer_name`, `customer_contact`, `delivery_type`, `address`, `notes`, `event_date`, `production_date`, `order_status`, serta `items` yang hanya memuat `product_id`, `product_name`, `qty`) tanpa field harga, margin, maupun kas. Saat `PATCH /api/v1/tasks/:id` mengubah tugas `produce` menjadi `done`, fungsi `deductStockForProduction` dipanggil secara idempoten di dalam transaksi yang sama.
+**Alasan:** Memungkinkan halaman `/app/karyawan` menampilkan konteks produksi/pengantaran secara utuh dan menjaga konsistensi pengurangan stok bahan baik saat diselesaikan dari halaman tugas maupun dari transisi status pesanan.
+
+### A4-07: Penyaringan ketat field finansial (`MarshalJSON`) pada `GET /api/v1/orders` dan `GET /api/v1/orders/:id` untuk peran `staff`
+**Keputusan:** `OrderDetail` pada `GET /api/v1/orders` dan `GET /api/v1/orders/:id` kini memuat `evaluation` (gerbang `G1`..`G4` dari `order_evaluations` dan `impact` dari `snapshot`), `payments`, `tasks`, serta `audits` (50 catatan audit terbaru untuk pesanan terkait). Ketika pemanggil memiliki peran `staff`, `OrderDetail` menandai `staffRedacted = true` dan melalui `MarshalJSON()` khusus membuang seluruh field harga, biaya, margin, kas, evaluasi, tawaran balik, dan pembayaran (`unit_price`, `unit_cost`, `subtotal`, `total`, `dp_required`, `paid`, `evaluation`, `payments`, `counter_offer`, serta nilai uang pada `audits.detail`).
+**Alasan:** Menjamin kepatuhan RBAC di tingkat payload JSON maupun tampilan UI bahwa peran `staff` tidak pernah melihat harga jual, HPP, margin, ataupun kas.
+
+
 
 
 

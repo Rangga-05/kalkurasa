@@ -451,3 +451,62 @@ func TestMasterAndSettingsInputValidation(t *testing.T) {
 	}
 }
 
+func TestAuthRegisterRoleInjectionAndCustomerRBAC(t *testing.T) {
+	r, _, _ := setupTestServer(t)
+
+	// 1. Pendaftaran pelanggan dengan injeksi "role": "owner" di body harus diabaikan dan dipaksa menjadi "customer"
+	wReg := doJSON(r, http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"name":     "Pelanggan Baru",
+		"email":    "pelanggan.baru@demo.test",
+		"contact":  "081234567899",
+		"password": "PasswordAman123!",
+		"role":     "owner",
+	}, nil)
+	if wReg.Code != http.StatusCreated {
+		t.Fatalf("expected 201 on POST /auth/register, got %d: %s", wReg.Code, wReg.Body.String())
+	}
+	var regResp struct {
+		Data struct {
+			Token string    `json:"token"`
+			User  auth.User `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(wReg.Body.Bytes(), &regResp); err != nil {
+		t.Fatalf("unmarshal register response: %v", err)
+	}
+	if regResp.Data.User.Role != auth.RoleCustomer {
+		t.Fatalf("role injection must be forced to customer, got %q", regResp.Data.User.Role)
+	}
+
+	// 2. Email duplikat harus ditolak 409 Conflict
+	wDup := doJSON(r, http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"name":     "Pelanggan Duplikat",
+		"email":    "PELANGGAN.BARU@demo.test",
+		"contact":  "081234567899",
+		"password": "PasswordAman123!",
+	}, nil)
+	if wDup.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on duplicate email register, got %d: %s", wDup.Code, wDup.Body.String())
+	}
+
+	// 3. Token customer ditolak 403 pada endpoint internal
+	custHdr := map[string]string{"Authorization": "Bearer " + regResp.Data.Token}
+	for _, rt := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/orders"},
+		{http.MethodGet, "/api/v1/decision-queue"},
+		{http.MethodGet, "/api/v1/settings"},
+		{http.MethodGet, "/api/v1/products"},
+		{http.MethodGet, "/api/v1/users"},
+		{http.MethodGet, "/api/v1/cash/projection"},
+	} {
+		w := doJSON(r, rt.method, rt.path, nil, custHdr)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 for customer on %s %s, got %d", rt.method, rt.path, w.Code)
+		}
+	}
+}
+
+

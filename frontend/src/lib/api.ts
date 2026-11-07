@@ -3,15 +3,30 @@ import type {
   ApiErrorEnvelope,
   AvailabilityDay,
   AvailabilityRequest,
+  CancelOrderRequest,
+  CancelOrderResult,
+  CapacityCalendarDay,
+  CapacityDayDetail,
   CounterResponseRequest,
+  CreateManualOrderRequest,
   CreatePublicOrderRequest,
+  DecideOrderRequest,
+  DecisionQueueItem,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
+  OrderDetail,
+  OrderFilterParams,
+  PaymentResult,
   PublicOrderSummary,
   PublicProduct,
   PublicTrackResponse,
+  RecordPaymentRequest,
   RegisterRequest,
+  TaskFilterParams,
+  TaskItem,
+  TransitionOrderRequest,
+  UpdateTaskRequest,
   User,
 } from "./types";
 
@@ -263,6 +278,208 @@ export async function getMyOrders(
   return requestJson<PublicTrackResponse[]>("/me/orders", {
     method: "GET",
     signal,
+  });
+}
+
+// ============================================================================
+// Endpoint Internal Alur Inti (Tahap 4B)
+// ============================================================================
+
+/**
+ * GET /api/v1/decision-queue
+ * Mengambil daftar pesanan berstatus pending_decision beserta pratinjau dampak terkini.
+ */
+export async function getDecisionQueue(
+  signal?: AbortSignal
+): Promise<DecisionQueueItem[]> {
+  return requestJson<DecisionQueueItem[]>("/decision-queue", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/orders/:id/decision
+ * Mengambil keputusan pesanan (accept, counter, reject) dengan evaluasi ulang.
+ */
+export async function decideOrder(
+  orderId: string,
+  payload: DecideOrderRequest
+): Promise<OrderDetail> {
+  return requestJson<OrderDetail>(
+    `/orders/${encodeURIComponent(orderId)}/decision`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * GET /api/v1/orders
+ * Mengambil daftar pesanan internal dengan filter status & tanggal (disaring untuk staff).
+ */
+export async function getOrders(
+  params: OrderFilterParams = {},
+  signal?: AbortSignal
+): Promise<OrderDetail[]> {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set("status", params.status);
+  if (params.date) qs.set("date", params.date);
+  if (params.event_date) qs.set("event_date", params.event_date);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return requestJson<OrderDetail[]>(`/orders${query}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/orders/:id
+ * Mengambil detail lengkap pesanan (items, evaluasi gerbang, pembayaran, tugas, audit;
+ * field harga/margin/kas dibuang bila pemanggil berperan staff).
+ */
+export async function getOrderById(
+  orderId: string,
+  signal?: AbortSignal
+): Promise<OrderDetail> {
+  return requestJson<OrderDetail>(`/orders/${encodeURIComponent(orderId)}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/orders
+ * Membuat pesanan manual oleh manajer atau pemilik (mendukung unit_price & production_date khusus).
+ */
+export async function createManualOrder(
+  payload: CreateManualOrderRequest
+): Promise<OrderDetail> {
+  return requestJson<OrderDetail>("/orders", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST /api/v1/orders/:id/payments
+ * Mencatat pembayaran manual pesanan dan mengubah status ke confirmed saat DP terpenuhi.
+ */
+export async function recordOrderPayment(
+  orderId: string,
+  payload: RecordPaymentRequest
+): Promise<PaymentResult> {
+  return requestJson<PaymentResult>(
+    `/orders/${encodeURIComponent(orderId)}/payments`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * POST /api/v1/orders/:id/transition
+ * Menjalankan transisi status pesanan (in_production, ready, delivering, completed) sesuai peran.
+ */
+export async function transitionOrder(
+  orderId: string,
+  payload: TransitionOrderRequest
+): Promise<OrderDetail> {
+  return requestJson<OrderDetail>(
+    `/orders/${encodeURIComponent(orderId)}/transition`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * POST /api/v1/orders/:id/cancel
+ * Membatalkan pesanan, melepas kapasitas, membatalkan tugas aktif, dan menghitung eksposur pembatalan.
+ */
+export async function cancelOrder(
+  orderId: string,
+  payload: CancelOrderRequest = {}
+): Promise<CancelOrderResult> {
+  return requestJson<CancelOrderResult>(
+    `/orders/${encodeURIComponent(orderId)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * GET /api/v1/capacity/calendar?month=YYYY-MM
+ * Mengambil kalender kapasitas bulanan berwarna (hijau, kuning, merah, penuh).
+ */
+export async function getCapacityCalendar(
+  month?: string,
+  signal?: AbortSignal
+): Promise<CapacityCalendarDay[]> {
+  const qs = month ? `?month=${encodeURIComponent(month)}` : "";
+  return requestJson<CapacityCalendarDay[]>(`/capacity/calendar${qs}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/capacity/day/:date
+ * Mengambil rincian beban & kapasitas per sumber daya serta daftar pesanan pada tanggal produksi.
+ */
+export async function getCapacityDay(
+  date: string,
+  signal?: AbortSignal
+): Promise<CapacityDayDetail> {
+  return requestJson<CapacityDayDetail>(
+    `/capacity/day/${encodeURIComponent(date)}`,
+    {
+      method: "GET",
+      signal,
+    }
+  );
+}
+
+/**
+ * GET /api/v1/tasks
+ * Mengambil daftar tugas operasional (produce, shop, deliver) tanpa field harga/margin/kas.
+ */
+export async function getTasks(
+  params: TaskFilterParams = {},
+  signal?: AbortSignal
+): Promise<TaskItem[]> {
+  const qs = new URLSearchParams();
+  if (params.mine) qs.set("mine", "true");
+  if (params.status) qs.set("status", params.status);
+  if (params.type) qs.set("type", params.type);
+  if (params.date) qs.set("date", params.date);
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return requestJson<TaskItem[]>(`/tasks${query}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * PATCH /api/v1/tasks/:id
+ * Mengubah status tugas (todo|doing|done) dan/atau actual_minutes.
+ */
+export async function updateTask(
+  taskId: string,
+  payload: UpdateTaskRequest
+): Promise<TaskItem> {
+  return requestJson<TaskItem>(`/tasks/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }
 

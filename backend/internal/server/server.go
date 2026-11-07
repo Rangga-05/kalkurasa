@@ -142,6 +142,10 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 			protected.GET("/capacity/calendar", manageOrders, ordersHandler.CapacityCalendar)
 			protected.GET("/capacity/day/:date", manageOrders, ordersHandler.CapacityDay)
 
+			// Operational tasks (Tahap 4B: owner, manager, staff; no prices/margins/cash)
+			protected.GET("/tasks", transitionOrders, ordersHandler.ListTasks)
+			protected.PATCH("/tasks/:id", transitionOrders, ordersHandler.UpdateTask)
+
 			// Settings: owner full access; manager read-only without cash keys
 			protected.GET("/settings",
 				auth.RequireRole(auth.RoleOwner, auth.RoleManager),

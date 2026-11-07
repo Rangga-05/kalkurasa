@@ -115,6 +115,9 @@ type registerRequest struct {
 	Email    string `json:"email"`
 	Contact  string `json:"contact"`
 	Password string `json:"password"`
+	// Role diterima pada struct semata-mata agar injeksi field "role" pada body JSON
+	// diabaikan dan selalu dipaksa menjadi RoleCustomer ("customer").
+	Role string `json:"role"`
 }
 
 func clientIP(c *gin.Context) string {
@@ -166,9 +169,14 @@ func enforceRegisterRateLimit(c *gin.Context, q db.DBTX) bool {
 
 // Register menangani POST /api/v1/auth/register (publik, dibatasi laju via rate_limits).
 // Membuat akun baru dengan peran customer dan langsung menerbitkan sesi login (cookie yang sama).
+// Field role dari body diabaikan dan selalu dipaksa menjadi 'customer'.
 func (h *Handler) Register(c *gin.Context) {
 	if !SecretOK(h.Secret) {
 		httpx.Unavailable(c, "Autentikasi belum dikonfigurasi di server.")
+		return
+	}
+
+	if !enforceRegisterRateLimit(c, h.DB) {
 		return
 	}
 
@@ -179,14 +187,10 @@ func (h *Handler) Register(c *gin.Context) {
 	v := httpx.NewValidation()
 	name := v.Str("Nama lengkap", req.Name, 120)
 	email := v.Email("Email", req.Email)
-	contact := v.Str("Nomor kontak", req.Contact, 80)
+	contact := v.OptStr("Nomor kontak", req.Contact, 80)
 	password := v.Password("Kata sandi", req.Password)
 	if !v.OK() {
 		v.Respond(c)
-		return
-	}
-
-	if !enforceRegisterRateLimit(c, h.DB) {
 		return
 	}
 
@@ -196,6 +200,7 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
+	// Paksa role selalu menjadi RoleCustomer ('customer'), abaikan req.Role bila dikirim.
 	user, err := h.Store.CreateCustomer(c.Request.Context(), email, name, contact, pwHash)
 	switch {
 	case errors.Is(err, ErrEmailTaken):

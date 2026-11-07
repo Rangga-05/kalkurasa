@@ -250,3 +250,63 @@ export function getDashboardPathForRole(role?: string | null): string {
   return ROLE_DASHBOARD_PATH[role as UserRole] ?? "/app/owner";
 }
 
+export const GATE_LABELS: Record<
+  string,
+  { name: string; shortDesc: string }
+> = {
+  G1: {
+    name: "G1 Kapasitas",
+    shortDesc: "Utilisasi harian vs batas kapasitas",
+  },
+  G2: {
+    name: "G2 Margin",
+    shortDesc: "Margin kotor vs batas minimum",
+  },
+  G3: {
+    name: "G3 Kas",
+    shortDesc: "Titik kas terendah vs penyangga kas",
+  },
+  G4: {
+    name: "G4 Lead Time",
+    shortDesc: "Selisih hari produksi vs lead time minimum",
+  },
+};
+
+export const RECOMMENDATION_META: Record<
+  string,
+  { label: string; tone: "emerald" | "amber" | "rose" | "slate" }
+> = {
+  accept: {
+    label: "Rekomendasi: Terima",
+    tone: "emerald",
+  },
+  accept_with_conditions: {
+    label: "Rekomendasi: Terima Bersyarat / Tawar Balik",
+    tone: "amber",
+  },
+  reject: {
+    label: "Rekomendasi: Tolak",
+    tone: "rose",
+  },
+};
+
+export const TASK_TYPE_LABELS: Record<string, string> = {
+  shop: "Belanja Bahan",
+  produce: "Produksi Dapur",
+  deliver: "Pengantaran / Penyerahan",
+};
+
+export const TASK_STATUS_LABELS: Record<
+  string,
+  { label: string; tone: "slate" | "amber" | "emerald" }
+> = {
+  todo: { label: "Belum Mulai", tone: "slate" },
+  doing: { label: "Sedang Dikerjakan", tone: "amber" },
+  done: { label: "Selesai", tone: "emerald" },
+};
+
+export const RESOURCE_LABELS: Record<string, string> = {
+  oven: "Oven Pemanggang",
+  labor: "Tenaga Kerja Dapur",
+};
+
