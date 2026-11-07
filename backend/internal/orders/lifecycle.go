@@ -1136,6 +1136,7 @@ type CancelOrderResult struct {
 	ShoppingCost         decimal.Decimal `json:"shopping_cost"`
 	DPReceived           decimal.Decimal `json:"dp_received"`
 	CancellationExposure decimal.Decimal `json:"cancellation_exposure"`
+	CashLowestAfter      decimal.Decimal `json:"cash_lowest_after"`
 	DPDisposition        string          `json:"dp_disposition,omitempty"`
 	Reason               string          `json:"reason,omitempty"`
 	Note                 string          `json:"note,omitempty"`
@@ -1256,6 +1257,15 @@ func CancelOrder(ctx context.Context, conn db.Conn, req CancelOrderInput) (*Canc
 			return err
 		}
 
+		// Hitung ulang proyeksi kas 14 hari setelah pesanan dibatalkan
+		today := db.TodayQ(ctx, tx)
+		cashEvents, err := LoadCashEvents(ctx, tx, today, params)
+		if err != nil {
+			return err
+		}
+		projAfter := engine.ProjectCash(params.EvalParams.OpeningCash, today, 14, cashEvents, params.EvalParams.FixedCostDaily)
+		cashLowestAfter := projAfter.Lowest.Round(2)
+
 		if err := audit.Log(ctx, tx, req.ActorID, audit.ActionStatus, "orders", req.OrderID, map[string]any{
 			"op":                    "cancel_order",
 			"code":                  code,
@@ -1264,6 +1274,7 @@ func CancelOrder(ctx context.Context, conn db.Conn, req CancelOrderInput) (*Canc
 			"shopping_cost":         shoppingCost.Round(2),
 			"dp_received":           paid.Round(2),
 			"cancellation_exposure": exposure.Round(2),
+			"cash_lowest_after":     cashLowestAfter,
 			"dp_disposition":        strings.TrimSpace(req.DPDisposition),
 			"reason":                strings.TrimSpace(req.Reason),
 			"note":                  strings.TrimSpace(req.Note),
@@ -1279,6 +1290,7 @@ func CancelOrder(ctx context.Context, conn db.Conn, req CancelOrderInput) (*Canc
 			ShoppingCost:         shoppingCost.Round(2),
 			DPReceived:           paid.Round(2),
 			CancellationExposure: exposure.Round(2),
+			CashLowestAfter:      cashLowestAfter,
 			DPDisposition:        strings.TrimSpace(req.DPDisposition),
 			Reason:               strings.TrimSpace(req.Reason),
 			Note:                 strings.TrimSpace(req.Note),

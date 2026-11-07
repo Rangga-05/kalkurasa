@@ -1642,3 +1642,580 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	}
 }
 
+// TestCashAndShopping_PostgresIntegration menguji fitur Tahap 5 langsung terhadap database PostgreSQL:
+//  1. TC-04: titik terendah -200.000 tanpa DP, MinDP = 600.000, DPCharged = 712.500, titik terendah dengan DP = 512.500.
+//  2. TC-05: kebutuhan tepung 6 tart x 0,4 + 100 box x 0,12 = 14,4 kg, stok 3 kg, buffer 10% -> need 12,84 kg;
+//     aturan loose -> buy 13 kg; aturan pack (25 kg) -> buy 25 kg (1 sak); tanggal beli = tanggal acara - shopping_lead_days.
+//  3. Pembelian (POST /api/v1/purchases) menambah stok, memperbarui buy_price, menulis stock_movements & cash_entries.
+//  4. Koreksi stok (POST /api/v1/stock/adjust) wajib alasan (422 bila kosong) dan memperbarui stok + stock_movements.
+//  5. TC-06: Pembatalan pesanan (belanja 1.300.000, DP diterima 712.500 -> eksposur 587.500), proyeksi kas dihitung ulang,
+//     bahan yang sudah dibeli tetap menjadi stok.
+//  6. RBAC: owner melihat proyeksi kas lengkap; manager hanya status lolos/tidak dan titik terendah tanpa opening_cash; staff 403.
+//  7. Seluruh fixture ber-awalan "ittest-" dibersihkan di akhir dan sisa baris dicetak untuk semua tabel.
+func TestCashAndShopping_PostgresIntegration(t *testing.T) {
+	_ = godotenv.Load(".env")
+	_ = godotenv.Load("../.env")
+	_ = godotenv.Load("../../.env")
+	_ = godotenv.Load("backend/.env")
+
+	cfg := config.Load()
+	if cfg.DatabaseURL == "" {
+		t.Fatal("DATABASE_URL wajib diatur untuk menjalankan test integrasi Postgres")
+	}
+	if len(cfg.JWTSecret) < 32 {
+		cfg.JWTSecret = "0123456789abcdef0123456789abcdef-ittest"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	pool, err := db.New(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
+	if err != nil {
+		t.Fatalf("db.New: %v", err)
+	}
+	defer pool.Close()
+
+	runSuffix, err := orders.GenerateCode()
+	if err != nil {
+		t.Fatalf("GenerateCode: %v", err)
+	}
+	runPrefix := "ittest-t5-" + strings.ToLower(runSuffix[:6]) + "-"
+
+	today := db.Today(ctx, pool)
+	eventDateTC05 := today.AddDate(0, 0, 120) // Jauh di masa depan agar tidak beririsan dengan pesanan lain
+	eventDateTC05Str := engine.DateKey(eventDateTC05)
+	endLockCleanupDate := eventDateTC05.AddDate(0, 0, 25)
+
+	var createdResourceIDs []string
+
+	cleanup := func() {
+		cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cleanCancel()
+
+		// 1. Hapus audit_logs terkait fixture ittest-
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM audit_logs
+			WHERE detail::text LIKE '%ittest-%'
+			   OR entity_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+			   OR entity_id IN (SELECT id FROM ingredients WHERE name LIKE 'ittest-%')
+			   OR entity_id IN (SELECT id FROM products WHERE name LIKE 'ittest-%')
+			   OR actor_id IN (SELECT id FROM users WHERE email LIKE 'ittest-%')
+		`)
+		// 2. Hapus stock_movements & purchases terkait bahan ittest-
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM stock_movements
+			WHERE ingredient_id IN (SELECT id FROM ingredients WHERE name LIKE 'ittest-%')
+			   OR ref_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+		`)
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM purchases
+			WHERE ingredient_id IN (SELECT id FROM ingredients WHERE name LIKE 'ittest-%')
+			   OR bought_by IN (SELECT id FROM users WHERE email LIKE 'ittest-%')
+		`)
+		// 3. Hapus tasks, payments, order_evaluations, order_items, orders ber-awalan ittest-
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM tasks WHERE order_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+		`)
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM payments WHERE order_id IN (SELECT id FROM orders WHERE customer_name LIKE 'ittest-%')
+		`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM orders WHERE customer_name LIKE 'ittest-%'`)
+		// 4. Hapus recipe_items, product_loads, products, ingredients ber-awalan ittest-
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM recipe_items
+			WHERE product_id IN (SELECT id FROM products WHERE name LIKE 'ittest-%')
+			   OR ingredient_id IN (SELECT id FROM ingredients WHERE name LIKE 'ittest-%')
+		`)
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM product_loads
+			WHERE product_id IN (SELECT id FROM products WHERE name LIKE 'ittest-%')
+		`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM products WHERE name LIKE 'ittest-%'`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM ingredients WHERE name LIKE 'ittest-%'`)
+		// 5. Hapus cash_entries & users ber-awalan ittest-
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM cash_entries
+			WHERE note LIKE '%ittest-%'
+			   OR created_by IN (SELECT id FROM users WHERE email LIKE 'ittest-%')
+		`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM users WHERE email LIKE 'ittest-%'`)
+		for _, rid := range createdResourceIDs {
+			_, _ = pool.Exec(cleanCtx, `DELETE FROM resources WHERE id = $1::uuid`, rid)
+		}
+		// 6. Hapus day_locks pada rentang tes
+		_, _ = pool.Exec(cleanCtx, `
+			DELETE FROM day_locks
+			WHERE day >= $1::date AND day <= $2::date
+		`, eventDateTC05Str, engine.DateKey(endLockCleanupDate))
+	}
+
+	cleanup()
+	defer cleanup()
+
+	// Pastikan sumber daya oven & labor tersedia
+	var ovenID, laborID string
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM resources WHERE code = 'oven'`).Scan(&ovenID); err != nil {
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO resources (code, name, unit, count, amount_per_unit_day, efficiency)
+			VALUES ('oven', 'ittest-oven', 'oven_hour', 2, 8.0000, 0.8500)
+			RETURNING id::text
+		`).Scan(&ovenID); err != nil {
+			t.Fatalf("ensure oven: %v", err)
+		}
+		createdResourceIDs = append(createdResourceIDs, ovenID)
+	}
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM resources WHERE code = 'labor'`).Scan(&laborID); err != nil {
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO resources (code, name, unit, count, amount_per_unit_day, efficiency)
+			VALUES ('labor', 'ittest-labor', 'minute', 4, 420.0000, 0.8500)
+			RETURNING id::text
+		`).Scan(&laborID); err != nil {
+			t.Fatalf("ensure labor: %v", err)
+		}
+		createdResourceIDs = append(createdResourceIDs, laborID)
+	}
+
+	// Buat pengguna uji ittest- (owner, manager, staff)
+	pwHash, err := auth.HashPassword("IttestPass2026!")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	var ownerID, managerID, staffID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO users (email, name, role, password_hash, is_active)
+		VALUES ($1, $2, 'owner', $3, true) RETURNING id::text
+	`, runPrefix+"owner@test.local", runPrefix+"owner", pwHash).Scan(&ownerID); err != nil {
+		t.Fatalf("insert owner: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO users (email, name, role, password_hash, is_active)
+		VALUES ($1, $2, 'manager', $3, true) RETURNING id::text
+	`, runPrefix+"manager@test.local", runPrefix+"manager", pwHash).Scan(&managerID); err != nil {
+		t.Fatalf("insert manager: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO users (email, name, role, password_hash, is_active)
+		VALUES ($1, $2, 'staff', $3, true) RETURNING id::text
+	`, runPrefix+"staff@test.local", runPrefix+"staff", pwHash).Scan(&staffID); err != nil {
+		t.Fatalf("insert staff: %v", err)
+	}
+
+	secret := []byte(cfg.JWTSecret)
+	ownerToken, _, _ := auth.IssueToken(secret, ownerID, auth.RoleOwner, time.Now(), auth.TokenTTL)
+	managerToken, _, _ := auth.IssueToken(secret, managerID, auth.RoleManager, time.Now(), auth.TokenTTL)
+	staffToken, _, _ := auth.IssueToken(secret, staffID, auth.RoleStaff, time.Now(), auth.TokenTTL)
+
+	gin.SetMode(gin.TestMode)
+	router := server.New(cfg, pool)
+
+	// =========================================================================
+	// 1. Verifikasi TC-04 (Model Kas, MinDP, DPCharged, dan Titik Terendah)
+	// =========================================================================
+	// Vektor TC-04: Saldo awal H-2 = 1.800.000; belanja 1.300.000 di H-2;
+	// DP pesanan lain +500.000 di H-1; biaya tetap 400.000/hari; buffer 400.000;
+	// total pesanan 2.375.000 (100 box @ 23.750); dp_pct 0,30; pelunasan masuk H+1.
+	hMinus2 := today
+	hMinus1 := today.AddDate(0, 0, 1)
+	h0 := today.AddDate(0, 0, 2)
+	hPlus1 := today.AddDate(0, 0, 3)
+
+	eventsNoDP := []engine.CashEvent{
+		{Date: hMinus2, Amount: decimal.NewFromInt(-1300000)},
+		{Date: hMinus1, Amount: decimal.NewFromInt(500000)},
+		{Date: hPlus1, Amount: decimal.NewFromInt(2375000)},
+	}
+	projNoDP := engine.ProjectCash(decimal.NewFromInt(1800000), hMinus2, 4, eventsNoDP, decimal.NewFromInt(400000))
+	minDP := engine.MinDP(decimal.NewFromInt(400000), projNoDP.Lowest)
+	dpCharged := engine.DPCharged(decimal.RequireFromString("0.30"), decimal.NewFromInt(2375000), minDP)
+
+	eventsWithDP := []engine.CashEvent{
+		{Date: hMinus2, Amount: decimal.NewFromInt(-1300000)},
+		{Date: hMinus2, Amount: dpCharged},
+		{Date: hMinus1, Amount: decimal.NewFromInt(500000)},
+		{Date: hPlus1, Amount: decimal.NewFromInt(2375000).Sub(dpCharged)},
+	}
+	projWithDP := engine.ProjectCash(decimal.NewFromInt(1800000), hMinus2, 4, eventsWithDP, decimal.NewFromInt(400000))
+
+	if !projNoDP.Lowest.Equal(decimal.NewFromInt(-200000)) || engine.DateKey(projNoDP.LowestDate) != engine.DateKey(h0) {
+		t.Fatalf("TC-04 titik terendah tanpa DP: diharapkan -200000 pada %s, dapat %s pada %s",
+			engine.DateKey(h0), projNoDP.Lowest, engine.DateKey(projNoDP.LowestDate))
+	}
+	if !minDP.Equal(decimal.NewFromInt(600000)) {
+		t.Fatalf("TC-04 MinDP: diharapkan 600000, dapat %s", minDP)
+	}
+	if !dpCharged.Equal(decimal.NewFromInt(712500)) {
+		t.Fatalf("TC-04 DPCharged: diharapkan 712500, dapat %s", dpCharged)
+	}
+	if !projWithDP.Lowest.Equal(decimal.NewFromInt(512500)) {
+		t.Fatalf("TC-04 titik terendah dengan DP: diharapkan 512500, dapat %s", projWithDP.Lowest)
+	}
+
+	// =========================================================================
+	// 2. Buat Bahan & Produk Uji untuk TC-05, Pembelian, Koreksi Stok, dan TC-06
+	// =========================================================================
+	// Tepung uji: stok awal 3 kg, min_stock 5 kg, buy_unit "sak", buy_unit_size 25 kg, buy_price 250.000 (Rp 10.000/kg), rounding "loose"
+	var flourID string
+	err = pool.QueryRow(ctx, `
+		INSERT INTO ingredients (name, use_unit, buy_unit, buy_unit_size, buy_price, stock, min_stock, rounding, is_active)
+		VALUES ($1, 'kg', 'sak', 25.0000, 250000.0000, 3.0000, 5.0000, 'loose', true)
+		RETURNING id::text
+	`, runPrefix+"tepung").Scan(&flourID)
+	if err != nil {
+		t.Fatalf("insert test flour: %v", err)
+	}
+
+	// Produk Snack Box uji: 0,12 kg tepung per box; untuk TC-06 kita juga membuat produk khusus yang purchase_cost_per_unit = 13.000
+	var snackBoxID, tartID, tc06ProdID string
+	err = pool.QueryRow(ctx, `
+		INSERT INTO products (name, category, price, packaging_cost, overhead_cost, is_active)
+		VALUES ($1, 'ittest-cat', 25000.0000, 2000.0000, 1200.0000, true)
+		RETURNING id::text
+	`, runPrefix+"snack-box").Scan(&snackBoxID)
+	if err != nil {
+		t.Fatalf("insert snack-box: %v", err)
+	}
+	err = pool.QueryRow(ctx, `
+		INSERT INTO products (name, category, price, packaging_cost, overhead_cost, is_active)
+		VALUES ($1, 'ittest-cat', 280000.0000, 15000.0000, 10000.0000, true)
+		RETURNING id::text
+	`, runPrefix+"tart").Scan(&tartID)
+	if err != nil {
+		t.Fatalf("insert tart: %v", err)
+	}
+	// Produk TC-06: packaging_cost = 13.000 (tanpa resep agar purchase_cost_per_unit tepat 13.000 sehingga 100 unit = 1.300.000)
+	err = pool.QueryRow(ctx, `
+		INSERT INTO products (name, category, price, packaging_cost, overhead_cost, is_active)
+		VALUES ($1, 'ittest-cat', 23750.0000, 13000.0000, 1200.0000, true)
+		RETURNING id::text
+	`, runPrefix+"paket-tc06").Scan(&tc06ProdID)
+	if err != nil {
+		t.Fatalf("insert paket-tc06: %v", err)
+	}
+
+	// Resep TC-05: 0,12 kg tepung/snack box dan 0,40 kg tepung/tart
+	_, err = pool.Exec(ctx, `
+		INSERT INTO recipe_items (product_id, ingredient_id, qty_per_unit) VALUES
+		($1::uuid, $3::uuid, 0.120000),
+		($2::uuid, $3::uuid, 0.400000)
+	`, snackBoxID, tartID, flourID)
+	if err != nil {
+		t.Fatalf("insert recipe_items: %v", err)
+	}
+
+	// Beban produk
+	_, err = pool.Exec(ctx, `
+		INSERT INTO product_loads (product_id, resource_id, load) VALUES
+		($1::uuid, $4::uuid, 0.0500), ($1::uuid, $5::uuid, 12.0000),
+		($2::uuid, $4::uuid, 0.5000), ($2::uuid, $5::uuid, 90.0000),
+		($3::uuid, $4::uuid, 0.0500), ($3::uuid, $5::uuid, 12.0000)
+	`, snackBoxID, tartID, tc06ProdID, ovenID, laborID)
+	if err != nil {
+		t.Fatalf("insert product_loads: %v", err)
+	}
+
+	// Buat pesanan confirmed untuk TC-05 pada eventDateTC05: 6 tart + 100 snack box
+	var tc05OrderID string
+	tc05Code, _ := orders.GenerateCode()
+	err = pool.QueryRow(ctx, `
+		INSERT INTO orders (code, source, customer_name, customer_contact, delivery_type, event_date, production_date, status, total, dp_required, paid)
+		VALUES ($1, 'manual', $2, '081200000005', 'pickup', $3::date, $3::date, 'confirmed', 4180000.0000, 1254000.0000, 1254000.0000)
+		RETURNING id::text
+	`, tc05Code, runPrefix+"pelanggan-tc05", eventDateTC05Str).Scan(&tc05OrderID)
+	if err != nil {
+		t.Fatalf("insert tc05 order: %v", err)
+	}
+	_, err = pool.Exec(ctx, `
+		INSERT INTO order_items (order_id, product_id, qty, unit_price, unit_cost) VALUES
+		($1::uuid, $2::uuid, 6, 280000.0000, 180000.0000),
+		($1::uuid, $3::uuid, 100, 25000.0000, 19000.0000)
+	`, tc05OrderID, tartID, snackBoxID)
+	if err != nil {
+		t.Fatalf("insert tc05 order_items: %v", err)
+	}
+
+	// =========================================================================
+	// 3. Verifikasi TC-05 lewat GET /api/v1/shopping-list (loose = 13, pack = 25)
+	// =========================================================================
+	wShopLoose := performJSON(router, http.MethodGet,
+		fmt.Sprintf("/api/v1/shopping-list?from=%s&to=%s", eventDateTC05Str, eventDateTC05Str),
+		nil, map[string]string{"Authorization": "Bearer " + managerToken})
+	if wShopLoose.Code != http.StatusOK {
+		t.Fatalf("GET /shopping-list (loose): diharapkan 200, dapat %d (%s)", wShopLoose.Code, wShopLoose.Body.String())
+	}
+	var shopLooseResp struct {
+		Data orders.ShoppingListResult `json:"data"`
+	}
+	if err := json.Unmarshal(wShopLoose.Body.Bytes(), &shopLooseResp); err != nil {
+		t.Fatalf("unmarshal shopping-list loose: %v", err)
+	}
+
+	var foundFlourLoose *orders.ShoppingListItem
+	for i := range shopLooseResp.Data.Items {
+		if shopLooseResp.Data.Items[i].IngredientID == flourID {
+			foundFlourLoose = &shopLooseResp.Data.Items[i]
+			break
+		}
+	}
+	if foundFlourLoose == nil {
+		t.Fatalf("bahan tepung %s tidak ditemukan di shopping-list", flourID)
+	}
+	if !foundFlourLoose.RequiredQty.Equal(decimal.RequireFromString("14.4")) {
+		t.Fatalf("TC-05 required_qty: diharapkan 14.4, dapat %s", foundFlourLoose.RequiredQty)
+	}
+	if !foundFlourLoose.NeedQty.Equal(decimal.RequireFromString("12.84")) {
+		t.Fatalf("TC-05 need_qty: diharapkan 12.84, dapat %s", foundFlourLoose.NeedQty)
+	}
+	if !foundFlourLoose.BuyUseUnits.Equal(decimal.NewFromInt(13)) {
+		t.Fatalf("TC-05 loose buy_use_units: diharapkan 13, dapat %s", foundFlourLoose.BuyUseUnits)
+	}
+	expectedPurchaseDate := engine.DateKey(eventDateTC05.AddDate(0, 0, -shopLooseResp.Data.ShoppingLeadDays))
+	if foundFlourLoose.PurchaseDate != expectedPurchaseDate {
+		t.Fatalf("TC-05 purchase_date: diharapkan %s, dapat %s", expectedPurchaseDate, foundFlourLoose.PurchaseDate)
+	}
+
+	// Ubah rounding tepung ke 'pack' (25 kg) dan verifikasi buy_use_units = 25 kg (1 sak)
+	if _, err := pool.Exec(ctx, `UPDATE ingredients SET rounding = 'pack' WHERE id = $1::uuid`, flourID); err != nil {
+		t.Fatalf("update flour rounding to pack: %v", err)
+	}
+	wShopPack := performJSON(router, http.MethodGet,
+		fmt.Sprintf("/api/v1/shopping-list?from=%s&to=%s", eventDateTC05Str, eventDateTC05Str),
+		nil, map[string]string{"Authorization": "Bearer " + managerToken})
+	var shopPackResp struct {
+		Data orders.ShoppingListResult `json:"data"`
+	}
+	_ = json.Unmarshal(wShopPack.Body.Bytes(), &shopPackResp)
+	var foundFlourPack *orders.ShoppingListItem
+	for i := range shopPackResp.Data.Items {
+		if shopPackResp.Data.Items[i].IngredientID == flourID {
+			foundFlourPack = &shopPackResp.Data.Items[i]
+			break
+		}
+	}
+	if foundFlourPack == nil || !foundFlourPack.BuyUseUnits.Equal(decimal.NewFromInt(25)) || !foundFlourPack.QtyBuyUnits.Equal(decimal.NewFromInt(1)) {
+		t.Fatalf("TC-05 pack: diharapkan buy_use_units=25 dan qty_buy_units=1, dapat %+v", foundFlourPack)
+	}
+
+	// RBAC Staff pada GET /api/v1/shopping-list: tidak boleh ada buy_price / estimated_cost
+	wShopStaff := performJSON(router, http.MethodGet,
+		fmt.Sprintf("/api/v1/shopping-list?from=%s&to=%s", eventDateTC05Str, eventDateTC05Str),
+		nil, map[string]string{"Authorization": "Bearer " + staffToken})
+	if wShopStaff.Code != http.StatusOK {
+		t.Fatalf("GET /shopping-list oleh staff: diharapkan 200, dapat %d", wShopStaff.Code)
+	}
+	if strings.Contains(wShopStaff.Body.String(), "buy_price") || strings.Contains(wShopStaff.Body.String(), "estimated_cost") {
+		t.Fatalf("GET /shopping-list oleh staff membocorkan harga: %s", wShopStaff.Body.String())
+	}
+
+	// =========================================================================
+	// 4. Pembelian Bahan (POST /api/v1/purchases) & Koreksi Stok (POST /api/v1/stock/adjust)
+	// =========================================================================
+	wPurchase := performJSON(router, http.MethodPost, "/api/v1/purchases", map[string]any{
+		"ingredient_id": flourID,
+		"qty_buy_units": 1,
+		"unit_price":    275000,
+		"note":          runPrefix + "beli-1-sak-tepung",
+	}, map[string]string{"Authorization": "Bearer " + managerToken})
+	if wPurchase.Code != http.StatusCreated {
+		t.Fatalf("POST /purchases: diharapkan 201, dapat %d (%s)", wPurchase.Code, wPurchase.Body.String())
+	}
+	var purchResp struct {
+		Data orders.PurchaseResult `json:"data"`
+	}
+	_ = json.Unmarshal(wPurchase.Body.Bytes(), &purchResp)
+	// Stok awal 3 kg + 1 sak (25 kg) = 28 kg
+	if !purchResp.Data.StockAfter.Equal(decimal.NewFromInt(28)) {
+		t.Fatalf("stok setelah pembelian: diharapkan 28, dapat %s", purchResp.Data.StockAfter)
+	}
+
+	// Koreksi stok tanpa alasan -> 422
+	wAdjInvalid := performJSON(router, http.MethodPost, "/api/v1/stock/adjust", map[string]any{
+		"ingredient_id": flourID,
+		"delta":         -1,
+		"reason":        "",
+	}, map[string]string{"Authorization": "Bearer " + managerToken})
+	if wAdjInvalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /stock/adjust tanpa alasan: diharapkan 422, dapat %d", wAdjInvalid.Code)
+	}
+
+	// Koreksi stok dengan alasan -> 200 OK (28 - 2 = 26 kg)
+	wAdjOK := performJSON(router, http.MethodPost, "/api/v1/stock/adjust", map[string]any{
+		"ingredient_id": flourID,
+		"delta":         -2,
+		"reason":        runPrefix + "koreksi-stok-opname",
+	}, map[string]string{"Authorization": "Bearer " + managerToken})
+	if wAdjOK.Code != http.StatusOK {
+		t.Fatalf("POST /stock/adjust dengan alasan: diharapkan 200, dapat %d (%s)", wAdjOK.Code, wAdjOK.Body.String())
+	}
+	var adjResp struct {
+		Data orders.StockAdjustResult `json:"data"`
+	}
+	_ = json.Unmarshal(wAdjOK.Body.Bytes(), &adjResp)
+	if !adjResp.Data.StockAfter.Equal(decimal.NewFromInt(26)) {
+		t.Fatalf("stok setelah koreksi: diharapkan 26, dapat %s", adjResp.Data.StockAfter)
+	}
+
+	// =========================================================================
+	// 5. TC-06: Pembatalan Pesanan (Belanja 1.300.000, DP 712.500 -> Eksposur 587.500)
+	// =========================================================================
+	var tc06OrderID string
+	tc06Code, _ := orders.GenerateCode()
+	err = pool.QueryRow(ctx, `
+		INSERT INTO orders (code, source, customer_name, customer_contact, delivery_type, event_date, production_date, status, total, dp_required, paid)
+		VALUES ($1, 'manual', $2, '081200000006', 'pickup', $3::date, $3::date, 'confirmed', 2375000.0000, 712500.0000, 712500.0000)
+		RETURNING id::text
+	`, tc06Code, runPrefix+"pelanggan-tc06", eventDateTC05Str).Scan(&tc06OrderID)
+	if err != nil {
+		t.Fatalf("insert tc06 order: %v", err)
+	}
+	_, err = pool.Exec(ctx, `
+		INSERT INTO order_items (order_id, product_id, qty, unit_price, unit_cost)
+		VALUES ($1::uuid, $2::uuid, 100, 23750.0000, 19000.0000)
+	`, tc06OrderID, tc06ProdID)
+	if err != nil {
+		t.Fatalf("insert tc06 order_items: %v", err)
+	}
+
+	wCancelTC06 := performJSON(router, http.MethodPost, "/api/v1/orders/"+tc06OrderID+"/cancel", map[string]any{
+		"reason":         runPrefix + "batal-tc06",
+		"dp_disposition": "forfeited",
+	}, map[string]string{"Authorization": "Bearer " + ownerToken})
+	if wCancelTC06.Code != http.StatusOK {
+		t.Fatalf("POST /orders/:id/cancel TC-06: diharapkan 200, dapat %d (%s)", wCancelTC06.Code, wCancelTC06.Body.String())
+	}
+	var cancelTC06 struct {
+		Data orders.CancelOrderResult `json:"data"`
+	}
+	_ = json.Unmarshal(wCancelTC06.Body.Bytes(), &cancelTC06)
+	if !cancelTC06.Data.ShoppingCost.Equal(decimal.NewFromInt(1300000)) {
+		t.Fatalf("TC-06 shopping_cost: diharapkan 1300000, dapat %s", cancelTC06.Data.ShoppingCost)
+	}
+	if !cancelTC06.Data.DPReceived.Equal(decimal.NewFromInt(712500)) {
+		t.Fatalf("TC-06 dp_received: diharapkan 712500, dapat %s", cancelTC06.Data.DPReceived)
+	}
+	if !cancelTC06.Data.CancellationExposure.Equal(decimal.NewFromInt(587500)) {
+		t.Fatalf("TC-06 cancellation_exposure: diharapkan 587500, dapat %s", cancelTC06.Data.CancellationExposure)
+	}
+
+	// Batalkan juga pesanan TC-05 dan pastikan bahan yang sudah dibeli (26 kg) tetap menjadi stok
+	wCancelTC05 := performJSON(router, http.MethodPost, "/api/v1/orders/"+tc05OrderID+"/cancel", map[string]any{
+		"reason": runPrefix + "batal-tc05",
+	}, map[string]string{"Authorization": "Bearer " + ownerToken})
+	if wCancelTC05.Code != http.StatusOK {
+		t.Fatalf("POST /orders/:id/cancel TC-05: diharapkan 200, dapat %d", wCancelTC05.Code)
+	}
+	var currentFlourStock decimal.Decimal
+	if err := pool.QueryRow(ctx, `SELECT stock FROM ingredients WHERE id = $1::uuid`, flourID).Scan(&currentFlourStock); err != nil {
+		t.Fatalf("baca stok tepung: %v", err)
+	}
+	if !currentFlourStock.Equal(decimal.NewFromInt(26)) {
+		t.Fatalf("bahan yang sudah dibeli harus tetap menjadi stok (26 kg), dapat %s", currentFlourStock)
+	}
+
+	// =========================================================================
+	// 6. Verifikasi RBAC Kas (GET /api/v1/cash/projection & POST /api/v1/cash/entries)
+	// =========================================================================
+	wCashEntry := performJSON(router, http.MethodPost, "/api/v1/cash/entries", map[string]any{
+		"entry_date": engine.DateKey(today),
+		"amount":     150000,
+		"note":       runPrefix + "kas-manual-owner",
+	}, map[string]string{"Authorization": "Bearer " + ownerToken})
+	if wCashEntry.Code != http.StatusCreated {
+		t.Fatalf("POST /cash/entries oleh owner: diharapkan 201, dapat %d (%s)", wCashEntry.Code, wCashEntry.Body.String())
+	}
+
+	wProjOwner := performJSON(router, http.MethodGet, "/api/v1/cash/projection?days=14", nil,
+		map[string]string{"Authorization": "Bearer " + ownerToken})
+	if wProjOwner.Code != http.StatusOK {
+		t.Fatalf("GET /cash/projection oleh owner: diharapkan 200, dapat %d (%s)", wProjOwner.Code, wProjOwner.Body.String())
+	}
+	var projOwner struct {
+		Data orders.CashProjectionResult `json:"data"`
+	}
+	_ = json.Unmarshal(wProjOwner.Body.Bytes(), &projOwner)
+	if projOwner.Data.OpeningCash == nil || len(projOwner.Data.Days) != 14 {
+		t.Fatalf("owner harus menerima opening_cash dan 14 hari proyeksi, dapat opening=%v days=%d",
+			projOwner.Data.OpeningCash, len(projOwner.Data.Days))
+	}
+
+	wProjMgr := performJSON(router, http.MethodGet, "/api/v1/cash/projection?days=14", nil,
+		map[string]string{"Authorization": "Bearer " + managerToken})
+	if wProjMgr.Code != http.StatusOK {
+		t.Fatalf("GET /cash/projection oleh manager: diharapkan 200, dapat %d (%s)", wProjMgr.Code, wProjMgr.Body.String())
+	}
+	if strings.Contains(wProjMgr.Body.String(), "opening_cash") || strings.Contains(wProjMgr.Body.String(), `"days"`) {
+		t.Fatalf("manager tidak boleh menerima opening_cash atau days: %s", wProjMgr.Body.String())
+	}
+
+	wProjStaff := performJSON(router, http.MethodGet, "/api/v1/cash/projection?days=14", nil,
+		map[string]string{"Authorization": "Bearer " + staffToken})
+	if wProjStaff.Code != http.StatusForbidden {
+		t.Fatalf("GET /cash/projection oleh staff: diharapkan 403, dapat %d", wProjStaff.Code)
+	}
+
+	// =========================================================================
+	// 7. Cleanup & Cetak Sisa Baris Semua Tabel
+	// =========================================================================
+	cleanup()
+
+	var (
+		remUsers, remProducts, remLoads, remIngredients, remRecipes       int
+		remOrders, remItems, remEvals, remPayments, remTasks              int
+		remPurchases, remMovements, remCash, remAudit, remDayLocks        int
+		totUsers, totResources, totProducts, totLoads, totIngredients     int
+		totRecipes, totSettings, totOrders, totItems, totEvals            int
+		totPayments, totTasks, totPurchases, totMovements, totCash        int
+		totAudit, totDayLocks, totRateLimits                              int
+	)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE email LIKE 'ittest-%'`).Scan(&remUsers)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM products WHERE name LIKE 'ittest-%'`).Scan(&remProducts)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM product_loads pl JOIN products p ON p.id = pl.product_id WHERE p.name LIKE 'ittest-%'`).Scan(&remLoads)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM ingredients WHERE name LIKE 'ittest-%'`).Scan(&remIngredients)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM recipe_items ri LEFT JOIN products p ON p.id = ri.product_id LEFT JOIN ingredients i ON i.id = ri.ingredient_id WHERE p.name LIKE 'ittest-%' OR i.name LIKE 'ittest-%'`).Scan(&remRecipes)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM orders WHERE customer_name LIKE 'ittest-%'`).Scan(&remOrders)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.customer_name LIKE 'ittest-%'`).Scan(&remItems)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM order_evaluations oe JOIN orders o ON o.id = oe.order_id WHERE o.customer_name LIKE 'ittest-%'`).Scan(&remEvals)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.customer_name LIKE 'ittest-%'`).Scan(&remPayments)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM tasks tk JOIN orders o ON o.id = tk.order_id WHERE o.customer_name LIKE 'ittest-%'`).Scan(&remTasks)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM purchases pu JOIN ingredients i ON i.id = pu.ingredient_id WHERE i.name LIKE 'ittest-%'`).Scan(&remPurchases)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM stock_movements sm JOIN ingredients i ON i.id = sm.ingredient_id WHERE i.name LIKE 'ittest-%'`).Scan(&remMovements)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM cash_entries WHERE note LIKE '%ittest-%'`).Scan(&remCash)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM audit_logs WHERE detail::text LIKE '%ittest-%'`).Scan(&remAudit)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM day_locks WHERE day >= $1::date AND day <= $2::date`, eventDateTC05Str, engine.DateKey(endLockCleanupDate)).Scan(&remDayLocks)
+
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&totUsers)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM resources`).Scan(&totResources)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM products`).Scan(&totProducts)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM product_loads`).Scan(&totLoads)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM ingredients`).Scan(&totIngredients)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM recipe_items`).Scan(&totRecipes)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM settings`).Scan(&totSettings)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM orders`).Scan(&totOrders)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM order_items`).Scan(&totItems)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM order_evaluations`).Scan(&totEvals)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM payments`).Scan(&totPayments)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM tasks`).Scan(&totTasks)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM purchases`).Scan(&totPurchases)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM stock_movements`).Scan(&totMovements)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM cash_entries`).Scan(&totCash)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM audit_logs`).Scan(&totAudit)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM day_locks`).Scan(&totDayLocks)
+	_ = pool.QueryRow(ctx, `SELECT COUNT(*) FROM rate_limits`).Scan(&totRateLimits)
+
+	t.Logf("Sisa baris ittest- setelah cleanup (TestCashAndShopping): users=%d, products=%d, product_loads=%d, ingredients=%d, recipe_items=%d, orders=%d, order_items=%d, order_evaluations=%d, payments=%d, tasks=%d, purchases=%d, stock_movements=%d, cash_entries=%d, audit_logs=%d, day_locks=%d",
+		remUsers, remProducts, remLoads, remIngredients, remRecipes,
+		remOrders, remItems, remEvals, remPayments, remTasks,
+		remPurchases, remMovements, remCash, remAudit, remDayLocks)
+	t.Logf("Total baris semua tabel: users=%d, resources=%d, products=%d, product_loads=%d, ingredients=%d, recipe_items=%d, settings=%d, orders=%d, order_items=%d, order_evaluations=%d, payments=%d, tasks=%d, purchases=%d, stock_movements=%d, cash_entries=%d, audit_logs=%d, day_locks=%d, rate_limits=%d",
+		totUsers, totResources, totProducts, totLoads, totIngredients,
+		totRecipes, totSettings, totOrders, totItems, totEvals,
+		totPayments, totTasks, totPurchases, totMovements, totCash,
+		totAudit, totDayLocks, totRateLimits)
+
+	if remUsers != 0 || remProducts != 0 || remLoads != 0 || remIngredients != 0 || remRecipes != 0 ||
+		remOrders != 0 || remItems != 0 || remEvals != 0 || remPayments != 0 || remTasks != 0 ||
+		remPurchases != 0 || remMovements != 0 || remCash != 0 || remAudit != 0 || remDayLocks != 0 {
+		t.Fatalf("masih ada baris ittest- yang belum bersih!")
+	}
+}
+
+

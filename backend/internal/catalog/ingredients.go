@@ -17,19 +17,21 @@ import (
 // BuyPrice bertipe pointer dengan omitempty agar dapat dihilangkan sepenuhnya
 // saat diakses oleh peran staff (Bagian 6 & Bagian 9).
 type Ingredient struct {
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	UseUnit     string           `json:"use_unit"`
-	BuyUnit     string           `json:"buy_unit"`
-	BuyUnitSize decimal.Decimal  `json:"buy_unit_size"`
-	BuyPrice    *decimal.Decimal `json:"buy_price,omitempty"`
-	Stock       decimal.Decimal  `json:"stock"`
-	MinStock    decimal.Decimal  `json:"min_stock"`
-	Rounding    string           `json:"rounding"`
-	IsActive    bool             `json:"is_active"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	UseUnit       string           `json:"use_unit"`
+	BuyUnit       string           `json:"buy_unit"`
+	BuyUnitSize   decimal.Decimal  `json:"buy_unit_size"`
+	BuyPrice      *decimal.Decimal `json:"buy_price,omitempty"`
+	Stock         decimal.Decimal  `json:"stock"`
+	MinStock      decimal.Decimal  `json:"min_stock"`
+	BelowMinStock bool             `json:"below_min_stock"`
+	Rounding      string           `json:"rounding"`
+	IsActive      bool             `json:"is_active"`
 }
 
 func (ing *Ingredient) stripForRole(role string) {
+	ing.BelowMinStock = ing.Stock.LessThan(ing.MinStock)
 	if role == auth.RoleStaff {
 		ing.BuyPrice = nil
 	}
@@ -102,6 +104,7 @@ func scanIngredient(row pgx.Row) (Ingredient, error) {
 		return Ingredient{}, err
 	}
 	ing.BuyPrice = &bp
+	ing.BelowMinStock = ing.Stock.LessThan(ing.MinStock)
 	return ing, nil
 }
 

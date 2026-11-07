@@ -430,7 +430,15 @@ func LoadCashEvents(ctx context.Context, q db.DBTX, today time.Time, params Sett
 			return nil, err
 		}
 
-		// DP yang belum terbayar masuk pada tanggal dp_deadline (atau hari ini bila sudah lewat)
+		// DP / pembayaran yang sudah diterima pada pesanan aktif masuk pada hari ini;
+		// sisa DP yang belum terbayar masuk pada tanggal dp_deadline (atau hari ini bila sudah lewat).
+		if paid.IsPositive() {
+			paidCapped := paid
+			if paidCapped.GreaterThan(total) {
+				paidCapped = total
+			}
+			events = append(events, engine.CashEvent{Date: today, Amount: paidCapped})
+		}
 		unpaidDP := dpReq.Sub(paid)
 		if unpaidDP.IsPositive() {
 			dpDate := today

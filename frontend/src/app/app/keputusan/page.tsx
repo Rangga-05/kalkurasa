@@ -9,7 +9,7 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useInternalSession } from "@/app/app/layout";
+import { useInternalSession } from "@/components/internal/use-internal-session";
 import { DecisionCard } from "@/components/internal/decision-card";
 import { getDecisionQueue, getErrorMessage } from "@/lib/api";
 import type { DecisionQueueItem, OrderDetail } from "@/lib/types";

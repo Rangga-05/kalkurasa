@@ -298,6 +298,36 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** `OrderDetail` pada `GET /api/v1/orders` dan `GET /api/v1/orders/:id` kini memuat `evaluation` (gerbang `G1`..`G4` dari `order_evaluations` dan `impact` dari `snapshot`), `payments`, `tasks`, serta `audits` (50 catatan audit terbaru untuk pesanan terkait). Ketika pemanggil memiliki peran `staff`, `OrderDetail` menandai `staffRedacted = true` dan melalui `MarshalJSON()` khusus membuang seluruh field harga, biaya, margin, kas, evaluasi, tawaran balik, dan pembayaran (`unit_price`, `unit_cost`, `subtotal`, `total`, `dp_required`, `paid`, `evaluation`, `payments`, `counter_offer`, serta nilai uang pada `audits.detail`).
 **Alasan:** Menjamin kepatuhan RBAC di tingkat payload JSON maupun tampilan UI bahwa peran `staff` tidak pernah melihat harga jual, HPP, margin, ataupun kas.
 
+---
+
+## Tahap 5 — Bahan, Belanja, Proyeksi Kas, Biaya Produk, dan Master Data
+
+### A5-01: Perhitungan Daftar Belanja (`GET /api/v1/shopping-list`) dari Pesanan Aktif Terkonfirmasi
+**Keputusan:** `GET /api/v1/shopping-list?from=&to=` menghimpun kebutuhan bahan dari pesanan berstatus `confirmed` dan `in_production` dalam rentang tanggal acara `from..to` (default `hari_ini .. hari_ini + 14 hari`), lalu memanggil `engine.ShoppingNeed` untuk setiap bahan guna menghitung kekurangan bersih (`need_qty = max(0, required*(1+buffer_pct) - stock)`), jumlah beli dalam satuan beli (`qty_buy_units` menurut aturan `loose` vs `pack`), serta estimasi biaya (`estimated_cost`). Tanggal belanja (`purchase_date`) ditetapkan sebesar `max(hari_ini, earliest_event_date - shopping_lead_days)`. Selain itu, respons menyertakan `low_stock_items` (seluruh bahan aktif dengan `stock < min_stock`). Untuk peran `staff`, seluruh field harga (`buy_price`, `estimated_cost`, `total_estimated`) dikosongkan (`nil`/`omitempty`).
+**Alasan:** Memenuhi Bagian 7 & 9 brief serta TC-05 tanpa menduplikasi rumus di luar `internal/engine`.
+
+### A5-02: Pencatatan Pembelian Bahan (`POST /api/v1/purchases`) dan Koreksi Stok (`POST /api/v1/stock/adjust`)
+**Keputusan:**
+- `POST /api/v1/purchases` dijalankan secara atomik di dalam transaksi (`FOR UPDATE` pada baris `ingredients`): menambah `ingredients.stock` sebesar `qty_buy_units * buy_unit_size`, memperbarui `ingredients.buy_price` ke harga aktual per satuan beli (`total_cost / qty_buy_units`, dibulatkan 2 desimal) apabila `total_cost > 0`, mencatat baris di `purchases`, mencatat `stock_movements` (`reason = 'purchase'`, `ref_type = 'purchase'`), mencatat `cash_entries` keluar (`amount = -total_cost`, `category = 'purchase'`), dan menulis `audit_logs`.
+- `POST /api/v1/stock/adjust` mewajibkan `reason` tidak kosong (`422 Unprocessable Entity` bila kosong) dan menolak hasil akhir stok negatif (`new_stock < 0`), lalu memperbarui `ingredients.stock`, menulis `stock_movements` (`ref_type = 'adjustment'`), dan menulis `audit_logs`.
+**Alasan:** Menjamin konsistensi antara stok fisik, harga beli aktual bahan untuk HPP, riwayat pergerakan stok, dan arus kas keluar.
+
+### A5-03: Pemodelan Peristiwa Kas (`LoadCashEvents` & `GET /api/v1/cash/projection`) serta Hindar Hitung Ganda Belanja
+**Keputusan:**
+1. Karena `settings.opening_cash` merepresentasikan saldo kas dasar pada awal periode proyeksi (`today`) dan pencatatan pembayaran (`POST /orders/:id/payments`) tidak mengubah `settings.opening_cash` maupun menulis `cash_entries`, maka untuk pesanan aktif (`accepted`, `confirmed`, `in_production`, `ready`, `delivering`) `LoadCashEvents` memasukkan kas yang sudah dibayarkan (`min(paid, total)`) pada `today`, ditambah sisa kewajiban DP (`max(0, dp_required - paid)`) pada tanggal tenggat DP, serta sisa pelunasan (`max(0, total - max(dp_required, paid))`) pada `event_date + 1 hari`.
+2. Untuk jadwal kas keluar belanja pesanan aktif (`event_date - shopping_lead_days`), jumlah kebutuhan belanja masa depan dihitung melalui `engine.ShoppingNeed` terhadap stok saat ini dan dikurangi total pembelian bahan aktual (`cash_entries` berkategori `'purchase'`) yang sudah tercatat pada rentang proyeksi, sehingga pembelian bahan yang sudah dibayar tunai lewat `POST /api/v1/purchases` tidak dihitung ganda terhadap estimasi belanja pesanan.
+3. RBAC `GET /api/v1/cash/projection`: `owner` menerima rincian lengkap (`opening_cash`, `fixed_cost_daily`, `cash_buffer`, `passed`, `lowest`, `lowest_date`, `days_below_buffer`, `days`, `entries`); `manager` hanya menerima `from`, `to`, `horizon_days`, `cash_buffer`, `passed`, `lowest`, `lowest_date`, dan `days_below_buffer` (tanpa `opening_cash`, `fixed_cost_daily`, `days`, maupun `entries`); `staff` ditolak dengan `403 Forbidden`.
+**Alasan:** Menghasilkan angka proyeksi kas yang presisi sesuai TC-04 (`lowest = 512.500` saat kas awal `1.800.000`, DP masuk `712.500`, belanja keluar `1.400.000`, biaya tetap `200.000`/hari) dan menegakkan matriks visibilitas kas Bagian 6/7 brief.
+
+### A5-04: Pembatalan Pesanan Menghitung Ulang Proyeksi Kas dan Mempertahankan Stok Bahan yang Sudah Dibeli
+**Keputusan:** Saat `POST /api/v1/orders/:id/cancel` dijalankan, selain menghitung `cancellation_exposure` melalui `engine.CancellationExposure(shoppingCost, dpReceived)` dan melepas kapasitas/tugas aktif, sistem juga menghitung ulang proyeksi kas 14 hari ke depan (`cash_lowest_after` dikembalikan pada respons pembatalan dan dicatat di `audit_logs`). Stok bahan yang sudah telanjur dibeli melalui `POST /api/v1/purchases` tetap berada di `ingredients.stock` (tidak dikurangi kembali) sehingga siap dipakai oleh pesanan berikutnya.
+**Alasan:** Memenuhi TC-06 dan aturan pembatalan pada spesifikasi bahwa bahan yang sudah dibeli tetap tercatat sebagai persediaan di gudang/dapur.
+
+### A5-05: Endpoint Ringkasan Biaya Produk (`GET /api/v1/costing/products`)
+**Keputusan:** `GET /api/v1/costing/products` menghitung HPP dan indikator harga setiap produk menggunakan fungsi-fungsi murni `internal/engine`: `engine.UnitCost(ingredientCost, wastePct, packagingCost, laborMinutes, laborRate, overhead)` (di mana `laborMinutes` diambil dari `product_loads` untuk resource `labor`), `engine.Margin(price, unitCost)`, `engine.MinPrice(unitCost, minMargin)`, dan `engine.MaxDiscount(price, unitCost, minMargin)`.
+**Alasan:** Memastikan halaman `/app/produk` menampilkan HPP (mis. Snack Box = `Rp 19.000`), margin, harga minimum, dan diskon maksimum secara konsisten dari satu sumber kebenaran (`internal/engine`).
+
+
 
 
 

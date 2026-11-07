@@ -100,7 +100,7 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 	ordersHandler := &orders.Handler{DB: dbConn}
 
 	readMaster := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleAdmin)
-	writeMaster := auth.RequireRole(auth.RoleManager, auth.RoleAdmin)
+	writeMaster := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleAdmin)
 	readIngredients := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleAdmin, auth.RoleStaff)
 	adminOnly := auth.RequireRole(auth.RoleAdmin)
 	manageOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager)
@@ -201,18 +201,20 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 			protected.PATCH("/users/:id", adminOnly, usersHandler.Update)
 			protected.DELETE("/users/:id", adminOnly, usersHandler.Delete)
 
-			// Guarded cash routes for RBAC enforcement (TC-09: staff denied access to cash)
+			// Shopping, purchases, stock adjustment, and product costing (Tahap 5)
+			protected.GET("/shopping-list", readIngredients, ordersHandler.ShoppingList)
+			protected.POST("/purchases", readIngredients, ordersHandler.RecordPurchase)
+			protected.POST("/stock/adjust", readIngredients, ordersHandler.AdjustStock)
+			protected.GET("/costing/products", readMaster, ordersHandler.ProductsCosting)
+
+			// Cash projection & manual cash entries (Tahap 5; TC-09: staff denied access to cash)
 			protected.GET("/cash/projection",
 				auth.RequireRole(auth.RoleOwner, auth.RoleManager),
-				func(c *gin.Context) {
-					httpx.DBUnavailable(c)
-				},
+				ordersHandler.CashProjection,
 			)
 			protected.POST("/cash/entries",
 				auth.RequireRole(auth.RoleOwner),
-				func(c *gin.Context) {
-					httpx.DBUnavailable(c)
-				},
+				ordersHandler.CreateCashEntry,
 			)
 		}
 	}

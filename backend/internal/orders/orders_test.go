@@ -182,6 +182,17 @@ func setupIsolatedTestEnv(t *testing.T) *testEnv {
 
 	flourID := "cccc0000-0000-4000-8000-000000000001"
 	mdb.ingredients[flourID] = decimal.NewFromInt(20) // 20 kg tepung
+	mdb.ingredientDetails[flourID] = memIngredient{
+		ID:          flourID,
+		Name:        "Tepung Terigu Protein Sedang",
+		UseUnit:     "kg",
+		BuyUnit:     "sak",
+		BuyUnitSize: decimal.NewFromInt(25),
+		BuyPrice:    decimal.NewFromInt(275000),
+		MinStock:    decimal.NewFromInt(5),
+		Rounding:    "loose",
+		IsActive:    true,
+	}
 	mdb.recipes[snackBoxID] = map[string]decimal.Decimal{
 		flourID: decimal.RequireFromString("0.12"), // 0,12 kg tepung per snack box
 	}
@@ -1509,5 +1520,339 @@ func TestTahap4B_TasksAndOrderDetailStaffRedaction(t *testing.T) {
 	}, map[string]string{"Authorization": "Bearer " + env.customerToken})
 	if wCustPatch.Code != http.StatusForbidden {
 		t.Fatalf("customer PATCH /tasks/:id expected 403, got %d (%s)", wCustPatch.Code, wCustPatch.Body.String())
+	}
+}
+
+// TestTahap5_CashProjectionTC04AndTC06AndRBAC menguji skenario TC-04, TC-06, dan RBAC kas pada tingkat layanan:
+//   - TC-04: Saldo awal H-2 (2026-11-10) = 1.800.000, belanja = 1.300.000 di H-2, DP pesanan lain +500.000 di H-1 (2026-11-11),
+//     biaya tetap = 400.000/hari, buffer = 400.000, pesanan 100 snack box @ 23.750 (total 2.375.000) di H0 (2026-11-12):
+//     titik terendah tanpa DP = -200.000, MinDP = 600.000, DPCharged = 712.500, titik terendah dengan DP = 512.500.
+//   - RBAC GET /api/v1/cash/projection: owner melihat lengkap; manager hanya status lolos/tidak dan titik terendah tanpa opening_cash; staff 403.
+//   - POST /api/v1/cash/entries: owner berhasil (201), manager & staff ditolak (403).
+//   - TC-06: Pembatalan pesanan dengan belanja 1.300.000 dan DP diterima 712.500 menghasilkan cancellation_exposure = 587.500
+//     dan menghitung ulang proyeksi kas.
+func TestTahap5_CashProjectionTC04AndTC06AndRBAC(t *testing.T) {
+	env := setupIsolatedTestEnv(t)
+
+	// Setel parameter sesuai vektor uji TC-04:
+	// Today = 2026-11-10 (H-2), EventDate = 2026-11-12 (H0), OpeningCash = 1.800.000, FixedCost = 400.000, Buffer = 400.000.
+	// Agar purchase_cost_per_unit snack box tepat 13.000:
+	// recipeCost = 10.476,190476... * 1,05 + packaging 2.000 = 13.000 -> kita setel waste_pct = 0.05, recipeCost = 10000, packaging = 2500 -> 10000*1.05 + 2500 = 13.000!
+	env.db.mu.Lock()
+	env.db.settings["opening_cash"] = "1800000"
+	env.db.settings["fixed_cost_daily"] = "400000"
+	env.db.settings["cash_buffer"] = "400000"
+	env.db.settings["dp_pct"] = "0.30"
+	env.db.settings["shopping_lead_days"] = "2"
+	env.db.settings["lead_time_days"] = "2"
+	sp := env.db.products[env.snackBoxID]
+	sp.PackagingCost = decimal.NewFromInt(2500) // 10.000 * 1,05 + 2.500 = 13.000 purchase_cost_per_unit
+	sp.OverheadCost = decimal.NewFromInt(900)   // 10.500 + 2.500 + 4.800 + 900 = 18.700 unit_cost
+	env.db.products[env.snackBoxID] = sp
+	// Tambahkan DP pesanan lain +500.000 pada H-1 (2026-11-11)
+	hMinus1, _ := time.Parse("2006-01-02", "2026-11-11")
+	env.db.cashEntries = append(env.db.cashEntries, memCashEntry{
+		ID:        "ce-tc04-other-dp",
+		EntryDate: hMinus1,
+		Amount:    decimal.NewFromInt(500000),
+		Note:      "DP pesanan lain H-1",
+	})
+	env.db.mu.Unlock()
+
+	// 1. Buat pesanan manual 100 box @ 23.750 pada H0 (2026-11-12) -> total = 2.375.000, belanja = 1.300.000
+	wCreate := performJSON(env.router, http.MethodPost, "/api/v1/orders", map[string]any{
+		"customer_name":    "Pelanggan TC-04",
+		"customer_contact": "081200000004",
+		"delivery_type":    "pickup",
+		"event_date":       "2026-11-12",
+		"items": []map[string]any{
+			{"product_id": env.snackBoxID, "qty": 100, "unit_price": 23750},
+		},
+	}, map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("create TC-04 order: expected 201, got %d (%s)", wCreate.Code, wCreate.Body.String())
+	}
+	var created struct {
+		Data orders.OrderDetail `json:"data"`
+	}
+	if err := json.Unmarshal(wCreate.Body.Bytes(), &created); err != nil {
+		t.Fatalf("unmarshal TC-04 order: %v", err)
+	}
+	if !created.Data.Total.Equal(decimal.NewFromInt(2375000)) {
+		t.Fatalf("TC-04 expected total 2.375.000, got %s", created.Data.Total)
+	}
+	if !created.Data.DPRequired.Equal(decimal.NewFromInt(712500)) {
+		t.Fatalf("TC-04 expected DPCharged 712.500, got %s", created.Data.DPRequired)
+	}
+	if !created.Data.Evaluation.Impact.CashLowestAfter.Equal(decimal.NewFromInt(512500)) {
+		t.Fatalf("TC-04 expected CashLowestAfter 512.500, got %s", created.Data.Evaluation.Impact.CashLowestAfter)
+	}
+
+	// Setujui pesanan oleh owner (karena 100 unit >= big_order_units 50) dan catat pembayaran DP 712.500 pada H-2
+	wDecide := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+created.Data.ID+"/decision", map[string]any{
+		"action": "accept",
+	}, map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wDecide.Code != http.StatusOK {
+		t.Fatalf("decide accept TC-04 order: expected 200, got %d (%s)", wDecide.Code, wDecide.Body.String())
+	}
+
+	wPayDP := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+created.Data.ID+"/payments", map[string]any{
+		"amount": 712500,
+		"method": "transfer",
+		"note":   "DP TC-04",
+	}, map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wPayDP.Code != http.StatusCreated {
+		t.Fatalf("pay DP TC-04: expected 201, got %d (%s)", wPayDP.Code, wPayDP.Body.String())
+	}
+
+	// 2. Uji GET /api/v1/cash/projection?days=4 oleh Owner (jendela H-2 s.d. H+1)
+	wCashOwner := performJSON(env.router, http.MethodGet, "/api/v1/cash/projection?days=4", nil,
+		map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wCashOwner.Code != http.StatusOK {
+		t.Fatalf("GET /cash/projection by owner: expected 200, got %d (%s)", wCashOwner.Code, wCashOwner.Body.String())
+	}
+	var cashOwner struct {
+		Data orders.CashProjectionResult `json:"data"`
+	}
+	if err := json.Unmarshal(wCashOwner.Body.Bytes(), &cashOwner); err != nil {
+		t.Fatalf("unmarshal owner cash projection: %v", err)
+	}
+	if !cashOwner.Data.Passed {
+		t.Fatalf("TC-04 owner cash projection expected passed=true, got false")
+	}
+	if !cashOwner.Data.Lowest.Equal(decimal.NewFromInt(512500)) || cashOwner.Data.LowestDate != "2026-11-12" {
+		t.Fatalf("TC-04 expected lowest=512500 on 2026-11-12, got %s on %s", cashOwner.Data.Lowest, cashOwner.Data.LowestDate)
+	}
+	if cashOwner.Data.OpeningCash == nil || !cashOwner.Data.OpeningCash.Equal(decimal.NewFromInt(1800000)) {
+		t.Fatalf("TC-04 owner expected opening_cash=1800000, got %v", cashOwner.Data.OpeningCash)
+	}
+	if len(cashOwner.Data.Days) != 4 {
+		t.Fatalf("TC-04 owner expected 4 daily balances, got %d", len(cashOwner.Data.Days))
+	}
+
+	// 3. Uji GET /api/v1/cash/projection?days=4 oleh Manager: hanya status lolos/tidak dan titik terendah tanpa opening_cash/days
+	wCashMgr := performJSON(env.router, http.MethodGet, "/api/v1/cash/projection?days=4", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wCashMgr.Code != http.StatusOK {
+		t.Fatalf("GET /cash/projection by manager: expected 200, got %d (%s)", wCashMgr.Code, wCashMgr.Body.String())
+	}
+	rawMgrCash := wCashMgr.Body.String()
+	for _, hidden := range []string{"opening_cash", "fixed_cost_daily", `"days"`, `"entries"`} {
+		if strings.Contains(rawMgrCash, hidden) {
+			t.Errorf("manager GET /cash/projection leaked %s: %s", hidden, rawMgrCash)
+		}
+	}
+	var cashMgr struct {
+		Data orders.CashProjectionResult `json:"data"`
+	}
+	_ = json.Unmarshal(wCashMgr.Body.Bytes(), &cashMgr)
+	if !cashMgr.Data.Passed || !cashMgr.Data.Lowest.Equal(decimal.NewFromInt(512500)) {
+		t.Fatalf("manager cash projection mismatch: passed=%v lowest=%s", cashMgr.Data.Passed, cashMgr.Data.Lowest)
+	}
+
+	// 4. Uji GET /api/v1/cash/projection oleh Staff -> 403 Forbidden
+	wCashStaff := performJSON(env.router, http.MethodGet, "/api/v1/cash/projection?days=14", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wCashStaff.Code != http.StatusForbidden {
+		t.Fatalf("staff GET /cash/projection expected 403, got %d", wCashStaff.Code)
+	}
+
+	// 5. Uji TC-06: Batalkan pesanan (belanja 1.300.000, DP diterima 712.500 -> eksposur 587.500)
+	wCancel := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+created.Data.ID+"/cancel", map[string]any{
+		"reason":         "Uji TC-06 Pembatalan",
+		"dp_disposition": "forfeited",
+	}, map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wCancel.Code != http.StatusOK {
+		t.Fatalf("TC-06 cancel order: expected 200, got %d (%s)", wCancel.Code, wCancel.Body.String())
+	}
+	var cancelRes struct {
+		Data orders.CancelOrderResult `json:"data"`
+	}
+	_ = json.Unmarshal(wCancel.Body.Bytes(), &cancelRes)
+	if !cancelRes.Data.ShoppingCost.Equal(decimal.NewFromInt(1300000)) {
+		t.Fatalf("TC-06 expected shopping_cost=1.300.000, got %s", cancelRes.Data.ShoppingCost)
+	}
+	if !cancelRes.Data.DPReceived.Equal(decimal.NewFromInt(712500)) {
+		t.Fatalf("TC-06 expected dp_received=712.500, got %s", cancelRes.Data.DPReceived)
+	}
+	if !cancelRes.Data.CancellationExposure.Equal(decimal.NewFromInt(587500)) {
+		t.Fatalf("TC-06 expected cancellation_exposure=587.500, got %s", cancelRes.Data.CancellationExposure)
+	}
+
+	// 6. Uji POST /api/v1/cash/entries: manager ditolak 403, owner berhasil 201
+	wEntryMgr := performJSON(env.router, http.MethodPost, "/api/v1/cash/entries", map[string]any{
+		"entry_date": "2026-11-10",
+		"amount":     250000,
+		"note":       "Suntikan kas",
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wEntryMgr.Code != http.StatusForbidden {
+		t.Fatalf("manager POST /cash/entries expected 403, got %d", wEntryMgr.Code)
+	}
+
+	wEntryOwner := performJSON(env.router, http.MethodPost, "/api/v1/cash/entries", map[string]any{
+		"entry_date": "2026-11-10",
+		"amount":     250000,
+		"note":       "Suntikan modal kerja",
+	}, map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wEntryOwner.Code != http.StatusCreated {
+		t.Fatalf("owner POST /cash/entries expected 201, got %d (%s)", wEntryOwner.Code, wEntryOwner.Body.String())
+	}
+}
+
+// TestTahap5_ShoppingListTC05PurchasesAndStockAdjust menguji skenario TC-05, pembelian, koreksi stok, dan RBAC:
+//   - TC-05: 6 tart (6 x 0,4 = 2,4 kg) + 100 snack box (100 x 0,12 = 12,0 kg) = 14,4 kg tepung;
+//     buffer 10% (0,10); stok awal 3 kg -> need = 12,84 kg;
+//     aturan loose -> buy = 13 kg; aturan pack (25 kg) -> buy = 25 kg (1 sak).
+//   - Tanggal beli = tanggal acara dikurangi shopping_lead_days.
+//   - Staff melihat daftar belanja tanpa buy_price dan estimated_cost.
+//   - POST /api/v1/purchases menambah stok, memperbarui buy_price, menulis stock_movements & cash_entries.
+//   - POST /api/v1/stock/adjust menolak tanpa alasan (422) dan berhasil dengan alasan.
+func TestTahap5_ShoppingListTC05PurchasesAndStockAdjust(t *testing.T) {
+	env := setupIsolatedTestEnv(t)
+
+	// Setel stok tepung = 3 kg (di bawah min_stock = 5 kg), rounding = "loose", packSize = 25 kg
+	env.db.mu.Lock()
+	env.db.ingredients[env.flourID] = decimal.NewFromInt(3)
+	im := env.db.ingredientDetails[env.flourID]
+	im.Rounding = "loose"
+	im.BuyUnitSize = decimal.NewFromInt(25)
+	im.BuyPrice = decimal.NewFromInt(275000)
+	im.MinStock = decimal.NewFromInt(5)
+	env.db.ingredientDetails[env.flourID] = im
+
+	// Buat pesanan confirmed berisi 6 tart + 100 snack box pada tanggal acara 2026-11-15
+	evDate, _ := time.Parse("2006-01-02", "2026-11-15")
+	ordID := "dddd0000-0000-4000-8000-000000000005"
+	env.db.orders = append(env.db.orders, memOrder{
+		ID:             ordID,
+		Code:           "TC05SHOP99",
+		Source:         "manual",
+		CustomerName:   "Pelanggan TC-05",
+		DeliveryType:   "pickup",
+		EventDate:      evDate,
+		ProductionDate: evDate,
+		Status:         orders.StatusConfirmed,
+		Total:          decimal.NewFromInt(4180000),
+		DPRequired:     decimal.NewFromInt(1254000),
+		Paid:           decimal.NewFromInt(1254000),
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	})
+	env.db.orderItems = append(env.db.orderItems,
+		memOrderItem{ID: "oi-tc05-1", OrderID: ordID, ProductID: env.tartID, Qty: 6, UnitPrice: decimal.NewFromInt(280000), UnitCost: decimal.NewFromInt(180000)},
+		memOrderItem{ID: "oi-tc05-2", OrderID: ordID, ProductID: env.snackBoxID, Qty: 100, UnitPrice: decimal.NewFromInt(25000), UnitCost: decimal.NewFromInt(19000)},
+	)
+	env.db.mu.Unlock()
+
+	// 1. Uji TC-05 dengan rounding = "loose" -> required = 14.4, need = 12.84, buy = 13 kg, purchase_date = 2026-11-13
+	wShopLoose := performJSON(env.router, http.MethodGet, "/api/v1/shopping-list?from=2026-11-10&to=2026-11-20", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wShopLoose.Code != http.StatusOK {
+		t.Fatalf("GET /shopping-list (loose): expected 200, got %d (%s)", wShopLoose.Code, wShopLoose.Body.String())
+	}
+	var shopLoose struct {
+		Data orders.ShoppingListResult `json:"data"`
+	}
+	if err := json.Unmarshal(wShopLoose.Body.Bytes(), &shopLoose); err != nil {
+		t.Fatalf("unmarshal shopping list loose: %v", err)
+	}
+	if len(shopLoose.Data.Items) != 1 {
+		t.Fatalf("expected 1 shopping item, got %d", len(shopLoose.Data.Items))
+	}
+	itLoose := shopLoose.Data.Items[0]
+	if !itLoose.RequiredQty.Equal(decimal.RequireFromString("14.4")) {
+		t.Fatalf("TC-05 expected required_qty=14.4, got %s", itLoose.RequiredQty)
+	}
+	if !itLoose.NeedQty.Equal(decimal.RequireFromString("12.84")) {
+		t.Fatalf("TC-05 expected need_qty=12.84, got %s", itLoose.NeedQty)
+	}
+	if !itLoose.BuyUseUnits.Equal(decimal.NewFromInt(13)) {
+		t.Fatalf("TC-05 loose expected buy_use_units=13, got %s", itLoose.BuyUseUnits)
+	}
+	if itLoose.PurchaseDate != "2026-11-13" {
+		t.Fatalf("TC-05 expected purchase_date=2026-11-13 (2026-11-15 - 2), got %s", itLoose.PurchaseDate)
+	}
+	if !itLoose.BelowMinStock || len(shopLoose.Data.LowStockItems) != 1 {
+		t.Fatalf("expected below_min_stock=true and 1 low_stock_item, got below=%v lowStock=%d", itLoose.BelowMinStock, len(shopLoose.Data.LowStockItems))
+	}
+
+	// 2. Uji TC-05 dengan rounding = "pack" (packSize = 25 kg) -> buy_use_units = 25 kg, qty_buy_units = 1 sak
+	env.db.mu.Lock()
+	imPack := env.db.ingredientDetails[env.flourID]
+	imPack.Rounding = "pack"
+	env.db.ingredientDetails[env.flourID] = imPack
+	env.db.mu.Unlock()
+
+	wShopPack := performJSON(env.router, http.MethodGet, "/api/v1/shopping-list?from=2026-11-10&to=2026-11-20", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	var shopPack struct {
+		Data orders.ShoppingListResult `json:"data"`
+	}
+	_ = json.Unmarshal(wShopPack.Body.Bytes(), &shopPack)
+	itPack := shopPack.Data.Items[0]
+	if !itPack.BuyUseUnits.Equal(decimal.NewFromInt(25)) || !itPack.QtyBuyUnits.Equal(decimal.NewFromInt(1)) {
+		t.Fatalf("TC-05 pack expected buy_use_units=25 and qty_buy_units=1, got buy_use=%s qty_buy=%s",
+			itPack.BuyUseUnits, itPack.QtyBuyUnits)
+	}
+
+	// 3. Uji RBAC Staff pada GET /api/v1/shopping-list -> buy_price dan estimated_cost tidak boleh dikirim
+	wShopStaff := performJSON(env.router, http.MethodGet, "/api/v1/shopping-list?from=2026-11-10&to=2026-11-20", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wShopStaff.Code != http.StatusOK {
+		t.Fatalf("GET /shopping-list by staff: expected 200, got %d", wShopStaff.Code)
+	}
+	rawShopStaff := wShopStaff.Body.String()
+	for _, forbidden := range []string{"buy_price", "estimated_cost", "total_estimated_cost"} {
+		if strings.Contains(rawShopStaff, forbidden) {
+			t.Errorf("staff GET /shopping-list leaked %s: %s", forbidden, rawShopStaff)
+		}
+	}
+
+	// 4. Uji POST /api/v1/purchases: beli 1 sak (25 kg) dengan harga aktual Rp 280.000
+	//    -> stok naik dari 3 kg menjadi 28 kg, buy_price menjadi 280.000, stock_movements & cash_entries tercatat
+	wPurchase := performJSON(env.router, http.MethodPost, "/api/v1/purchases", map[string]any{
+		"ingredient_id": env.flourID,
+		"qty_buy_units": 1,
+		"unit_price":    280000,
+		"note":          "Beli 1 sak tepung terigu",
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wPurchase.Code != http.StatusCreated {
+		t.Fatalf("POST /purchases: expected 201, got %d (%s)", wPurchase.Code, wPurchase.Body.String())
+	}
+	var purchRes struct {
+		Data orders.PurchaseResult `json:"data"`
+	}
+	_ = json.Unmarshal(wPurchase.Body.Bytes(), &purchRes)
+	if !purchRes.Data.StockBefore.Equal(decimal.NewFromInt(3)) || !purchRes.Data.StockAfter.Equal(decimal.NewFromInt(28)) {
+		t.Fatalf("purchase stock expected 3 -> 28, got %s -> %s", purchRes.Data.StockBefore, purchRes.Data.StockAfter)
+	}
+	if purchRes.Data.BelowMinStock {
+		t.Fatalf("after buying 25 kg, below_min_stock should be false")
+	}
+
+	// 5. Uji POST /api/v1/stock/adjust: tanpa alasan -> 422; dengan alasan -> berhasil
+	wAdjNoReason := performJSON(env.router, http.MethodPost, "/api/v1/stock/adjust", map[string]any{
+		"ingredient_id": env.flourID,
+		"delta":         -2,
+		"reason":        "   ",
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wAdjNoReason.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("stock adjust without reason expected 422, got %d (%s)", wAdjNoReason.Code, wAdjNoReason.Body.String())
+	}
+
+	wAdjOK := performJSON(env.router, http.MethodPost, "/api/v1/stock/adjust", map[string]any{
+		"ingredient_id": env.flourID,
+		"delta":         -2.5,
+		"reason":        "Koreksi stok opname akhir pekan",
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wAdjOK.Code != http.StatusOK {
+		t.Fatalf("stock adjust with reason expected 200, got %d (%s)", wAdjOK.Code, wAdjOK.Body.String())
+	}
+	var adjRes struct {
+		Data orders.StockAdjustResult `json:"data"`
+	}
+	_ = json.Unmarshal(wAdjOK.Body.Bytes(), &adjRes)
+	if !adjRes.Data.StockAfter.Equal(decimal.RequireFromString("25.5")) {
+		t.Fatalf("expected stock_after=25.5, got %s", adjRes.Data.StockAfter)
 	}
 }

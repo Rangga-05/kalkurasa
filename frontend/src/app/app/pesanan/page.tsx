@@ -15,7 +15,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useInternalSession } from "@/app/app/layout";
+import { useInternalSession } from "@/components/internal/use-internal-session";
 import { OrderStatusBadge } from "@/components/internal/order-timeline";
 import {
   createManualOrder,

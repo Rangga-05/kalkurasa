@@ -24,22 +24,54 @@ type memDB struct {
 	dayMu    map[string]*sync.Mutex
 	settings map[string]string
 
-	resources   []memResource
-	products    map[string]memProduct
-	loads       map[string]map[string]decimal.Decimal // productID -> resourceCode -> load
-	recipeCosts map[string]decimal.Decimal            // productID -> ingredient cost per unit
-	ingredients map[string]decimal.Decimal            // ingredientID -> current stock
-	recipes     map[string]map[string]decimal.Decimal // productID -> ingredientID -> qty_per_unit
+	resources         []memResource
+	products          map[string]memProduct
+	loads             map[string]map[string]decimal.Decimal // productID -> resourceCode -> load
+	recipeCosts       map[string]decimal.Decimal            // productID -> ingredient cost per unit
+	ingredients       map[string]decimal.Decimal            // ingredientID -> current stock
+	ingredientDetails map[string]memIngredient              // ingredientID -> full metadata
+	recipes           map[string]map[string]decimal.Decimal // productID -> ingredientID -> qty_per_unit
 
 	orders         []memOrder
 	orderItems     []memOrderItem
 	evaluations    []memEval
 	payments       []memPayment
 	tasks          []memTask
+	purchases      []memPurchase
+	cashEntries    []memCashEntry
 	stockMovements []memStockMovement
 	rateLimits     map[string]int
 	auditLogs      int
 	auditEntries   []memAuditEntry
+}
+
+type memIngredient struct {
+	ID          string
+	Name        string
+	UseUnit     string
+	BuyUnit     string
+	BuyUnitSize decimal.Decimal
+	BuyPrice    decimal.Decimal
+	MinStock    decimal.Decimal
+	Rounding    string
+	IsActive    bool
+}
+
+type memPurchase struct {
+	ID           string
+	IngredientID string
+	QtyBuyUnits  decimal.Decimal
+	UnitPrice    decimal.Decimal
+	BoughtAt     time.Time
+	BoughtBy     string
+}
+
+type memCashEntry struct {
+	ID        string
+	EntryDate time.Time
+	Amount    decimal.Decimal
+	Note      string
+	CreatedBy string
 }
 
 type memAuditEntry struct {
@@ -153,14 +185,15 @@ type memEval struct {
 
 func newMemDB() *memDB {
 	return &memDB{
-		dayMu:       make(map[string]*sync.Mutex),
-		settings:    make(map[string]string),
-		products:    make(map[string]memProduct),
-		loads:       make(map[string]map[string]decimal.Decimal),
-		recipeCosts: make(map[string]decimal.Decimal),
-		ingredients: make(map[string]decimal.Decimal),
-		recipes:     make(map[string]map[string]decimal.Decimal),
-		rateLimits:  make(map[string]int),
+		dayMu:             make(map[string]*sync.Mutex),
+		settings:          make(map[string]string),
+		products:          make(map[string]memProduct),
+		loads:             make(map[string]map[string]decimal.Decimal),
+		recipeCosts:       make(map[string]decimal.Decimal),
+		ingredients:       make(map[string]decimal.Decimal),
+		ingredientDetails: make(map[string]memIngredient),
+		recipes:           make(map[string]map[string]decimal.Decimal),
+		rateLimits:        make(map[string]int),
 	}
 }
 
@@ -567,6 +600,27 @@ func (tx *memTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.Comm
 		tx.db.mu.Unlock()
 		return pgconn.NewCommandTag("UPDATE 1"), nil
 
+	case strings.HasPrefix(q, "update ingredients set stock = $1, buy_price = $2 where id = $3::uuid"):
+		newSt := args[0].(decimal.Decimal)
+		newBP := args[1].(decimal.Decimal)
+		iid := fmt.Sprint(args[2])
+		tx.db.mu.Lock()
+		tx.db.ingredients[iid] = newSt
+		if im, ok := tx.db.ingredientDetails[iid]; ok {
+			im.BuyPrice = newBP
+			tx.db.ingredientDetails[iid] = im
+		}
+		tx.db.mu.Unlock()
+		return pgconn.NewCommandTag("UPDATE 1"), nil
+
+	case strings.HasPrefix(q, "update ingredients set stock = $1 where id = $2::uuid"):
+		newSt := args[0].(decimal.Decimal)
+		iid := fmt.Sprint(args[1])
+		tx.db.mu.Lock()
+		tx.db.ingredients[iid] = newSt
+		tx.db.mu.Unlock()
+		return pgconn.NewCommandTag("UPDATE 1"), nil
+
 	case strings.HasPrefix(q, "insert into stock_movements"):
 		id := tx.db.nextUUID()
 		now := time.Now().UTC()
@@ -954,6 +1008,96 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 		tx.db.mu.Unlock()
 		return &memRow{vals: []any{cnt}}
 
+	case strings.Contains(q, "from ingredients where id = $1::uuid for update"):
+		iid := fmt.Sprint(args[0])
+		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
+		im, ok := tx.db.ingredientDetails[iid]
+		if !ok {
+			return &memRow{err: pgx.ErrNoRows}
+		}
+		st := tx.db.ingredients[iid]
+		return &memRow{vals: []any{
+			im.ID, im.Name, im.UseUnit, im.BuyUnit, im.BuyUnitSize, im.BuyPrice, st, im.MinStock, im.Rounding, im.IsActive,
+		}}
+
+	case strings.HasPrefix(q, "insert into purchases"):
+		id := tx.db.nextUUID()
+		now := time.Now().UTC()
+		if u := parseTimeArg(args[3]); u != nil {
+			now = *u
+		}
+		boughtBy := ""
+		if args[4] != nil {
+			boughtBy = fmt.Sprint(args[4])
+		}
+		tx.db.mu.Lock()
+		tx.db.purchases = append(tx.db.purchases, memPurchase{
+			ID:           id,
+			IngredientID: fmt.Sprint(args[0]),
+			QtyBuyUnits:  args[1].(decimal.Decimal),
+			UnitPrice:    args[2].(decimal.Decimal),
+			BoughtAt:     now,
+			BoughtBy:     boughtBy,
+		})
+		tx.db.mu.Unlock()
+		return &memRow{vals: []any{id}}
+
+	case strings.HasPrefix(q, "insert into stock_movements"):
+		id := tx.db.nextUUID()
+		now := time.Now().UTC()
+		reason := "production"
+		refType := "order"
+		refID := ""
+		if strings.Contains(q, "'purchase', 'purchase'") {
+			reason = "purchase"
+			refType = "purchase"
+			refID = fmt.Sprint(args[2])
+			if u := parseTimeArg(args[3]); u != nil {
+				now = *u
+			}
+		} else if strings.Contains(q, "'adjustment'") {
+			reason = fmt.Sprint(args[2])
+			refType = "adjustment"
+			if u := parseTimeArg(args[3]); u != nil {
+				now = *u
+			}
+		}
+		tx.db.mu.Lock()
+		tx.db.stockMovements = append(tx.db.stockMovements, memStockMovement{
+			ID:           id,
+			IngredientID: fmt.Sprint(args[0]),
+			Delta:        args[1].(decimal.Decimal),
+			Reason:       reason,
+			RefType:      refType,
+			RefID:        refID,
+			CreatedAt:    now,
+		})
+		tx.db.mu.Unlock()
+		return &memRow{vals: []any{id}}
+
+	case strings.HasPrefix(q, "insert into cash_entries"):
+		id := tx.db.nextUUID()
+		dt, _ := time.Parse("2006-01-02", fmt.Sprint(args[0])[:10])
+		note := ""
+		if args[2] != nil {
+			note = fmt.Sprint(args[2])
+		}
+		createdBy := ""
+		if args[3] != nil {
+			createdBy = fmt.Sprint(args[3])
+		}
+		tx.db.mu.Lock()
+		tx.db.cashEntries = append(tx.db.cashEntries, memCashEntry{
+			ID:        id,
+			EntryDate: dt,
+			Amount:    args[1].(decimal.Decimal),
+			Note:      note,
+			CreatedBy: createdBy,
+		})
+		tx.db.mu.Unlock()
+		return &memRow{vals: []any{id}}
+
 	default:
 		return &memRow{err: fmt.Errorf("memTx.QueryRow unsupported SQL: %s", q)}
 	}
@@ -1035,6 +1179,72 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		}
 		return &memRows{rows: rows}, nil
 
+	case strings.HasPrefix(q, "select id::text, name, category, price, packaging_cost, overhead_cost, is_active from products order by name asc, id asc"):
+		var rows [][]any
+		for _, p := range tx.db.products {
+			rows = append(rows, []any{p.ID, p.Name, p.Category, p.Price, p.PackagingCost, p.OverheadCost, p.IsActive})
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.HasPrefix(q, "select id::text, name, use_unit, buy_unit, buy_unit_size, buy_price, stock, min_stock, rounding, is_active from ingredients where is_active = true"):
+		var rows [][]any
+		for id, im := range tx.db.ingredientDetails {
+			if !im.IsActive {
+				continue
+			}
+			st := tx.db.ingredients[id]
+			rows = append(rows, []any{
+				im.ID, im.Name, im.UseUnit, im.BuyUnit, im.BuyUnitSize, im.BuyPrice, st, im.MinStock, im.Rounding, im.IsActive,
+			})
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "count(distinct o.id) as order_count"):
+		fromKey := fmt.Sprint(args[0])[:10]
+		toKey := fmt.Sprint(args[1])[:10]
+		type agg struct {
+			qty      decimal.Decimal
+			minEvent time.Time
+			orders   map[string]bool
+		}
+		byIng := make(map[string]*agg)
+		for _, o := range tx.db.orders {
+			if o.Status != "confirmed" && o.Status != "in_production" {
+				continue
+			}
+			ek := o.EventDate.Format("2006-01-02")
+			if ek < fromKey || ek > toKey {
+				continue
+			}
+			for _, it := range tx.db.orderItems {
+				if it.OrderID != o.ID {
+					continue
+				}
+				qDec := decimal.NewFromInt(int64(it.Qty))
+				for ingID, qtyPerUnit := range tx.db.recipes[it.ProductID] {
+					a, ok := byIng[ingID]
+					if !ok {
+						a = &agg{
+							qty:      decimal.Zero,
+							minEvent: o.EventDate,
+							orders:   make(map[string]bool),
+						}
+						byIng[ingID] = a
+					}
+					a.qty = a.qty.Add(qDec.Mul(qtyPerUnit))
+					if o.EventDate.Before(a.minEvent) {
+						a.minEvent = o.EventDate
+					}
+					a.orders[o.ID] = true
+				}
+			}
+		}
+		var rows [][]any
+		for ingID, a := range byIng {
+			rows = append(rows, []any{ingID, a.qty, a.minEvent, len(a.orders)})
+		}
+		return &memRows{rows: rows}, nil
+
 	case strings.Contains(q, "from products where id = any"):
 		ids := args[0].([]string)
 		var rows [][]any
@@ -1112,8 +1322,29 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		}
 		return &memRows{rows: rows}, nil
 
+	case strings.Contains(q, "select id::text, entry_date, amount, coalesce(note, ''), created_by::text from cash_entries"):
+		fromKey := fmt.Sprint(args[0])[:10]
+		toKey := fmt.Sprint(args[1])[:10]
+		var rows [][]any
+		for _, ce := range tx.db.cashEntries {
+			dk := ce.EntryDate.Format("2006-01-02")
+			if dk >= fromKey && dk <= toKey {
+				cb := strPtrOrNil(ce.CreatedBy)
+				rows = append(rows, []any{ce.ID, ce.EntryDate, ce.Amount, ce.Note, cb})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
 	case strings.Contains(q, "from cash_entries"):
-		return &memRows{}, nil
+		fromKey := fmt.Sprint(args[0])[:10]
+		var rows [][]any
+		for _, ce := range tx.db.cashEntries {
+			dk := ce.EntryDate.Format("2006-01-02")
+			if dk >= fromKey {
+				rows = append(rows, []any{ce.EntryDate, ce.Amount})
+			}
+		}
+		return &memRows{rows: rows}, nil
 
 	case strings.HasPrefix(q, "select oi.id::text, oi.product_id::text, p.name, oi.qty, oi.unit_price, oi.unit_cost from order_items"):
 		oid := fmt.Sprint(args[0])

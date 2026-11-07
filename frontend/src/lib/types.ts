@@ -393,6 +393,7 @@ export interface CancelOrderResult {
   shopping_cost: DecimalValue;
   dp_received: DecimalValue;
   cancellation_exposure: DecimalValue;
+  cash_lowest_after?: DecimalValue;
   dp_disposition?: string;
   reason?: string;
   note?: string;
@@ -457,4 +458,275 @@ export interface UpdateTaskRequest {
   status?: TaskStatus;
   actual_minutes?: number;
 }
+
+// ============================================================================
+// Tipe Data Bahan, Belanja, Kas, Biaya Produk, dan Master Data (Tahap 5)
+// ============================================================================
+
+export type RoundingRule = "loose" | "pack";
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  use_unit: string;
+  buy_unit: string;
+  buy_unit_size: DecimalValue;
+  buy_price?: DecimalValue;
+  stock: DecimalValue;
+  min_stock: DecimalValue;
+  below_min_stock: boolean;
+  rounding_rule: RoundingRule;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CreateIngredientRequest {
+  name: string;
+  use_unit: string;
+  buy_unit: string;
+  buy_unit_size: DecimalValue;
+  buy_price: DecimalValue;
+  stock?: DecimalValue;
+  min_stock?: DecimalValue;
+  rounding_rule: RoundingRule;
+  is_active?: boolean;
+}
+
+export interface UpdateIngredientRequest {
+  name?: string;
+  use_unit?: string;
+  buy_unit?: string;
+  buy_unit_size?: DecimalValue;
+  buy_price?: DecimalValue;
+  min_stock?: DecimalValue;
+  rounding_rule?: RoundingRule;
+  is_active?: boolean;
+}
+
+export interface ShoppingListItem {
+  ingredient_id: string;
+  ingredient_name: string;
+  use_unit: string;
+  buy_unit: string;
+  buy_unit_size: DecimalValue;
+  buy_price?: DecimalValue;
+  rounding_rule: RoundingRule;
+  required_qty: DecimalValue;
+  stock: DecimalValue;
+  min_stock: DecimalValue;
+  below_min_stock: boolean;
+  buffer_pct: DecimalValue;
+  need_qty: DecimalValue;
+  buy_use_units: DecimalValue;
+  qty_buy_units: DecimalValue;
+  estimated_cost?: DecimalValue;
+  purchase_date: string; // YYYY-MM-DD
+  earliest_event: string; // YYYY-MM-DD
+  order_codes: string[];
+}
+
+export interface LowStockAlertItem {
+  ingredient_id: string;
+  ingredient_name: string;
+  use_unit: string;
+  buy_unit: string;
+  buy_unit_size: DecimalValue;
+  buy_price?: DecimalValue;
+  stock: DecimalValue;
+  min_stock: DecimalValue;
+  deficit: DecimalValue;
+}
+
+export interface ShoppingListResult {
+  from: string;
+  to: string;
+  buffer_pct: DecimalValue;
+  lead_days: number;
+  order_count: number;
+  total_estimated?: DecimalValue;
+  items: ShoppingListItem[];
+  low_stock_items: LowStockAlertItem[];
+}
+
+export interface RecordPurchaseRequest {
+  ingredient_id: string;
+  qty_buy_units: DecimalValue;
+  total_cost: DecimalValue;
+  purchased_at?: string; // YYYY-MM-DD
+  supplier?: string;
+}
+
+export interface PurchaseResult {
+  purchase_id: string;
+  ingredient_id: string;
+  ingredient_name: string;
+  qty_buy_units: DecimalValue;
+  added_use_units: DecimalValue;
+  new_stock: DecimalValue;
+  total_cost: DecimalValue;
+  new_buy_price: DecimalValue;
+  purchased_at: string;
+  supplier?: string;
+  cash_entry_id: string;
+}
+
+export interface StockAdjustRequest {
+  ingredient_id: string;
+  qty: DecimalValue; // perubahan (+/-) dalam use_unit
+  reason: string;
+}
+
+export interface StockAdjustResult {
+  movement_id: string;
+  ingredient_id: string;
+  ingredient_name: string;
+  use_unit: string;
+  qty_change: DecimalValue;
+  previous_stock: DecimalValue;
+  new_stock: DecimalValue;
+  min_stock: DecimalValue;
+  below_min_stock: boolean;
+  reason: string;
+}
+
+export interface CashProjectionDayDTO {
+  date: string; // YYYY-MM-DD
+  inflow: DecimalValue;
+  outflow: DecimalValue;
+  fixed_cost: DecimalValue;
+  closing: DecimalValue;
+  below_buffer: boolean;
+}
+
+export interface CashEntryDTO {
+  id: string;
+  entry_date: string; // YYYY-MM-DD
+  amount: DecimalValue;
+  category: string;
+  note?: string;
+  order_id?: string | null;
+  created_at: string;
+}
+
+export interface CashProjectionResult {
+  from: string;
+  to: string;
+  horizon_days: number;
+  opening_cash?: DecimalValue;
+  fixed_cost_daily?: DecimalValue;
+  cash_buffer: DecimalValue;
+  passed: boolean;
+  lowest: DecimalValue;
+  lowest_date: string;
+  days_below_buffer: string[];
+  days?: CashProjectionDayDTO[];
+  entries?: CashEntryDTO[];
+}
+
+export interface CreateCashEntryRequest {
+  entry_date: string; // YYYY-MM-DD
+  amount: DecimalValue; // positif untuk masuk, negatif untuk keluar
+  category: string;
+  note?: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  category: string;
+  price: DecimalValue;
+  packaging_cost?: DecimalValue;
+  overhead_per_unit?: DecimalValue;
+  waste_pct: DecimalValue;
+  lead_time_days: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CreateProductRequest {
+  name: string;
+  category?: string;
+  price: DecimalValue;
+  packaging_cost?: DecimalValue;
+  overhead_per_unit?: DecimalValue;
+  waste_pct?: DecimalValue;
+  lead_time_days?: number;
+  is_active?: boolean;
+}
+
+export interface UpdateProductRequest {
+  name?: string;
+  category?: string;
+  price?: DecimalValue;
+  packaging_cost?: DecimalValue;
+  overhead_per_unit?: DecimalValue;
+  waste_pct?: DecimalValue;
+  lead_time_days?: number;
+  is_active?: boolean;
+}
+
+export interface RecipeItem {
+  product_id: string;
+  ingredient_id: string;
+  ingredient_name?: string;
+  use_unit?: string;
+  qty_per_unit: DecimalValue;
+}
+
+export interface UpsertProductRecipesRequest {
+  replace_all: boolean;
+  items: {
+    ingredient_id: string;
+    qty_per_unit: DecimalValue;
+  }[];
+}
+
+export interface ProductLoad {
+  product_id: string;
+  resource_id: string;
+  resource_code?: string;
+  resource_name?: string;
+  resource_unit?: string;
+  load_per_unit: DecimalValue;
+}
+
+export interface UpsertProductLoadsRequest {
+  replace_all: boolean;
+  loads: {
+    resource_id: string;
+    load_per_unit: DecimalValue;
+  }[];
+}
+
+export interface Resource {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  daily_capacity: DecimalValue;
+  created_at: string;
+}
+
+export interface ProductCostingDTO {
+  product_id: string;
+  name: string;
+  category: string;
+  is_active: boolean;
+  price: DecimalValue;
+  ingredient_cost: DecimalValue;
+  waste_pct: DecimalValue;
+  packaging_cost: DecimalValue;
+  labor_minutes: DecimalValue;
+  labor_cost: DecimalValue;
+  overhead_per_unit: DecimalValue;
+  unit_cost: DecimalValue;
+  margin: DecimalValue;
+  target_margin: DecimalValue;
+  min_margin: DecimalValue;
+  min_price: DecimalValue;
+  max_discount: DecimalValue;
+}
+
+export type SettingsMap = Record<string, string>;
+
 

@@ -24,24 +24,12 @@ import {
 } from "lucide-react";
 import { getMe, logout, getErrorMessage } from "@/lib/api";
 import { getDashboardPathForRole, ROLE_LABELS } from "@/lib/format";
-import type { User, UserRole } from "@/lib/types";
+import type { UserRole } from "@/lib/types";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-
-export function useInternalSession(): {
-  user: User | undefined;
-  isLoading: boolean;
-} {
-  const meQuery = useQuery({
-    queryKey: ["auth-me"],
-    queryFn: ({ signal }) => getMe(signal),
-    retry: false,
-  });
-  return { user: meQuery.data, isLoading: meQuery.isLoading };
-}
 
 interface NavItem {
   href: string;
@@ -103,7 +91,7 @@ const INTERNAL_NAV_ITEMS: NavItem[] = [
     href: "/app/kas",
     label: "Proyeksi Kas",
     icon: Wallet,
-    roles: ["owner"],
+    roles: ["owner", "manager"],
   },
   {
     href: "/app/produk",
@@ -115,7 +103,7 @@ const INTERNAL_NAV_ITEMS: NavItem[] = [
     href: "/app/bahan",
     label: "Master Bahan Baku",
     icon: Boxes,
-    roles: ["owner", "manager", "admin"],
+    roles: ["owner", "manager", "admin", "staff"],
   },
   {
     href: "/app/pengaturan",

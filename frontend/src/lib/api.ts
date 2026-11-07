@@ -7,26 +7,47 @@ import type {
   CancelOrderResult,
   CapacityCalendarDay,
   CapacityDayDetail,
+  CashEntryDTO,
+  CashProjectionResult,
   CounterResponseRequest,
+  CreateCashEntryRequest,
+  CreateIngredientRequest,
   CreateManualOrderRequest,
+  CreateProductRequest,
   CreatePublicOrderRequest,
   DecideOrderRequest,
   DecisionQueueItem,
+  Ingredient,
   LoginRequest,
   LoginResponse,
   LogoutResponse,
   OrderDetail,
   OrderFilterParams,
   PaymentResult,
+  Product,
+  ProductCostingDTO,
+  ProductLoad,
   PublicOrderSummary,
   PublicProduct,
   PublicTrackResponse,
+  PurchaseResult,
+  RecipeItem,
   RecordPaymentRequest,
+  RecordPurchaseRequest,
   RegisterRequest,
+  Resource,
+  SettingsMap,
+  ShoppingListResult,
+  StockAdjustRequest,
+  StockAdjustResult,
   TaskFilterParams,
   TaskItem,
   TransitionOrderRequest,
+  UpdateIngredientRequest,
+  UpdateProductRequest,
   UpdateTaskRequest,
+  UpsertProductLoadsRequest,
+  UpsertProductRecipesRequest,
   User,
 } from "./types";
 
@@ -482,4 +503,312 @@ export async function updateTask(
     body: JSON.stringify(payload),
   });
 }
+
+// ============================================================================
+// Endpoint Bahan, Belanja, Kas, Biaya Produk & Master Data (Tahap 5)
+// ============================================================================
+
+/**
+ * GET /api/v1/shopping-list?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Mengambil daftar belanja bahan dari pesanan aktif (confirmed & in_production)
+ * menggunakan engine.ShoppingNeed, beserta daftar bahan yang stoknya di bawah minimum.
+ */
+export async function getShoppingList(
+  params: { from?: string; to?: string } = {},
+  signal?: AbortSignal
+): Promise<ShoppingListResult> {
+  const qs = new URLSearchParams();
+  if (params.from) qs.set("from", params.from);
+  if (params.to) qs.set("to", params.to);
+  const query = qs.toString() ? `?${qs.toString()}` : "";
+  return requestJson<ShoppingListResult>(`/shopping-list${query}`, {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/purchases
+ * Mencatat pembelian bahan: menambah stok, memperbarui buy_price aktual,
+ * mencatat stock_movements dan cash_entries keluar.
+ */
+export async function recordPurchase(
+  payload: RecordPurchaseRequest
+): Promise<PurchaseResult> {
+  return requestJson<PurchaseResult>("/purchases", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * POST /api/v1/stock/adjust
+ * Mencatat koreksi stok bahan dengan alasan wajib.
+ */
+export async function adjustStock(
+  payload: StockAdjustRequest
+): Promise<StockAdjustResult> {
+  return requestJson<StockAdjustResult>("/stock/adjust", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * GET /api/v1/cash/projection?days=14
+ * Mengambil proyeksi arus kas harian dengan engine.ProjectCash.
+ * Owner melihat rincian penuh; Manager hanya melihat passed, lowest, lowest_date, days_below_buffer.
+ */
+export async function getCashProjection(
+  days = 14,
+  signal?: AbortSignal
+): Promise<CashProjectionResult> {
+  return requestJson<CashProjectionResult>(
+    `/cash/projection?days=${encodeURIComponent(String(days))}`,
+    {
+      method: "GET",
+      signal,
+    }
+  );
+}
+
+/**
+ * POST /api/v1/cash/entries
+ * Mencatat entri kas manual (khusus Owner).
+ */
+export async function createCashEntry(
+  payload: CreateCashEntryRequest
+): Promise<CashEntryDTO> {
+  return requestJson<CashEntryDTO>("/cash/entries", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * GET /api/v1/costing/products
+ * Mengambil HPP (UnitCost), margin, harga minimum, dan diskon maksimum seluruh produk.
+ */
+export async function getProductsCosting(
+  signal?: AbortSignal
+): Promise<ProductCostingDTO[]> {
+  return requestJson<ProductCostingDTO[]>("/costing/products", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/ingredients
+ * Mengambil daftar bahan (dilengkapi below_min_stock; buy_price disembunyikan untuk staff).
+ */
+export async function getIngredients(
+  signal?: AbortSignal
+): Promise<Ingredient[]> {
+  return requestJson<Ingredient[]>("/ingredients", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/ingredients
+ * Membuat bahan baru.
+ */
+export async function createIngredient(
+  payload: CreateIngredientRequest
+): Promise<Ingredient> {
+  return requestJson<Ingredient>("/ingredients", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * PUT /api/v1/ingredients/:id
+ * Memperbarui data master bahan.
+ */
+export async function updateIngredient(
+  id: string,
+  payload: UpdateIngredientRequest
+): Promise<Ingredient> {
+  return requestJson<Ingredient>(`/ingredients/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * DELETE /api/v1/ingredients/:id
+ * Menghapus atau menonaktifkan bahan.
+ */
+export async function deleteIngredient(
+  id: string
+): Promise<{ id: string; deleted?: boolean; deactivated?: boolean }> {
+  return requestJson<{ id: string; deleted?: boolean; deactivated?: boolean }>(
+    `/ingredients/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+/**
+ * GET /api/v1/products
+ * Mengambil daftar semua produk internal.
+ */
+export async function getProducts(signal?: AbortSignal): Promise<Product[]> {
+  return requestJson<Product[]>("/products", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/products
+ * Membuat produk baru.
+ */
+export async function createProduct(
+  payload: CreateProductRequest
+): Promise<Product> {
+  return requestJson<Product>("/products", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * PUT /api/v1/products/:id
+ * Memperbarui data produk.
+ */
+export async function updateProduct(
+  id: string,
+  payload: UpdateProductRequest
+): Promise<Product> {
+  return requestJson<Product>(`/products/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * DELETE /api/v1/products/:id
+ * Menghapus atau menonaktifkan produk.
+ */
+export async function deleteProduct(
+  id: string
+): Promise<{ id: string; deleted?: boolean; deactivated?: boolean }> {
+  return requestJson<{ id: string; deleted?: boolean; deactivated?: boolean }>(
+    `/products/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+/**
+ * GET /api/v1/products/:id/recipes
+ * Mengambil resep bahan untuk satu produk.
+ */
+export async function getProductRecipes(
+  productId: string,
+  signal?: AbortSignal
+): Promise<RecipeItem[]> {
+  return requestJson<RecipeItem[]>(
+    `/products/${encodeURIComponent(productId)}/recipes`,
+    {
+      method: "GET",
+      signal,
+    }
+  );
+}
+
+/**
+ * PUT /api/v1/products/:id/recipes
+ * Menyimpan/mengganti daftar resep bahan untuk satu produk.
+ */
+export async function upsertProductRecipes(
+  productId: string,
+  payload: UpsertProductRecipesRequest
+): Promise<RecipeItem[]> {
+  return requestJson<RecipeItem[]>(
+    `/products/${encodeURIComponent(productId)}/recipes`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * GET /api/v1/products/:id/loads
+ * Mengambil beban produksi per sumber daya untuk satu produk.
+ */
+export async function getProductLoads(
+  productId: string,
+  signal?: AbortSignal
+): Promise<ProductLoad[]> {
+  return requestJson<ProductLoad[]>(
+    `/products/${encodeURIComponent(productId)}/loads`,
+    {
+      method: "GET",
+      signal,
+    }
+  );
+}
+
+/**
+ * PUT /api/v1/products/:id/loads
+ * Menyimpan/mengganti beban produksi per sumber daya untuk satu produk.
+ */
+export async function upsertProductLoads(
+  productId: string,
+  payload: UpsertProductLoadsRequest
+): Promise<ProductLoad[]> {
+  return requestJson<ProductLoad[]>(
+    `/products/${encodeURIComponent(productId)}/loads`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+/**
+ * GET /api/v1/resources
+ * Mengambil daftar sumber daya kapasitas (oven, kompor, tenaga kerja, pengemasan).
+ */
+export async function getResources(signal?: AbortSignal): Promise<Resource[]> {
+  return requestJson<Resource[]>("/resources", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/settings
+ * Mengambil parameter bisnis (owner menerima semua field; manager menerima field non-kas).
+ */
+export async function getSettings(
+  signal?: AbortSignal
+): Promise<SettingsMap> {
+  return requestJson<SettingsMap>("/settings", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * PUT /api/v1/settings
+ * Memperbarui parameter bisnis (khusus Owner).
+ */
+export async function updateSettings(
+  payload: Record<string, string | number>
+): Promise<SettingsMap> {
+  return requestJson<SettingsMap>("/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 
