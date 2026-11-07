@@ -327,10 +327,29 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** `GET /api/v1/costing/products` menghitung HPP dan indikator harga setiap produk menggunakan fungsi-fungsi murni `internal/engine`: `engine.UnitCost(ingredientCost, wastePct, packagingCost, laborMinutes, laborRate, overhead)` (di mana `laborMinutes` diambil dari `product_loads` untuk resource `labor`), `engine.Margin(price, unitCost)`, `engine.MinPrice(unitCost, minMargin)`, dan `engine.MaxDiscount(price, unitCost, minMargin)`.
 **Alasan:** Memastikan halaman `/app/produk` menampilkan HPP (mis. Snack Box = `Rp 19.000`), margin, harga minimum, dan diskon maksimum secara konsisten dari satu sumber kebenaran (`internal/engine`).
 
+---
 
+## Tahap 6 — Dashboard per Peran, KPI, dan Audit Log
 
+### A6-01: Rumus 7 KPI Operasional & Keuangan pada `GET /api/v1/kpi`
+**Keputusan:** Endpoint `GET /api/v1/kpi` (diizinkan untuk `owner`, `manager`, dan `admin`; ditolak `403` untuk `staff` dan `customer`) menghitung ketujuh indikator pada Bagian 10 spesifikasi menggunakan fungsi-fungsi murni `internal/engine`:
+1. **Ketepatan waktu (`on_time_rate`)**: Rasio pesanan berstatus `completed` yang diselesaikan paling lambat pada `event_date` (`DateKey(updated_at) <= event_date`) terhadap total pesanan `completed`.
+2. **Utilisasi rata-rata (`avg_utilization`)**: Rata-rata utilisasi puncak harian (`engine.DayUtilization(engine.DayLoads(...), caps)`) pada hari-hari yang memiliki beban produksi aktif (`accepted`, `confirmed`, `in_production`, `ready`, `delivering`, `completed`), disertai nilai puncak (`peak_utilization`) dan tanggalnya (`peak_date`).
+3. **Selisih biaya bahan (`ingredient_cost_variance`)**: Dihitung melalui `engine.Deviation(estimated_cost, actual_cost)` (`(actual_cost - estimated_cost) / estimated_cost`). Untuk pesanan yang memiliki item dengan snapshot `unit_cost` pada `order_items` dibanding biaya produk terkini (`GetProductsCosting` setelah pembaruan harga beli bahan dari `POST /api/v1/purchases`), estimasi diambil dari biaya historis saat pesanan dibuat dan biaya aktual diambil dari HPP bahan terkini (atau perbandingan biaya tenaga kerja aktual `actual_minutes * labor_rate` apabila deviasi harga bahan belum berubah). Selain itu, `GetKPI` mengevaluasi `engine.ShouldRecalibrate(dev, 0.15, sampleCount, 5)` untuk memicu `recalibration_warning`.
+4. **Tingkat pembatalan (`cancellation_rate`)**: `(cancelled_orders + expired_orders) / accepted_total_orders`, di mana `accepted_total_orders` mencakup semua pesanan yang pernah masuk alur penerimaan (`accepted`, `confirmed`, `in_production`, `ready`, `delivering`, `completed`, `cancelled`, `expired`).
+5. **Pesanan ditawar balik atau ditolak (`countered_or_rejected`)**: Menghitung `total_countered`, hasil akhirnya (`counter_accepted`, `counter_rejected`, `counter_pending`), `direct_rejected`, serta `total_rejected`.
+6. **Margin realisasi (`realized_margin`)**: Menggunakan `engine.Margin(revenue, realized_cost)` secara agregat maupun per pesanan (`orders`), di mana `realized_cost` menggabungkan biaya bahan/kemasan/overhead terkini (`GetProductsCosting`) dengan waktu kerja aktual (`tasks.actual_minutes * labor_rate_per_min`) bila tugas produksi memiliki `actual_minutes > 0` (atau beban tenaga standar bila belum diisi).
+7. **Hari kas rawan (`vulnerable_cash_days`)**: Diambil dari `GetCashProjection` (14 hari ke depan) berupa `days_below_buffer`, `lowest_balance`, `lowest_date`, `cash_buffer`, dan `passed`.
+**Alasan:** Seluruh 7 metrik spesifikasi dihitung deterministik di server lewat `internal/engine` dan kompatibel baik dengan PostgreSQL maupun `memDB` pada unit test.
 
+### A6-02: Pemisahan Payload Dashboard per Peran dan Perlindungan RBAC `staff`
+**Keputusan:**
+- `GET /api/v1/dashboard/owner` (`owner` saja): Mengembalikan ringkasan antrian keputusan (`decision_queue_count`, `decision_queue` 5 teratas), proyeksi kas 14 hari lengkap (`cash_projection`), 7 KPI (`kpi`), 14 hari kalender kapasitas (`capacity_days`), peringatan stok rendah (`low_stock_alerts`), peringatan kalibrasi ulang (`recalibration_warning`), dan 8 catatan audit terbaru (`recent_audits`).
+- `GET /api/v1/dashboard/manager` (`manager` dan `owner`): Mengembalikan antrian keputusan (`decision_queue`), kalender kapasitas 14 hari (`capacity_days`), daftar belanja (`shopping_list`), daftar tugas lintas peran (`tasks`), pesanan hari ini & mendatang (`orders_today`), ringkasan kas tanpa saldo awal/rincian harian (`cash_summary` via `GetCashProjection` untuk peran `manager`), serta KPI operasional (`kpi`).
+- `GET /api/v1/dashboard/staff` (`staff`, `manager`, dan `owner`): Memanggil `ListTasks` dan `GetShoppingList` dengan konteks `auth.RoleStaff`, lalu membentuk `StaffDeliveryItem` yang **hanya** memuat `order_id`, `order_code`, `customer_name`, `customer_contact`, `event_date`, `delivery_type`, `address`, `order_status`, `notes`, dan `items` (`product_id`, `product_name`, `qty`). Seluruh field harga, HPP, margin, DP, maupun kas tidak pernah ada di struktur JSON `StaffDashboardResponse`.
+**Alasan:** Memenuhi Bagian 6 & 10 brief bahwa dashboard `staff` bebas dari informasi harga, margin, dan kas, sekaligus menyediakan seluruh data agregat yang dibutuhkan halaman dashboard tiap peran dalam satu panggilan API.
 
-
-
+### A6-03: Filter dan Paginasi `GET /api/v1/audit-logs`
+**Keputusan:** Endpoint `GET /api/v1/audit-logs` hanya dapat diakses oleh `owner` dan `admin` (`403 Forbidden` untuk `manager`, `staff`, dan `customer`), mendukung parameter kueri `action`, `entity`, `actor_id`, `entity_id`, `from` (`YYYY-MM-DD` WIB), `to` (`YYYY-MM-DD` WIB), serta paginasi `page` (default `1`) dan `limit` (default `25`, maks `100`), dengan struktur respons `{ items, page, limit, total, total_pages }`.
+**Alasan:** Memudahkan audit jejak perubahan keputusan, override, pembayaran, pembatalan, koreksi stok, dan pengaturan oleh `owner` maupun `admin`.
 

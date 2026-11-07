@@ -1856,3 +1856,274 @@ func TestTahap5_ShoppingListTC05PurchasesAndStockAdjust(t *testing.T) {
 		t.Fatalf("expected stock_after=25.5, got %s", adjRes.Data.StockAfter)
 	}
 }
+
+// TestTahap6_KPICalculationsAndDashboardsAndAuditLogsRBAC menguji seluruh perhitungan KPI Bagian 10,
+// ketiga endpoint dashboard per peran (/dashboard/owner, /dashboard/manager, /dashboard/staff),
+// endpoint /audit-logs dengan filter & paginasi, serta penegakan RBAC ketat (staff tidak menerima
+// harga, margin, atau kas dari endpoint dashboard manapun).
+func TestTahap6_KPICalculationsAndDashboardsAndAuditLogsRBAC(t *testing.T) {
+	env := setupIsolatedTestEnv(t)
+
+	ev12, _ := time.Parse("2006-01-02", "2026-11-12")
+	ev13, _ := time.Parse("2006-01-02", "2026-11-13")
+	ev14, _ := time.Parse("2006-01-02", "2026-11-14")
+	onTimeComplete := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC) // selesai tepat pada 2026-11-12 (<= event_date 2026-11-12)
+	lateComplete := time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)   // selesai 2026-11-15 (> event_date 2026-11-13)
+	counterJSON := []byte(`{"date":"2026-11-13","min_price_per_item":{"bbbb0000-0000-4000-8000-000000000001":"25000"},"dp":"525000"}`)
+
+	env.db.mu.Lock()
+	// Setel stok tepung = 3 kg (< min_stock 5 kg) untuk memicu low_stock_alerts
+	env.db.ingredients[env.flourID] = decimal.NewFromInt(3)
+	// Harga bahan aktual naik +10%: dari 10.000 (snapshot saat pesanan dibuat -> unit_cost 18.500)
+	// menjadi 11.000 (biaya bahan aktual + waste 5% = 11.550 -> actual unit_cost = 19.550)
+	env.db.recipeCosts[env.snackBoxID] = decimal.NewFromInt(11000)
+
+	// Fixture 7 pesanan untuk menguji seluruh rumus KPI:
+	// 1. Completed tepat waktu (30 snack box @ 25.000, snapshot unit_cost 18.500, prod 2026-11-12)
+	// 2. Completed terlambat & berasal dari counter_offer yang diterima (70 snack box @ 25.000, snapshot unit_cost 18.500, prod 2026-11-13)
+	// 3. Cancelled (pernah diterima)
+	// 4. Expired (pernah diterima)
+	// 5. Countered (masih menunggu respons pelanggan)
+	// 6. Rejected setelah counter_offer
+	// 7. Rejected langsung tanpa counter_offer
+	env.db.orders = []memOrder{
+		{
+			ID: "e6000000-0000-4000-8000-000000000001", Code: "KPI0000001", Source: "public",
+			CustomerName: "Pelanggan Tepat Waktu", CustomerContact: "0811000001", DeliveryType: "delivery", Address: "Jl. Melati 1",
+			EventDate: ev12, ProductionDate: ev12, Status: orders.StatusCompleted,
+			Total: decimal.NewFromInt(750000), DPRequired: decimal.NewFromInt(225000), Paid: decimal.NewFromInt(750000),
+			Recommendation: "accept", CreatedAt: onTimeComplete.Add(-48 * time.Hour), UpdatedAt: onTimeComplete,
+		},
+		{
+			ID: "e6000000-0000-4000-8000-000000000002", Code: "KPI0000002", Source: "public",
+			CustomerName: "Pelanggan Telat Counter", CustomerContact: "0811000002", DeliveryType: "pickup",
+			EventDate: ev13, ProductionDate: ev13, Status: orders.StatusCompleted,
+			Total: decimal.NewFromInt(1750000), DPRequired: decimal.NewFromInt(525000), Paid: decimal.NewFromInt(1750000),
+			Recommendation: "accept_with_conditions", CounterOfferJSON: counterJSON,
+			CreatedAt: onTimeComplete.Add(-48 * time.Hour), UpdatedAt: lateComplete,
+		},
+		{
+			ID: "e6000000-0000-4000-8000-000000000003", Code: "KPI0000003", Source: "public",
+			CustomerName: "Pelanggan Batal", CustomerContact: "0811000003", DeliveryType: "pickup",
+			EventDate: ev14, ProductionDate: ev14, Status: orders.StatusCancelled,
+			Total: decimal.NewFromInt(500000), DPRequired: decimal.NewFromInt(150000), Paid: decimal.NewFromInt(150000),
+			Recommendation: "accept", CreatedAt: onTimeComplete, UpdatedAt: onTimeComplete,
+		},
+		{
+			ID: "e6000000-0000-4000-8000-000000000004", Code: "KPI0000004", Source: "public",
+			CustomerName: "Pelanggan Expired", CustomerContact: "0811000004", DeliveryType: "pickup",
+			EventDate: ev14, ProductionDate: ev14, Status: orders.StatusExpired,
+			Total: decimal.NewFromInt(500000), DPRequired: decimal.NewFromInt(150000), Paid: decimal.Zero,
+			Recommendation: "accept", CreatedAt: onTimeComplete, UpdatedAt: onTimeComplete,
+		},
+		{
+			ID: "e6000000-0000-4000-8000-000000000005", Code: "KPI0000005", Source: "public",
+			CustomerName: "Pelanggan Masih Counter", CustomerContact: "0811000005", DeliveryType: "pickup",
+			EventDate: ev14, ProductionDate: ev14, Status: orders.StatusCountered,
+			Total: decimal.NewFromInt(500000), DPRequired: decimal.NewFromInt(150000), Paid: decimal.Zero,
+			Recommendation: "accept_with_conditions", CounterOfferJSON: counterJSON,
+			CreatedAt: onTimeComplete, UpdatedAt: onTimeComplete,
+		},
+		{
+			ID: "e6000000-0000-4000-8000-000000000006", Code: "KPI0000006", Source: "public",
+			CustomerName: "Pelanggan Tolak Counter", CustomerContact: "0811000006", DeliveryType: "pickup",
+			EventDate: ev14, ProductionDate: ev14, Status: orders.StatusRejected,
+			Total: decimal.NewFromInt(500000), DPRequired: decimal.NewFromInt(150000), Paid: decimal.Zero,
+			Recommendation: "accept_with_conditions", CounterOfferJSON: counterJSON,
+			CreatedAt: onTimeComplete, UpdatedAt: onTimeComplete,
+		},
+		{
+			ID: "e6000000-0000-4000-8000-000000000007", Code: "KPI0000007", Source: "public",
+			CustomerName: "Pelanggan Tolak Langsung", CustomerContact: "0811000007", DeliveryType: "pickup",
+			EventDate: ev14, ProductionDate: ev14, Status: orders.StatusRejected,
+			Total: decimal.NewFromInt(500000), DPRequired: decimal.NewFromInt(150000), Paid: decimal.Zero,
+			Recommendation: "reject",
+			CreatedAt:      onTimeComplete, UpdatedAt: onTimeComplete,
+		},
+	}
+
+	env.db.orderItems = []memOrderItem{
+		{ID: "oi-kpi-1", OrderID: "e6000000-0000-4000-8000-000000000001", ProductID: env.snackBoxID, Qty: 30, UnitPrice: decimal.NewFromInt(25000), UnitCost: decimal.NewFromInt(18500)},
+		{ID: "oi-kpi-2", OrderID: "e6000000-0000-4000-8000-000000000002", ProductID: env.snackBoxID, Qty: 70, UnitPrice: decimal.NewFromInt(25000), UnitCost: decimal.NewFromInt(18500)},
+	}
+
+	// Tambahkan tugas operasional untuk menguji /dashboard/staff (hari ini = 2026-11-10)
+	env.db.tasks = []memTask{
+		{
+			ID: "dddd0000-0000-4000-8000-000000000011", OrderID: "e6000000-0000-4000-8000-000000000001",
+			Type: "produce", Title: "Produksi KPI0000001", DueDate: "2026-11-10", Status: "doing", CreatedAt: onTimeComplete,
+		},
+		{
+			ID: "dddd0000-0000-4000-8000-000000000012", OrderID: "e6000000-0000-4000-8000-000000000001",
+			Type: "deliver", Title: "Antar KPI0000001", DueDate: "2026-11-12", Status: "todo", CreatedAt: onTimeComplete,
+		},
+	}
+
+	// Tambahkan catatan audit untuk menguji /audit-logs
+	env.db.auditEntries = []memAuditEntry{
+		{
+			ID: "aaaa1111-0000-4000-8000-000000000001", ActorID: "11111111-1111-1111-1111-111111111111",
+			Action: "override", Entity: "orders", EntityID: "e6000000-0000-4000-8000-000000000001",
+			Detail: `{"override_reason":"Pelanggan prioritas"}`, CreatedAt: onTimeComplete,
+		},
+		{
+			ID: "aaaa1111-0000-4000-8000-000000000002", ActorID: "11111111-1111-1111-1111-111111111111",
+			Action: "setting", Entity: "settings", EntityID: "",
+			Detail: `{"key":"margin_min","value":"0.20"}`, CreatedAt: onTimeComplete.Add(time.Minute),
+		},
+	}
+	env.db.mu.Unlock()
+
+	// 1. Uji GET /api/v1/kpi oleh Owner
+	wKPI := performJSON(env.router, http.MethodGet, "/api/v1/kpi", nil,
+		map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wKPI.Code != http.StatusOK {
+		t.Fatalf("GET /kpi by owner: expected 200, got %d (%s)", wKPI.Code, wKPI.Body.String())
+	}
+	var kpiResp struct {
+		Data orders.KPIResult `json:"data"`
+	}
+	if err := json.Unmarshal(wKPI.Body.Bytes(), &kpiResp); err != nil {
+		t.Fatalf("unmarshal KPI: %v", err)
+	}
+	kpi := kpiResp.Data
+
+	// Verifikasi KPI 1: Ketepatan waktu (1 tepat waktu dari 2 selesai = 0.5000)
+	if kpi.CompletedOrders != 2 || kpi.OnTimeOrders != 1 || !kpi.OnTimeRate.Equal(decimal.RequireFromString("0.5")) {
+		t.Fatalf("KPI on_time_rate mismatch: completed=%d on_time=%d rate=%s", kpi.CompletedOrders, kpi.OnTimeOrders, kpi.OnTimeRate)
+	}
+
+	// Verifikasi KPI 2: Utilisasi rata-rata (hari 1: 360/1428 = 0.25210084, hari 2: 840/1428 = 0.58823529 -> rata-rata = 0.4202)
+	if kpi.ActiveProductionDays != 2 || !kpi.AvgUtilization.Equal(decimal.RequireFromString("0.4202")) {
+		t.Fatalf("KPI avg_utilization expected 0.4202 across 2 days, got %s across %d days", kpi.AvgUtilization, kpi.ActiveProductionDays)
+	}
+
+	// Verifikasi KPI 3: Selisih biaya bahan ((1.155.000 - 1.050.000) / 1.050.000 = 0.1000)
+	if !kpi.EstimatedIngredientCost.Equal(decimal.NewFromInt(1050000)) ||
+		!kpi.ActualIngredientCost.Equal(decimal.NewFromInt(1155000)) ||
+		!kpi.IngredientCostVariance.Equal(decimal.RequireFromString("0.1")) {
+		t.Fatalf("KPI ingredient_cost_variance mismatch: est=%s act=%s var=%s",
+			kpi.EstimatedIngredientCost, kpi.ActualIngredientCost, kpi.IngredientCostVariance)
+	}
+
+	// Verifikasi KPI 4: Tingkat pembatalan (2 cancelled/expired dari 4 accepted-or-beyond = 0.5000)
+	if kpi.CancelledOrders != 1 || kpi.ExpiredOrders != 1 || kpi.AcceptedOrdersTotal != 4 ||
+		!kpi.CancellationRate.Equal(decimal.RequireFromString("0.5")) {
+		t.Fatalf("KPI cancellation_rate mismatch: cancelled=%d expired=%d total=%d rate=%s",
+			kpi.CancelledOrders, kpi.ExpiredOrders, kpi.AcceptedOrdersTotal, kpi.CancellationRate)
+	}
+
+	// Verifikasi KPI 5: Pesanan ditawar balik atau ditolak
+	cr := kpi.CounteredOrRejected
+	if cr.TotalCountered != 3 || cr.CounterPending != 1 || cr.CounterAccepted != 1 ||
+		cr.CounterRejected != 1 || cr.DirectRejected != 1 || cr.TotalRejected != 2 || cr.TotalCounteredOrRejected != 4 {
+		t.Fatalf("KPI countered_or_rejected mismatch: %+v", cr)
+	}
+
+	// Verifikasi KPI 6: Margin realisasi (est = (2.500.000 - 1.850.000)/2.500.000 = 0.26, real = (2.500.000 - 1.955.000)/2.500.000 = 0.218)
+	if !kpi.EstimatedMargin.Equal(decimal.RequireFromString("0.26")) ||
+		!kpi.RealizedMargin.Equal(decimal.RequireFromString("0.218")) ||
+		len(kpi.OrdersMargin) != 2 {
+		t.Fatalf("KPI margin mismatch: est=%s real=%s len(orders)=%d",
+			kpi.EstimatedMargin, kpi.RealizedMargin, len(kpi.OrdersMargin))
+	}
+
+	// 2. Uji RBAC pada GET /api/v1/kpi: Staff ditolak 403
+	wKPIStaff := performJSON(env.router, http.MethodGet, "/api/v1/kpi", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wKPIStaff.Code != http.StatusForbidden {
+		t.Fatalf("staff GET /kpi expected 403, got %d", wKPIStaff.Code)
+	}
+
+	// 3. Uji GET /api/v1/dashboard/owner: Owner 200, Manager 403, Staff 403
+	wDashOwner := performJSON(env.router, http.MethodGet, "/api/v1/dashboard/owner", nil,
+		map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wDashOwner.Code != http.StatusOK {
+		t.Fatalf("owner GET /dashboard/owner expected 200, got %d (%s)", wDashOwner.Code, wDashOwner.Body.String())
+	}
+	wDashOwnerByMgr := performJSON(env.router, http.MethodGet, "/api/v1/dashboard/owner", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wDashOwnerByMgr.Code != http.StatusForbidden {
+		t.Fatalf("manager GET /dashboard/owner expected 403, got %d", wDashOwnerByMgr.Code)
+	}
+	wDashOwnerByStaff := performJSON(env.router, http.MethodGet, "/api/v1/dashboard/owner", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wDashOwnerByStaff.Code != http.StatusForbidden {
+		t.Fatalf("staff GET /dashboard/owner expected 403, got %d", wDashOwnerByStaff.Code)
+	}
+
+	// 4. Uji GET /api/v1/dashboard/manager: Manager 200 (tanpa opening_cash), Staff 403
+	wDashMgr := performJSON(env.router, http.MethodGet, "/api/v1/dashboard/manager", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wDashMgr.Code != http.StatusOK {
+		t.Fatalf("manager GET /dashboard/manager expected 200, got %d (%s)", wDashMgr.Code, wDashMgr.Body.String())
+	}
+	if strings.Contains(wDashMgr.Body.String(), "opening_cash") {
+		t.Fatalf("manager dashboard leaked opening_cash: %s", wDashMgr.Body.String())
+	}
+	wDashMgrByStaff := performJSON(env.router, http.MethodGet, "/api/v1/dashboard/manager", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wDashMgrByStaff.Code != http.StatusForbidden {
+		t.Fatalf("staff GET /dashboard/manager expected 403, got %d", wDashMgrByStaff.Code)
+	}
+
+	// 5. Uji GET /api/v1/dashboard/staff: Staff 200 dan dijamin TANPA harga, margin, atau kas
+	wDashStaff := performJSON(env.router, http.MethodGet, "/api/v1/dashboard/staff", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wDashStaff.Code != http.StatusOK {
+		t.Fatalf("staff GET /dashboard/staff expected 200, got %d (%s)", wDashStaff.Code, wDashStaff.Body.String())
+	}
+	rawStaffDash := wDashStaff.Body.String()
+	for _, forbidden := range []string{
+		"unit_price", "unit_cost", "subtotal", `"total"`, `"price"`,
+		"margin", "dp_required", `"paid"`, "opening_cash", "cash_buffer",
+		"buy_price", "estimated_cost", "cash_lowest",
+	} {
+		if strings.Contains(rawStaffDash, forbidden) {
+			t.Errorf("staff GET /dashboard/staff leaked %s: %s", forbidden, rawStaffDash)
+		}
+	}
+	var staffDash struct {
+		Data orders.StaffDashboardResult `json:"data"`
+	}
+	if err := json.Unmarshal(wDashStaff.Body.Bytes(), &staffDash); err != nil {
+		t.Fatalf("unmarshal staff dashboard: %v", err)
+	}
+	if len(staffDash.Data.TodayTasks) != 1 || len(staffDash.Data.Deliveries) != 1 || len(staffDash.Data.LowStockAlerts) != 1 {
+		t.Fatalf("unexpected staff dashboard counts: today=%d deliveries=%d lowStock=%d",
+			len(staffDash.Data.TodayTasks), len(staffDash.Data.Deliveries), len(staffDash.Data.LowStockAlerts))
+	}
+
+	// 6. Uji GET /api/v1/audit-logs: Owner 200 dengan filter & paginasi, Manager & Staff ditolak 403
+	wAudMgr := performJSON(env.router, http.MethodGet, "/api/v1/audit-logs", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wAudMgr.Code != http.StatusForbidden {
+		t.Fatalf("manager GET /audit-logs expected 403, got %d", wAudMgr.Code)
+	}
+	wAudStaff := performJSON(env.router, http.MethodGet, "/api/v1/audit-logs", nil,
+		map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wAudStaff.Code != http.StatusForbidden {
+		t.Fatalf("staff GET /audit-logs expected 403, got %d", wAudStaff.Code)
+	}
+
+	wAudOwner := performJSON(env.router, http.MethodGet, "/api/v1/audit-logs?action=override&page=1&limit=10", nil,
+		map[string]string{"Authorization": "Bearer " + env.ownerToken})
+	if wAudOwner.Code != http.StatusOK {
+		t.Fatalf("owner GET /audit-logs expected 200, got %d (%s)", wAudOwner.Code, wAudOwner.Body.String())
+	}
+	var audResp struct {
+		Data []orders.AuditLogItem `json:"data"`
+		Meta struct {
+			Page  int `json:"page"`
+			Limit int `json:"limit"`
+			Total int `json:"total"`
+		} `json:"meta"`
+	}
+	if err := json.Unmarshal(wAudOwner.Body.Bytes(), &audResp); err != nil {
+		t.Fatalf("unmarshal audit logs: %v", err)
+	}
+	if audResp.Meta.Total != 1 || len(audResp.Data) != 1 || audResp.Data[0].Action != "override" {
+		t.Fatalf("audit logs filter mismatch: meta=%+v data=%+v", audResp.Meta, audResp.Data)
+	}
+}
+

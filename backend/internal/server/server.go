@@ -216,6 +216,28 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 				auth.RequireRole(auth.RoleOwner),
 				ordersHandler.CreateCashEntry,
 			)
+
+			// Dashboards per role, KPI, and Audit Logs (Tahap 6)
+			protected.GET("/dashboard/owner",
+				auth.RequireRole(auth.RoleOwner),
+				ordersHandler.DashboardOwner,
+			)
+			protected.GET("/dashboard/manager",
+				auth.RequireRole(auth.RoleOwner, auth.RoleManager),
+				ordersHandler.DashboardManager,
+			)
+			protected.GET("/dashboard/staff",
+				transitionOrders,
+				ordersHandler.DashboardStaff,
+			)
+			protected.GET("/kpi",
+				readMaster,
+				ordersHandler.KPI,
+			)
+			protected.GET("/audit-logs",
+				auth.RequireRole(auth.RoleOwner, auth.RoleAdmin),
+				ordersHandler.AuditLogs,
+			)
 		}
 	}
 

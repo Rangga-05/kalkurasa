@@ -1271,6 +1271,12 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		for _, pid := range ids {
 			if cost, ok := tx.db.recipeCosts[pid]; ok {
 				rows = append(rows, []any{pid, decimal.NewFromInt(1), cost, decimal.NewFromInt(1)})
+				continue
+			}
+			for ingID, qtyPerUnit := range tx.db.recipes[pid] {
+				if im, ok := tx.db.ingredientDetails[ingID]; ok && im.BuyUnitSize.IsPositive() {
+					rows = append(rows, []any{pid, qtyPerUnit, im.BuyPrice, im.BuyUnitSize})
+				}
 			}
 		}
 		return &memRows{rows: rows}, nil
@@ -1432,7 +1438,7 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		}
 		return &memRows{rows: rows}, nil
 
-	case strings.Contains(q, "from audit_logs a left join users u"):
+	case strings.Contains(q, "from audit_logs a left join users u") && strings.Contains(q, "where a.entity = 'orders'"):
 		oid := fmt.Sprint(args[0])
 		var rows [][]any
 		for i := len(tx.db.auditEntries) - 1; i >= 0; i-- {
@@ -1449,6 +1455,26 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 				}
 				rows = append(rows, []any{id, actorPtr, actorName, ae.Action, ae.Detail, ae.CreatedAt})
 			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from audit_logs a left join users u"):
+		var rows [][]any
+		for i := len(tx.db.auditEntries) - 1; i >= 0; i-- {
+			ae := tx.db.auditEntries[i]
+			id := ae.ID
+			if id == "" {
+				id = fmt.Sprintf("00000000-0000-4000-8000-%012d", i+1)
+			}
+			actorPtr := strPtrOrNil(ae.ActorID)
+			entityPtr := strPtrOrNil(ae.EntityID)
+			actorName := ""
+			actorRole := ""
+			if ae.ActorID != "" {
+				actorName = "Pengguna Internal"
+				actorRole = "owner"
+			}
+			rows = append(rows, []any{id, actorPtr, actorName, actorRole, ae.Action, ae.Entity, entityPtr, ae.Detail, ae.CreatedAt})
 		}
 		return &memRows{rows: rows}, nil
 
