@@ -35,18 +35,19 @@ const (
 
 // SettingsParams memuat seluruh parameter bisnis dari tabel settings.
 type SettingsParams struct {
-	EvalParams        engine.EvalParams
-	StatusGreenBelow  decimal.Decimal
-	StatusYellowBelow decimal.Decimal
-	LaborRatePerMin   decimal.Decimal
-	WastePct          decimal.Decimal
-	ShoppingBufferPct decimal.Decimal
-	DPDeadlineHours   int
-	BigOrderTotal     decimal.Decimal
-	BigOrderUnits     int
+	EvalParams            engine.EvalParams
+	StatusGreenBelow      decimal.Decimal
+	StatusYellowBelow     decimal.Decimal
+	LaborRatePerMin       decimal.Decimal
+	WastePct              decimal.Decimal
+	ShoppingBufferPct     decimal.Decimal
+	DPDeadlineHours       int
+	BigOrderTotal         decimal.Decimal
+	BigOrderUnits         int
+	MaxActiveUnpaidOrders int
 }
 
-// DefaultSettingsParams mengembalikan nilai default sesuai Bagian 5 brief.
+// DefaultSettingsParams mengembalikan nilai default sesuai Bagian 5 brief & Tahap 4A+.
 func DefaultSettingsParams() SettingsParams {
 	return SettingsParams{
 		EvalParams: engine.EvalParams{
@@ -59,14 +60,15 @@ func DefaultSettingsParams() SettingsParams {
 			LeadTimeDays:     2,
 			ShoppingLeadDays: 2,
 		},
-		StatusGreenBelow:  decimal.RequireFromString("0.70"),
-		StatusYellowBelow: decimal.RequireFromString("0.90"),
-		LaborRatePerMin:   decimal.NewFromInt(400),
-		WastePct:          decimal.RequireFromString("0.05"),
-		ShoppingBufferPct: decimal.RequireFromString("0.10"),
-		DPDeadlineHours:   24,
-		BigOrderTotal:     decimal.NewFromInt(2_000_000),
-		BigOrderUnits:     50,
+		StatusGreenBelow:      decimal.RequireFromString("0.70"),
+		StatusYellowBelow:     decimal.RequireFromString("0.90"),
+		LaborRatePerMin:       decimal.NewFromInt(400),
+		WastePct:              decimal.RequireFromString("0.05"),
+		ShoppingBufferPct:     decimal.RequireFromString("0.10"),
+		DPDeadlineHours:       24,
+		BigOrderTotal:         decimal.NewFromInt(2_000_000),
+		BigOrderUnits:         50,
+		MaxActiveUnpaidOrders: 2,
 	}
 }
 
@@ -132,6 +134,8 @@ func LoadSettingsParams(ctx context.Context, q db.DBTX) (SettingsParams, error) 
 			p.BigOrderUnits = parseInt(raw, p.BigOrderUnits)
 		case "shopping_lead_days":
 			p.EvalParams.ShoppingLeadDays = parseInt(raw, p.EvalParams.ShoppingLeadDays)
+		case "max_active_unpaid_orders":
+			p.MaxActiveUnpaidOrders = parseInt(raw, p.MaxActiveUnpaidOrders)
 		}
 	}
 	return p, rows.Err()
@@ -639,6 +643,7 @@ func CheckAvailability(ctx context.Context, q db.DBTX, items []OrderItemInput, f
 // CreateOrderInput adalah parameter pembuatan pesanan (publik maupun manual).
 type CreateOrderInput struct {
 	Source          string // "public" | "manual"
+	CustomerID      string // UUID pelanggan untuk pesanan publik
 	CustomerName    string
 	CustomerContact string
 	DeliveryType    string // "delivery" | "pickup"
@@ -663,28 +668,29 @@ type OrderItemDetail struct {
 
 // OrderDetail adalah representasi lengkap pesanan setelah dibuat.
 type OrderDetail struct {
-	ID                   string           `json:"id"`
-	Code                 string           `json:"code"`
-	Source               string           `json:"source"`
-	CustomerName         string           `json:"customer_name"`
-	CustomerContact      string           `json:"customer_contact"`
-	DeliveryType         string           `json:"delivery_type"`
-	Address              string           `json:"address,omitempty"`
-	Notes                string           `json:"notes,omitempty"`
-	EventDate            string           `json:"event_date"`
-	ProductionDate       string           `json:"production_date"`
-	Status               string           `json:"status"`
-	Total                decimal.Decimal  `json:"total"`
-	DPRequired           decimal.Decimal  `json:"dp_required"`
-	DPDeadline           *time.Time       `json:"dp_deadline"`
-	Paid                 decimal.Decimal  `json:"paid"`
-	Recommendation       string           `json:"recommendation"`
-	RecommendationReason string           `json:"recommendation_reason"`
-	CounterOffer         *CounterOfferDTO `json:"counter_offer"`
-	Evaluation           EvaluationDTO    `json:"evaluation"`
+	ID                   string            `json:"id"`
+	Code                 string            `json:"code"`
+	Source               string            `json:"source"`
+	CustomerID           *string           `json:"customer_id,omitempty"`
+	CustomerName         string            `json:"customer_name"`
+	CustomerContact      string            `json:"customer_contact"`
+	DeliveryType         string            `json:"delivery_type"`
+	Address              string            `json:"address,omitempty"`
+	Notes                string            `json:"notes,omitempty"`
+	EventDate            string            `json:"event_date"`
+	ProductionDate       string            `json:"production_date"`
+	Status               string            `json:"status"`
+	Total                decimal.Decimal   `json:"total"`
+	DPRequired           decimal.Decimal   `json:"dp_required"`
+	DPDeadline           *time.Time        `json:"dp_deadline"`
+	Paid                 decimal.Decimal   `json:"paid"`
+	Recommendation       string            `json:"recommendation"`
+	RecommendationReason string            `json:"recommendation_reason"`
+	CounterOffer         *CounterOfferDTO  `json:"counter_offer"`
+	Evaluation           EvaluationDTO     `json:"evaluation"`
 	Items                []OrderItemDetail `json:"items"`
-	CreatedAt            time.Time        `json:"created_at"`
-	UpdatedAt            time.Time        `json:"updated_at"`
+	CreatedAt            time.Time         `json:"created_at"`
+	UpdatedAt            time.Time         `json:"updated_at"`
 }
 
 // EvaluateOrder di lapisan layanan merangkai EvalInput dari database dan
@@ -779,6 +785,27 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		}
 		if _, err := ExpireOverdueOrders(ctx, tx, time.Now().UTC()); err != nil {
 			return err
+		}
+
+		// Tahap 4A+: Batasi jumlah pesanan aktif yang belum dibayar DP per pelanggan
+		if req.Source == "public" && req.CustomerID != "" && params.MaxActiveUnpaidOrders > 0 {
+			var activeUnpaid int
+			if err := tx.QueryRow(ctx, `
+				SELECT COUNT(*)
+				FROM orders
+				WHERE customer_id = $1::uuid
+				  AND status IN ('pending_decision', 'countered', 'accepted')
+				  AND paid < dp_required
+			`, req.CustomerID).Scan(&activeUnpaid); err != nil {
+				return err
+			}
+			if activeUnpaid >= params.MaxActiveUnpaidOrders {
+				return httpx.Err(
+					http.StatusUnprocessableEntity,
+					"active_order_limit",
+					fmt.Sprintf("Anda sudah memiliki %d pesanan aktif yang belum dibayar DP (batas maksimal %d pesanan). Silakan selesaikan pembayaran DP atau batalkan pesanan sebelumnya terlebih dahulu.", activeUnpaid, params.MaxActiveUnpaidOrders),
+				)
+			}
 		}
 
 		// Bangun EvalItem untuk engine.EvaluateOrder
@@ -885,6 +912,13 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		if req.CreatedBy != "" {
 			createdBy = req.CreatedBy
 		}
+		var customerIDPtr any
+		var customerIDStrPtr *string
+		if req.CustomerID != "" {
+			customerIDPtr = req.CustomerID
+			cid := req.CustomerID
+			customerIDStrPtr = &cid
+		}
 		var addrPtr, notesPtr any
 		if req.Address != "" {
 			addrPtr = req.Address
@@ -900,19 +934,19 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		var createdAt, updatedAt time.Time
 		err = tx.QueryRow(ctx, `
 			INSERT INTO orders (
-				code, source, customer_name, customer_contact, delivery_type,
+				code, source, customer_id, customer_name, customer_contact, delivery_type,
 				address, notes, event_date, production_date, status,
 				total, dp_required, dp_deadline, paid,
 				recommendation, recommendation_reason, counter_offer, snapshot, created_by
 			) VALUES (
-				$1, $2, $3, $4, $5,
-				$6, $7, $8::date, $9::date, $10,
-				$11, $12, $13, 0,
-				$14, $15, $16::jsonb, $17::jsonb, $18::uuid
+				$1, $2, $3::uuid, $4, $5, $6,
+				$7, $8, $9::date, $10::date, $11,
+				$12, $13, $14, 0,
+				$15, $16, $17::jsonb, $18::jsonb, $19::uuid
 			)
 			RETURNING id::text, created_at, updated_at
 		`,
-			code, req.Source, req.CustomerName, req.CustomerContact, req.DeliveryType,
+			code, req.Source, customerIDPtr, req.CustomerName, req.CustomerContact, req.DeliveryType,
 			addrPtr, notesPtr, eventDateKey, prodDateKey, status,
 			evalRes.Total.Round(4), dpRequired, dpDeadline,
 			evalRes.Recommendation, evalRes.Reason, counterJSON, string(snapBytes), createdBy,
@@ -949,7 +983,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		}
 
 		// Catat audit log
-		if err := audit.Log(ctx, tx, req.CreatedBy, audit.ActionDecision, "orders", orderID, map[string]any{
+		auditDetail := map[string]any{
 			"op":             "create_order",
 			"code":           code,
 			"source":         req.Source,
@@ -957,7 +991,11 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			"recommendation": evalRes.Recommendation,
 			"total":          evalRes.Total.Round(2),
 			"dp_required":    dpRequired,
-		}); err != nil {
+		}
+		if req.CustomerID != "" {
+			auditDetail["customer_id"] = req.CustomerID
+		}
+		if err := audit.Log(ctx, tx, req.CreatedBy, audit.ActionDecision, "orders", orderID, auditDetail); err != nil {
 			return err
 		}
 
@@ -965,6 +1003,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			ID:                   orderID,
 			Code:                 code,
 			Source:               req.Source,
+			CustomerID:           customerIDStrPtr,
 			CustomerName:         req.CustomerName,
 			CustomerContact:      req.CustomerContact,
 			DeliveryType:         req.DeliveryType,

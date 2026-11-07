@@ -45,6 +45,11 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 const DEMO_ACCOUNTS: { email: string; role: UserRole; name: string }[] = [
+  {
+    email: "customer@demo.test",
+    role: "customer",
+    name: "Dewi Lestari (Pelanggan)",
+  },
   { email: "owner@demo.test", role: "owner", name: "Bu Sari (Pemilik)" },
   { email: "manager@demo.test", role: "manager", name: "Rina (Manajer)" },
   { email: "staff@demo.test", role: "staff", name: "Budi (Karyawan)" },
@@ -76,6 +81,18 @@ function LoginFormContent() {
         `Selamat datang, ${res.user.name}`,
         `Masuk sebagai ${ROLE_LABELS[res.user.role]}`
       );
+      if (res.user.role === "customer") {
+        const customerTarget =
+          nextPath &&
+          (nextPath.startsWith("/pesan") ||
+            nextPath.startsWith("/pesanan-saya") ||
+            nextPath.startsWith("/lacak"))
+            ? nextPath
+            : "/pesanan-saya";
+        router.push(customerTarget);
+        router.refresh();
+        return;
+      }
       const defaultTarget = getDashboardPathForRole(res.user.role);
       const target =
         nextPath && nextPath.startsWith("/app") ? nextPath : defaultTarget;
@@ -97,6 +114,10 @@ function LoginFormContent() {
     });
   };
 
+  const registerHref = nextPath
+    ? `/daftar?next=${encodeURIComponent(nextPath)}`
+    : "/daftar";
+
   return (
     <div className="mx-auto w-full max-w-md space-y-5">
       <Card className="border-stone-200/90 shadow-sm">
@@ -105,11 +126,11 @@ function LoginFormContent() {
             <ChefHat className="h-6 w-6" />
           </div>
           <CardTitle className="text-xl sm:text-2xl">
-            Masuk ke Portal Internal
+            Masuk ke Akun Kalkurasa
           </CardTitle>
           <CardDescription>
-            Khusus Pemilik Usaha, Manajer Operasional, Karyawan Dapur, dan
-            Administrator Kalkurasa.
+            Halaman masuk terpadu untuk Pelanggan Pre-Order maupun Tim Internal
+            (Pemilik, Manajer, Karyawan, dan Admin).
           </CardDescription>
         </CardHeader>
 
@@ -180,6 +201,16 @@ function LoginFormContent() {
               )}
             </Button>
           </form>
+
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-center text-xs text-stone-700">
+            Belum punya akun pelanggan untuk memesan?{" "}
+            <Link
+              href={registerHref}
+              className="font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-950"
+            >
+              Daftar Akun Pelanggan
+            </Link>
+          </div>
 
           {/* Pilihan Cepat Akun Demo */}
           <div className="border-t border-stone-200 pt-4">

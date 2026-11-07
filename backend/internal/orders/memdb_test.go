@@ -106,6 +106,7 @@ type memOrder struct {
 	ID                   string
 	Code                 string
 	Source               string
+	CustomerID           string
 	CustomerName         string
 	CustomerContact      string
 	DeliveryType         string
@@ -620,6 +621,42 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 		}
 		return &memRow{err: pgx.ErrNoRows}
 
+	case strings.Contains(q, "select count(*) from orders where customer_id = $1::uuid"):
+		cid := fmt.Sprint(args[0])
+		tx.db.mu.Lock()
+		cnt := 0
+		for _, o := range tx.db.orders {
+			if o.CustomerID == cid &&
+				(o.Status == "pending_decision" || o.Status == "countered" || o.Status == "accepted") &&
+				o.Paid.LessThan(o.DPRequired) {
+				cnt++
+			}
+		}
+		tx.db.mu.Unlock()
+		return &memRow{vals: []any{cnt}}
+
+	case strings.HasPrefix(q, "select id::text, code, source, customer_id::text, customer_name, customer_contact, delivery_type, address, notes, event_date, production_date"):
+		oid := fmt.Sprint(args[0])
+		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
+		for _, o := range tx.db.orders {
+			if o.ID == oid {
+				custID := strPtrOrNil(o.CustomerID)
+				addr := strPtrOrNil(o.Address)
+				notes := strPtrOrNil(o.Notes)
+				rec := strPtrOrNil(o.Recommendation)
+				reason := strPtrOrNil(o.RecommendationReason)
+				return &memRow{vals: []any{
+					o.ID, o.Code, o.Source, custID, o.CustomerName, o.CustomerContact, o.DeliveryType,
+					addr, notes, o.EventDate, o.ProductionDate,
+					o.Status, o.Total, o.DPRequired, o.DPDeadline, o.Paid,
+					rec, reason, o.CounterOfferJSON,
+					o.CreatedAt, o.UpdatedAt,
+				}}
+			}
+		}
+		return &memRow{err: pgx.ErrNoRows}
+
 	case strings.HasPrefix(q, "select id::text, code, source, customer_name, customer_contact, delivery_type, address, notes, event_date, production_date"):
 		oid := fmt.Sprint(args[0])
 		tx.db.mu.Lock()
@@ -763,44 +800,49 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 
 	case strings.HasPrefix(q, "insert into orders"):
 		now := time.Now().UTC()
-		evDate, _ := time.Parse("2006-01-02", fmt.Sprint(args[7])[:10])
-		prDate, _ := time.Parse("2006-01-02", fmt.Sprint(args[8])[:10])
-		dpDeadline := parseTimeArg(args[12])
+		custID := ""
+		if args[2] != nil {
+			custID = fmt.Sprint(args[2])
+		}
+		evDate, _ := time.Parse("2006-01-02", fmt.Sprint(args[8])[:10])
+		prDate, _ := time.Parse("2006-01-02", fmt.Sprint(args[9])[:10])
+		dpDeadline := parseTimeArg(args[13])
 		var counterBytes []byte
-		if args[15] != nil {
-			counterBytes = []byte(fmt.Sprint(args[15]))
+		if args[16] != nil {
+			counterBytes = []byte(fmt.Sprint(args[16]))
 		}
 		var snapBytes []byte
-		if args[16] != nil {
-			snapBytes = []byte(fmt.Sprint(args[16]))
+		if args[17] != nil {
+			snapBytes = []byte(fmt.Sprint(args[17]))
 		}
 		addr := ""
-		if args[5] != nil {
-			addr = fmt.Sprint(args[5])
+		if args[6] != nil {
+			addr = fmt.Sprint(args[6])
 		}
 		notes := ""
-		if args[6] != nil {
-			notes = fmt.Sprint(args[6])
+		if args[7] != nil {
+			notes = fmt.Sprint(args[7])
 		}
 		id := tx.db.nextUUID()
 		ord := memOrder{
 			ID:                   id,
 			Code:                 fmt.Sprint(args[0]),
 			Source:               fmt.Sprint(args[1]),
-			CustomerName:         fmt.Sprint(args[2]),
-			CustomerContact:      fmt.Sprint(args[3]),
-			DeliveryType:         fmt.Sprint(args[4]),
+			CustomerID:           custID,
+			CustomerName:         fmt.Sprint(args[3]),
+			CustomerContact:      fmt.Sprint(args[4]),
+			DeliveryType:         fmt.Sprint(args[5]),
 			Address:              addr,
 			Notes:                notes,
 			EventDate:            evDate,
 			ProductionDate:       prDate,
-			Status:               fmt.Sprint(args[9]),
-			Total:                args[10].(decimal.Decimal),
-			DPRequired:           args[11].(decimal.Decimal),
+			Status:               fmt.Sprint(args[10]),
+			Total:                args[11].(decimal.Decimal),
+			DPRequired:           args[12].(decimal.Decimal),
 			DPDeadline:           dpDeadline,
 			Paid:                 decimal.Zero,
-			Recommendation:       fmt.Sprint(args[13]),
-			RecommendationReason: fmt.Sprint(args[14]),
+			Recommendation:       fmt.Sprint(args[14]),
+			RecommendationReason: fmt.Sprint(args[15]),
 			CounterOfferJSON:     counterBytes,
 			SnapshotJSON:         snapBytes,
 			CreatedAt:            now,
@@ -1076,6 +1118,21 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 			if o.ProductionDate.Format("2006-01-02") == dk &&
 				(o.Status == "accepted" || o.Status == "confirmed" || o.Status == "in_production") {
 				rows = append(rows, []any{o.ID, o.Code, o.CustomerName, o.Status, o.EventDate, o.ProductionDate, o.Total})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from orders where customer_id = $1::uuid"):
+		cid := fmt.Sprint(args[0])
+		var rows [][]any
+		for i := len(tx.db.orders) - 1; i >= 0; i-- {
+			o := tx.db.orders[i]
+			if o.CustomerID == cid {
+				rows = append(rows, []any{
+					o.ID, o.Code, o.CustomerName, o.DeliveryType, o.EventDate, o.Status,
+					o.Total, o.DPRequired, o.DPDeadline, o.Paid, o.CounterOfferJSON,
+					o.CreatedAt, o.UpdatedAt,
+				})
 			}
 		}
 		return &memRows{rows: rows}, nil

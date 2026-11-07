@@ -64,6 +64,26 @@ func (s *fakeUserStore) FindByID(_ context.Context, id string) (*auth.User, erro
 	return u, nil
 }
 
+func (s *fakeUserStore) CreateCustomer(_ context.Context, email, name, contact, passwordHash string) (*auth.User, error) {
+	norm := strings.ToLower(strings.TrimSpace(email))
+	if _, exists := s.byEmail[norm]; exists {
+		return nil, auth.ErrEmailTaken
+	}
+	id := "66666666-6666-4666-8666-666666666666"
+	u := auth.User{
+		ID:        id,
+		Email:     norm,
+		Name:      name,
+		Contact:   contact,
+		Role:      auth.RoleCustomer,
+		IsActive:  true,
+		CreatedAt: time.Now().UTC(),
+	}
+	s.byEmail[norm] = &auth.UserWithHash{User: u, PasswordHash: passwordHash}
+	s.byID[id] = &u
+	return &u, nil
+}
+
 func setupTestServer(t *testing.T) (*gin.Engine, *fakeUserStore, string) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

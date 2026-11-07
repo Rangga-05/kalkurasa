@@ -95,27 +95,30 @@ func main() {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// 1. Seed 4 pengguna demo (idempoten pada email)
+	// 1. Seed 5 pengguna demo termasuk customer@demo.test (idempoten pada email)
 	demoUsers := []struct {
-		email string
-		name  string
-		role  string
+		email   string
+		name    string
+		contact string
+		role    string
 	}{
-		{email: "owner@demo.test", name: "Bu Sari (Pemilik)", role: auth.RoleOwner},
-		{email: "manager@demo.test", name: "Rina (Manajer Operasional)", role: auth.RoleManager},
-		{email: "staff@demo.test", name: "Budi (Karyawan Produksi)", role: auth.RoleStaff},
-		{email: "admin@demo.test", name: "Admin Sistem", role: auth.RoleAdmin},
+		{email: "owner@demo.test", name: "Bu Sari (Pemilik)", contact: "081100000001", role: auth.RoleOwner},
+		{email: "manager@demo.test", name: "Rina (Manajer Operasional)", contact: "081100000002", role: auth.RoleManager},
+		{email: "staff@demo.test", name: "Budi (Karyawan Produksi)", contact: "081100000003", role: auth.RoleStaff},
+		{email: "admin@demo.test", name: "Admin Sistem", contact: "081100000004", role: auth.RoleAdmin},
+		{email: "customer@demo.test", name: "Dewi Lestari (Pelanggan Demo)", contact: "081234567890", role: auth.RoleCustomer},
 	}
 	for _, u := range demoUsers {
 		_, err := tx.Exec(ctx, `
-			INSERT INTO users (email, name, role, password_hash, is_active)
-			VALUES ($1, $2, $3, $4, true)
+			INSERT INTO users (email, name, contact, role, password_hash, is_active)
+			VALUES ($1, $2, $3, $4, $5, true)
 			ON CONFLICT (email) DO UPDATE SET
 				name = EXCLUDED.name,
+				contact = EXCLUDED.contact,
 				role = EXCLUDED.role,
 				password_hash = EXCLUDED.password_hash,
 				is_active = true
-		`, u.email, u.name, u.role, pwHash)
+		`, u.email, u.name, u.contact, u.role, pwHash)
 		if err != nil {
 			log.Fatalf("seed user %s: %v", u.email, err)
 		}
@@ -174,6 +177,7 @@ func main() {
 		{key: "big_order_total", jsonVal: "2000000"},
 		{key: "big_order_units", jsonVal: "50"},
 		{key: "shopping_lead_days", jsonVal: "2"},
+		{key: "max_active_unpaid_orders", jsonVal: "2"},
 		{key: "demo_today", jsonVal: "null"},
 	}
 	for _, s := range settingsSeed {

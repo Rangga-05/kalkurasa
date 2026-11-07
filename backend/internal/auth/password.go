@@ -11,22 +11,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Peran pengguna internal (sesuai kolom users.role).
+// Peran pengguna (sesuai kolom users.role).
 const (
-	RoleOwner   = "owner"
-	RoleManager = "manager"
-	RoleStaff   = "staff"
-	RoleAdmin   = "admin"
+	RoleOwner    = "owner"
+	RoleManager  = "manager"
+	RoleStaff    = "staff"
+	RoleAdmin    = "admin"
+	RoleCustomer = "customer"
 )
 
 // Roles adalah daftar peran yang valid.
-func Roles() []string { return []string{RoleOwner, RoleManager, RoleStaff, RoleAdmin} }
+func Roles() []string {
+	return []string{RoleOwner, RoleManager, RoleStaff, RoleAdmin, RoleCustomer}
+}
 
-// User adalah pengguna internal tanpa data rahasia.
+// User adalah pengguna tanpa data rahasia.
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
+	Contact   string    `json:"contact"`
 	Role      string    `json:"role"`
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`

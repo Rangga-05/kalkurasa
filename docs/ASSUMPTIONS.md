@@ -270,6 +270,23 @@ Setiap asumsi atau penyimpangan dari spesifikasi dicatat di sini dengan alasan s
 **Keputusan:** `frontend/src/middleware.ts` membaca cookie `session` (`HttpOnly`) dan mendekode klaim payload JWT (`sub`, `role`, `exp`) untuk mengarahkan pengguna yang belum masuk ke `/login?next=...`, mengarahkan pengguna yang sudah masuk dari `/login` atau `/app` ke dashboard peran masing-masing (`/app/owner`, `/app/manajer`, `/app/karyawan`, `/app/admin`), serta menjaga akses rute `/app/...` berdasarkan peran. Selain itu, `frontend/src/app/app/layout.tsx` tetap memanggil `GET /api/v1/auth/me` sehingga pencabutan sesi atau penonaktifan akun di database langsung mengarahkan pengguna kembali ke `/login`.
 **Alasan:** Mengikuti Bagian 10 brief bahwa akses halaman dijaga di middleware Next.js sekaligus di server API sebagai sumber otorisasi utama.
 
+---
+
+## Tahap 4A+ — Akun Pelanggan, Batas Pesanan Aktif, dan Perbaikan Tampilan Tanggal
+
+### A4-03: Kolom `users.contact` pada migrasi `002_customers.sql`
+**Keputusan:** Migrasi `backend/migrations/002_customers.sql` tidak hanya memperbarui constraint `users.role` agar menerima `'customer'` dan menambah `orders.customer_id uuid null references users(id)` beserta indeks `orders_customer_id_idx`, tetapi juga menambahkan kolom `users.contact text not null default ''`. Migrasi `001_init.sql` tidak disentuh sama sekali.
+**Alasan:** Endpoint `POST /api/v1/auth/register` menerima input `contact`, dan `POST /api/v1/public/orders` serta halaman `/pesan` perlu membaca nomor kontak dari profil pelanggan yang sedang masuk.
+
+### A4-04: Pemisahan `orders.customer_id` dan `orders.created_by` untuk pesanan publik
+**Keputusan:** Saat pelanggan membuat pesanan melalui `POST /api/v1/public/orders`, kolom `orders.customer_id` diisi dengan UUID pelanggan yang terautentikasi (`role = 'customer'`), sedangkan `orders.created_by` dan `audit_logs.actor_id` tetap `NULL` (dengan `detail.customer_id` tercatat di JSON `audit_logs`). Untuk pesanan manual (`POST /api/v1/orders` oleh `manager`/`owner`), `orders.created_by` dan `audit_logs.actor_id` berisi UUID staf pembuat pesanan, sedangkan `orders.customer_id` bernilai `NULL`.
+**Alasan:** Membedakan secara tegas antara pemilik pesanan pelanggan (`customer_id`) dan staf internal pencatat pesanan manual (`created_by`), serta mempertahankan kompatibilitas penuh dengan invarian audit log pesanan publik pada test integrasi `TC-08`.
+
+### A4-05: Penegakan batas `max_active_unpaid_orders` di dalam transaksi pembuatan pesanan
+**Keputusan:** Pengaturan `max_active_unpaid_orders` (nilai bawaan `2`, dapat diubah oleh `owner` melalui `PUT /api/v1/settings`) diperiksa di dalam transaksi `CreateOrder` ketika `customer_id` terisi. Sistem menghitung jumlah pesanan milik `customer_id` yang berstatus `IN ('pending_decision', 'countered', 'accepted')` dan `paid < dp_required` (setelah menjalankan `ExpireOverdueOrders` terlebih dahulu agar pesanan yang sudah melewati tenggat DP tidak lagi dihitung). Bila jumlahnya sudah mencapai `max_active_unpaid_orders`, pesanan baru ditolak dengan `422 Unprocessable Entity` (`code: "active_order_limit"`).
+**Alasan:** Mencegah pemblokiran kapasitas dapur oleh pesanan fiktif yang belum membayar DP, sambil memastikan pelanggan yang pesanannya sudah kedaluwarsa atau sudah melunasi DP dapat kembali memesan.
+
+
 
 
 

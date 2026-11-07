@@ -101,8 +101,9 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 			WHERE product_id IN (SELECT id FROM products WHERE name LIKE 'ittest-%')
 		`)
 		_, _ = pool.Exec(cleanCtx, `DELETE FROM products WHERE name LIKE 'ittest-%'`)
-		// 4. Hapus cash_entries ber-awalan ittest-
+		// 4. Hapus cash_entries dan users ber-awalan ittest-
 		_, _ = pool.Exec(cleanCtx, `DELETE FROM cash_entries WHERE note LIKE 'ittest-%'`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM users WHERE email LIKE 'ittest-%'`)
 		// 5. Hapus resources hanya bila dibuat oleh test ini
 		for _, rid := range createdResourceIDs {
 			_, _ = pool.Exec(cleanCtx, `DELETE FROM resources WHERE id = $1::uuid`, rid)
@@ -197,6 +198,32 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 		t.Fatalf("insert test cash_entry: %v", err)
 	}
 
+	// Buat pengguna customer uji untuk masing-masing request (rounds*2) dalam 1 statement
+	custRows, err := pool.Query(ctx, `
+		INSERT INTO users (email, name, contact, role, password_hash, is_active)
+		SELECT $1 || gs::text || '@demo.test', $1 || 'cust-' || gs::text, '081200001111', 'customer', 'ittest-hash', true
+		FROM generate_series(1, $2) AS gs
+		RETURNING id::text
+	`, runPrefix, rounds*2)
+	if err != nil {
+		t.Fatalf("insert test customers: %v", err)
+	}
+	custTokens := make([]string, 0, rounds*2)
+	for custRows.Next() {
+		var cid string
+		if err := custRows.Scan(&cid); err != nil {
+			custRows.Close()
+			t.Fatalf("scan test customer id: %v", err)
+		}
+		tok, _, err := auth.IssueToken([]byte(cfg.JWTSecret), cid, auth.RoleCustomer, time.Now(), auth.TokenTTL)
+		if err != nil {
+			custRows.Close()
+			t.Fatalf("IssueToken customer: %v", err)
+		}
+		custTokens = append(custTokens, tok)
+	}
+	custRows.Close()
+
 	gin.SetMode(gin.TestMode)
 	router := server.New(cfg, pool)
 
@@ -234,6 +261,7 @@ func TestTC08_PostgresIntegration20Rounds(t *testing.T) {
 					},
 				}, map[string]string{
 					"X-Forwarded-For": ip,
+					"Authorization":   "Bearer " + custTokens[r*2+idx],
 				})
 
 				var parsed struct {
@@ -562,6 +590,32 @@ func TestDecision_PostgresConcurrentAccept(t *testing.T) {
 		t.Fatalf("insert test cash_entry: %v", err)
 	}
 
+	// Buat pengguna customer uji untuk TestDecision (rounds*2) dalam 1 statement
+	decCustRows, err := pool.Query(ctx, `
+		INSERT INTO users (email, name, contact, role, password_hash, is_active)
+		SELECT $1 || 'cust-' || gs::text || '@demo.test', $1 || 'Cust-' || gs::text, '081200009999', 'customer', 'ittest-hash', true
+		FROM generate_series(1, $2) AS gs
+		RETURNING id::text
+	`, runPrefix, rounds*2)
+	if err != nil {
+		t.Fatalf("insert test customers for decision: %v", err)
+	}
+	decCustTokens := make([]string, 0, rounds*2)
+	for decCustRows.Next() {
+		var cid string
+		if err := decCustRows.Scan(&cid); err != nil {
+			decCustRows.Close()
+			t.Fatalf("scan test customer id: %v", err)
+		}
+		tok, _, err := auth.IssueToken([]byte(cfg.JWTSecret), cid, auth.RoleCustomer, time.Now(), auth.TokenTTL)
+		if err != nil {
+			decCustRows.Close()
+			t.Fatalf("IssueToken customer: %v", err)
+		}
+		decCustTokens = append(decCustTokens, tok)
+	}
+	decCustRows.Close()
+
 	gin.SetMode(gin.TestMode)
 	router := server.New(cfg, pool)
 
@@ -591,6 +645,7 @@ func TestDecision_PostgresConcurrentAccept(t *testing.T) {
 				},
 			}, map[string]string{
 				"X-Forwarded-For": ip,
+				"Authorization":   "Bearer " + decCustTokens[r*2+i],
 			})
 			if wCreate.Code != http.StatusCreated {
 				t.Fatalf("putaran %d buat pesanan %d: diharapkan 201, dapat %d (%s)", r+1, i+1, wCreate.Code, wCreate.Body.String())
@@ -838,7 +893,7 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 			DELETE FROM day_locks
 			WHERE day >= $1::date AND day <= $2::date
 		`, engine.DateKey(startDate), engine.DateKey(endLockCleanupDate))
-		_, _ = pool.Exec(cleanCtx, `DELETE FROM rate_limits WHERE key LIKE 'order:198.51.100.%'`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM rate_limits WHERE key LIKE 'order:198.51.100.%' OR key LIKE 'register:198.51.100.%'`)
 	}
 
 	cleanup()
@@ -967,6 +1022,41 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	router := server.New(cfg, pool)
 
 	// =========================================================================
+	// 0. Registrasi Akun Pelanggan (POST /api/v1/auth/register) & Cek 401
+	// =========================================================================
+	wReg := performJSON(router, http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"name":     runPrefix + "Pelanggan Uji",
+		"email":    runPrefix + "customer@demo.test",
+		"contact":  "081200001234",
+		"password": "PasswordUji123!",
+	}, map[string]string{"X-Forwarded-For": "198.51.100.200"})
+	if wReg.Code != http.StatusCreated {
+		t.Fatalf("POST /auth/register: diharapkan 201, dapat %d (%s)", wReg.Code, wReg.Body.String())
+	}
+	var regResp struct {
+		Data struct {
+			Token string    `json:"token"`
+			User  auth.User `json:"user"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(wReg.Body.Bytes(), &regResp)
+	customerToken := regResp.Data.Token
+	customerID := regResp.Data.User.ID
+	if customerToken == "" || customerID == "" {
+		t.Fatalf("registrasi customer tidak mengembalikan token/id: %+v", regResp.Data)
+	}
+
+	// Pastikan POST /public/orders tanpa login ditolak 401
+	wNoAuth := performJSON(router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"delivery_type": "pickup",
+		"event_date":    dateAStr,
+		"items":         []map[string]any{{"product_id": productID, "qty": 25}},
+	}, map[string]string{"X-Forwarded-For": "198.51.100.200"})
+	if wNoAuth.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /public/orders tanpa login: diharapkan 401, dapat %d", wNoAuth.Code)
+	}
+
+	// =========================================================================
 	// 1. Pembuatan Pesanan Publik (Order 1 & Order 2 pada dateA)
 	// =========================================================================
 	// Order 1 (25 unit pada dateA -> utilisasi 60% <= 90%, langsung accepted)
@@ -979,7 +1069,10 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": productID, "qty": 25},
 		},
-	}, map[string]string{"X-Forwarded-For": "198.51.100.201"})
+	}, map[string]string{
+		"X-Forwarded-For": "198.51.100.201",
+		"Authorization":   "Bearer " + customerToken,
+	})
 	if wOrd1.Code != http.StatusCreated {
 		t.Fatalf("Order 1 POST /public/orders: diharapkan 201, dapat %d (%s)", wOrd1.Code, wOrd1.Body.String())
 	}
@@ -1003,7 +1096,10 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": productID, "qty": 25},
 		},
-	}, map[string]string{"X-Forwarded-For": "198.51.100.202"})
+	}, map[string]string{
+		"X-Forwarded-For": "198.51.100.202",
+		"Authorization":   "Bearer " + customerToken,
+	})
 	if wOrd2.Code != http.StatusCreated {
 		t.Fatalf("Order 2 POST /public/orders: diharapkan 201, dapat %d (%s)", wOrd2.Code, wOrd2.Body.String())
 	}
@@ -1019,6 +1115,38 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	}
 	order2ID := ord2Resp.Data.ID
 	order2Code := ord2Resp.Data.Code
+
+	// Pastikan pesanan ke-3 yang belum dibayar DP ditolak 422 (max_active_unpaid_orders = 2)
+	wLimit := performJSON(router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"customer_name":    runPrefix + "pelanggan-limit",
+		"customer_contact": "081200000009",
+		"delivery_type":    "pickup",
+		"event_date":       dateCStr,
+		"items": []map[string]any{
+			{"product_id": productID, "qty": 25},
+		},
+	}, map[string]string{
+		"X-Forwarded-For": "198.51.100.209",
+		"Authorization":   "Bearer " + customerToken,
+	})
+	if wLimit.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("batas max_active_unpaid_orders: diharapkan 422 pada pesanan ke-3 belum bayar DP, dapat %d (%s)", wLimit.Code, wLimit.Body.String())
+	}
+
+	// Cek GET /api/v1/me/orders mengembalikan 2 pesanan milik pelanggan ini
+	wMeOrd := performJSON(router, http.MethodGet, "/api/v1/me/orders", nil, map[string]string{
+		"Authorization": "Bearer " + customerToken,
+	})
+	if wMeOrd.Code != http.StatusOK {
+		t.Fatalf("GET /me/orders: diharapkan 200, dapat %d (%s)", wMeOrd.Code, wMeOrd.Body.String())
+	}
+	var meOrdResp struct {
+		Data []orders.PublicTrackResponse `json:"data"`
+	}
+	_ = json.Unmarshal(wMeOrd.Body.Bytes(), &meOrdResp)
+	if len(meOrdResp.Data) != 2 {
+		t.Fatalf("GET /me/orders: diharapkan 2 pesanan, dapat %d", len(meOrdResp.Data))
+	}
 
 	// =========================================================================
 	// 2. Antrian Keputusan (GET /api/v1/decision-queue)
@@ -1303,7 +1431,10 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": productID, "qty": 25},
 		},
-	}, map[string]string{"X-Forwarded-For": "198.51.100.203"})
+	}, map[string]string{
+		"X-Forwarded-For": "198.51.100.203",
+		"Authorization":   "Bearer " + customerToken,
+	})
 	if wOrd3.Code != http.StatusCreated {
 		t.Fatalf("Order 3 POST /public/orders: diharapkan 201, dapat %d (%s)", wOrd3.Code, wOrd3.Body.String())
 	}

@@ -55,11 +55,33 @@ Content-Type: application/json
   "password": "{{demoPassword}}"
 }
 
-### 1.5 Cek Profil Pengguna Saat Ini (/auth/me)
+### 1.5 Login sebagai Customer Demo (Dewi Lestari)
+# @name loginCustomer
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@demo.test",
+  "password": "{{demoPassword}}"
+}
+
+### 1.6 Registrasi Pelanggan Baru (Publik, langsung login)
+# @name registerCustomer
+POST {{api}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Andi Pratama",
+  "email": "andi.pelanggan@demo.test",
+  "contact": "081299887766",
+  "password": "Password123!"
+}
+
+### 1.7 Cek Profil Pengguna Saat Ini (/auth/me)
 GET {{api}}/auth/me
 Authorization: Bearer {{loginOwner.response.body.data.token}}
 
-### 1.6 Logout
+### 1.8 Logout
 POST {{api}}/auth/logout
 Authorization: Bearer {{loginOwner.response.body.data.token}}
 
@@ -216,13 +238,14 @@ Content-Type: application/json
   ]
 }
 
-### 6.3 Buat Pesanan Publik (POST /public/orders)
+### 6.3 Buat Pesanan Publik (POST /public/orders — wajib login sebagai customer)
 # @name createPublicOrder
 POST {{api}}/public/orders
+Authorization: Bearer {{loginCustomer.response.body.data.token}}
 Content-Type: application/json
 
 {
-  "customer_name": "Bapak Hendra",
+  "customer_name": "Dewi Lestari",
   "customer_contact": "081234567890",
   "delivery_type": "pickup",
   "notes": "Ambil jam 09.00 pagi",
@@ -234,6 +257,11 @@ Content-Type: application/json
     }
   ]
 }
+
+### 6.3b Daftar Pesanan Milik Pelanggan Saat Ini (GET /me/orders — khusus customer)
+GET {{api}}/me/orders
+Authorization: Bearer {{loginCustomer.response.body.data.token}}
+Accept: application/json
 
 ### 6.4 Lacak Pesanan Publik (GET /public/orders/:code — hanya field aman)
 GET {{api}}/public/orders/{{createPublicOrder.response.body.data.code}}

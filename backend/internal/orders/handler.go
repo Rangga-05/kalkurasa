@@ -230,10 +230,11 @@ func validateOrderRequest(req createOrderRequest, allowManualFields bool) (Creat
 	}, v
 }
 
-// PublicOrderSummary adalah respons ringkas dan aman untuk POST /public/orders (Bagian 9).
+// PublicOrderSummary adalah respons ringkas dan aman untuk POST /public/orders (Bagian 9 & Tahap 4A+).
 type PublicOrderSummary struct {
 	ID             string            `json:"id"`
 	Code           string            `json:"code"`
+	CustomerID     *string           `json:"customer_id,omitempty"`
 	Status         string            `json:"status"`
 	Recommendation string            `json:"recommendation"`
 	EventDate      string            `json:"event_date"`
@@ -254,11 +255,27 @@ type PublicOrderItem struct {
 	Subtotal    decimal.Decimal `json:"subtotal"`
 }
 
-// CreatePublicOrder menangani POST /api/v1/public/orders (dibatasi laju 30/menit/IP via tabel rate_limits).
+// CreatePublicOrder menangani POST /api/v1/public/orders (wajib login sebagai customer; dibatasi laju 30/menit/IP via tabel rate_limits).
 func (h *Handler) CreatePublicOrder(c *gin.Context) {
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Autentikasi diperlukan. Silakan masuk sebagai pelanggan terlebih dahulu.")
+		return
+	}
+	if actor.Role != auth.RoleCustomer {
+		httpx.Forbidden(c, "Anda tidak memiliki izin untuk membuat pesanan sebagai pelanggan.")
+		return
+	}
+
 	var req createOrderRequest
 	if !httpx.BindJSON(c, &req) {
 		return
+	}
+	if strings.TrimSpace(req.CustomerName) == "" && strings.TrimSpace(actor.Name) != "" {
+		req.CustomerName = actor.Name
+	}
+	if strings.TrimSpace(req.CustomerContact) == "" && strings.TrimSpace(actor.Contact) != "" {
+		req.CustomerContact = actor.Contact
 	}
 	in, v := validateOrderRequest(req, false)
 	if !v.OK() {
@@ -274,6 +291,7 @@ func (h *Handler) CreatePublicOrder(c *gin.Context) {
 	}
 
 	in.Source = "public"
+	in.CustomerID = actor.ID
 	detail, err := CreateOrder(c.Request.Context(), h.DB, in)
 	if err != nil {
 		httpx.HandleError(c, err)
@@ -294,6 +312,7 @@ func (h *Handler) CreatePublicOrder(c *gin.Context) {
 	httpx.Created(c, PublicOrderSummary{
 		ID:             detail.ID,
 		Code:           detail.Code,
+		CustomerID:     detail.CustomerID,
 		Status:         detail.Status,
 		Recommendation: detail.Recommendation,
 		EventDate:      detail.EventDate,
@@ -304,6 +323,30 @@ func (h *Handler) CreatePublicOrder(c *gin.Context) {
 		Items:          pubItems,
 		CreatedAt:      detail.CreatedAt,
 	})
+}
+
+// MyOrders menangani GET /api/v1/me/orders (khusus peran customer).
+func (h *Handler) MyOrders(c *gin.Context) {
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Autentikasi diperlukan. Silakan masuk terlebih dahulu.")
+		return
+	}
+	if actor.Role != auth.RoleCustomer {
+		httpx.Forbidden(c, "Hanya akun pelanggan yang dapat melihat daftar pesanan pelanggan.")
+		return
+	}
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+
+	items, err := ListCustomerOrders(c.Request.Context(), h.DB, actor.ID)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, items)
 }
 
 // CreateManualOrder menangani POST /api/v1/orders (khusus manager dan owner).

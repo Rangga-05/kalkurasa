@@ -34,12 +34,13 @@ export interface ApiErrorEnvelope {
   error: ApiErrorBody;
 }
 
-export type UserRole = "owner" | "manager" | "staff" | "admin";
+export type UserRole = "owner" | "manager" | "staff" | "admin" | "customer";
 
 export interface User {
   id: string;
   email: string;
   name: string;
+  contact?: string;
   role: UserRole;
   is_active: boolean;
   created_at: string;
@@ -47,6 +48,13 @@ export interface User {
 
 export interface LoginRequest {
   email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  contact: string;
   password: string;
 }
 
@@ -129,8 +137,8 @@ export interface CreatePublicOrderItemInput {
 }
 
 export interface CreatePublicOrderRequest {
-  customer_name: string;
-  customer_contact: string;
+  customer_name?: string;
+  customer_contact?: string;
   delivery_type: DeliveryType;
   address?: string;
   notes?: string;
@@ -141,6 +149,7 @@ export interface CreatePublicOrderRequest {
 export interface PublicOrderSummary {
   id: string;
   code: string;
+  customer_id?: string | null;
   status: OrderStatus;
   recommendation: RecommendationType | string;
   event_date: string; // YYYY-MM-DD

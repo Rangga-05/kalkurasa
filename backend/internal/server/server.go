@@ -84,6 +84,7 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 	secret := []byte(cfg.JWTSecret)
 	authHandler := &auth.Handler{
 		Store:        store,
+		DB:           dbConn,
 		Secret:       secret,
 		CookieSecure: cfg.CookieSecure,
 		ExposeToken:  cfg.AppEnv != "production",
@@ -105,17 +106,19 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 	manageOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager)
 	readOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleStaff, auth.RoleAdmin)
 	transitionOrders := auth.RequireRole(auth.RoleOwner, auth.RoleManager, auth.RoleStaff)
+	customerOnly := auth.RequireRole(auth.RoleCustomer)
 
 	v1 := r.Group("/api/v1")
 	{
 		// Public auth endpoints
+		v1.POST("/auth/register", authHandler.Register)
 		v1.POST("/auth/login", authHandler.Login)
 		v1.POST("/auth/logout", authHandler.Logout)
 
-		// Public order & catalog endpoints (Tahap 3A & 3B)
+		// Public order & catalog endpoints (Tahap 3A, 3B & 4A+)
 		v1.GET("/public/products", ordersHandler.PublicProducts)
 		v1.POST("/public/availability", ordersHandler.PublicAvailability)
-		v1.POST("/public/orders", ordersHandler.CreatePublicOrder)
+		v1.POST("/public/orders", guard.Authenticate(), customerOnly, ordersHandler.CreatePublicOrder)
 		v1.GET("/public/orders/:code", ordersHandler.TrackPublicOrder)
 		v1.POST("/public/orders/:code/counter-response", ordersHandler.CounterResponse)
 
@@ -124,6 +127,7 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 		protected.Use(guard.Authenticate())
 		{
 			protected.GET("/auth/me", authHandler.Me)
+			protected.GET("/me/orders", customerOnly, ordersHandler.MyOrders)
 
 			// Internal orders, decision queue & capacity (Tahap 3A & 3B)
 			protected.GET("/orders", readOrders, ordersHandler.ListOrders)

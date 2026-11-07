@@ -22,14 +22,26 @@ import (
 )
 
 type testUserStore struct {
-	users map[string]*auth.User
+	mu      sync.Mutex
+	users   map[string]*auth.User
+	byEmail map[string]*auth.UserWithHash
+	seq     int
 }
 
-func (s *testUserStore) FindByEmail(_ context.Context, _ string) (*auth.UserWithHash, error) {
+func (s *testUserStore) FindByEmail(_ context.Context, email string) (*auth.UserWithHash, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.byEmail != nil {
+		if u, ok := s.byEmail[strings.ToLower(email)]; ok {
+			return u, nil
+		}
+	}
 	return nil, auth.ErrNotFound
 }
 
 func (s *testUserStore) FindByID(_ context.Context, id string) (*auth.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	u, ok := s.users[id]
 	if !ok {
 		return nil, auth.ErrNotFound
@@ -37,15 +49,49 @@ func (s *testUserStore) FindByID(_ context.Context, id string) (*auth.User, erro
 	return u, nil
 }
 
+func (s *testUserStore) CreateCustomer(_ context.Context, email, name, contact, passwordHash string) (*auth.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.byEmail == nil {
+		s.byEmail = make(map[string]*auth.UserWithHash)
+	}
+	normEmail := strings.ToLower(strings.TrimSpace(email))
+	if _, exists := s.byEmail[normEmail]; exists {
+		return nil, auth.ErrEmailTaken
+	}
+	for _, existing := range s.users {
+		if strings.EqualFold(existing.Email, normEmail) {
+			return nil, auth.ErrEmailTaken
+		}
+	}
+	s.seq++
+	id := fmt.Sprintf("99999999-9999-4000-8000-%012d", s.seq)
+	u := auth.User{
+		ID:        id,
+		Email:     normEmail,
+		Name:      name,
+		Contact:   contact,
+		Role:      auth.RoleCustomer,
+		IsActive:  true,
+		CreatedAt: time.Now().UTC(),
+	}
+	s.users[id] = &u
+	s.byEmail[normEmail] = &auth.UserWithHash{User: u, PasswordHash: passwordHash}
+	return &u, nil
+}
+
 type testEnv struct {
-	db           *memDB
-	router       *gin.Engine
-	snackBoxID   string
-	tartID       string
-	flourID      string
-	managerToken string
-	ownerToken   string
-	staffToken   string
+	db             *memDB
+	router         *gin.Engine
+	snackBoxID     string
+	tartID         string
+	flourID        string
+	managerToken   string
+	ownerToken     string
+	staffToken     string
+	customerID     string
+	customerToken  string
+	customer2Token string
 }
 
 // setupIsolatedTestEnv membuat fixture data uji langsung di dalam test
@@ -143,7 +189,7 @@ func setupIsolatedTestEnv(t *testing.T) *testEnv {
 		flourID: decimal.RequireFromString("0.40"), // 0,40 kg tepung per tart
 	}
 
-	// 4. Pengguna uji (owner, manager, & staff)
+	// 4. Pengguna uji (owner, manager, staff, & customer)
 	now := time.Date(2026, 11, 10, 8, 0, 0, 0, time.UTC)
 	uStore := &testUserStore{
 		users: map[string]*auth.User{
@@ -155,6 +201,12 @@ func setupIsolatedTestEnv(t *testing.T) *testEnv {
 			},
 			"33333333-3333-3333-3333-333333333333": {
 				ID: "33333333-3333-3333-3333-333333333333", Email: "staff@test.local", Name: "Staff Uji", Role: auth.RoleStaff, IsActive: true, CreatedAt: now,
+			},
+			"44444444-4444-4444-4444-444444444444": {
+				ID: "44444444-4444-4444-4444-444444444444", Email: "customer@test.local", Name: "Pelanggan Uji", Contact: "081234567890", Role: auth.RoleCustomer, IsActive: true, CreatedAt: now,
+			},
+			"55555555-5555-5555-5555-555555555555": {
+				ID: "55555555-5555-5555-5555-555555555555", Email: "customer2@test.local", Name: "Pelanggan Kedua", Contact: "081299990000", Role: auth.RoleCustomer, IsActive: true, CreatedAt: now,
 			},
 		},
 	}
@@ -174,16 +226,21 @@ func setupIsolatedTestEnv(t *testing.T) *testEnv {
 	ownerTok, _, _ := auth.IssueToken(secret, "11111111-1111-1111-1111-111111111111", auth.RoleOwner, time.Now(), auth.TokenTTL)
 	mgrTok, _, _ := auth.IssueToken(secret, "22222222-2222-2222-2222-222222222222", auth.RoleManager, time.Now(), auth.TokenTTL)
 	staffTok, _, _ := auth.IssueToken(secret, "33333333-3333-3333-3333-333333333333", auth.RoleStaff, time.Now(), auth.TokenTTL)
+	custTok, _, _ := auth.IssueToken(secret, "44444444-4444-4444-4444-444444444444", auth.RoleCustomer, time.Now(), auth.TokenTTL)
+	cust2Tok, _, _ := auth.IssueToken(secret, "55555555-5555-5555-5555-555555555555", auth.RoleCustomer, time.Now(), auth.TokenTTL)
 
 	return &testEnv{
-		db:           mdb,
-		router:       r,
-		snackBoxID:   snackBoxID,
-		tartID:       tartID,
-		flourID:      flourID,
-		managerToken: mgrTok,
-		ownerToken:   ownerTok,
-		staffToken:   staffTok,
+		db:             mdb,
+		router:         r,
+		snackBoxID:     snackBoxID,
+		tartID:         tartID,
+		flourID:        flourID,
+		managerToken:   mgrTok,
+		ownerToken:     ownerTok,
+		staffToken:     staffTok,
+		customerID:     "44444444-4444-4444-4444-444444444444",
+		customerToken:  custTok,
+		customer2Token: cust2Tok,
 	}
 }
 
@@ -257,6 +314,10 @@ func TestTC08_ConcurrentOrdersLastSlot(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			<-startBarrier
+			tok := env.customerToken
+			if idx == 1 {
+				tok = env.customer2Token
+			}
 			w := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
 				"customer_name":    fmt.Sprintf("Pelanggan Serentak %d", idx+1),
 				"customer_contact": fmt.Sprintf("0812345678%d", idx+1),
@@ -267,6 +328,7 @@ func TestTC08_ConcurrentOrdersLastSlot(t *testing.T) {
 				},
 			}, map[string]string{
 				"X-Forwarded-For": fmt.Sprintf("203.0.113.%d", idx+10),
+				"Authorization":   "Bearer " + tok,
 			})
 			var envResp struct {
 				Data orders.PublicOrderSummary `json:"data"`
@@ -437,7 +499,9 @@ func TestTC09_CustomerOrderTrackingAndGuessingCode(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": env.snackBoxID, "qty": 10},
 		},
-	}, nil)
+	}, map[string]string{
+		"Authorization": "Bearer " + env.customerToken,
+	})
 	if wCreate.Code != http.StatusCreated {
 		t.Fatalf("create order: expected 201, got %d (%s)", wCreate.Code, wCreate.Body.String())
 	}
@@ -526,7 +590,9 @@ func TestTC11_DPExpirationReleasesCapacity(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": env.snackBoxID, "qty": 45},
 		},
-	}, nil)
+	}, map[string]string{
+		"Authorization": "Bearer " + env.customerToken,
+	})
 	if wOrd1.Code != http.StatusCreated {
 		t.Fatalf("create order 1: expected 201, got %d (%s)", wOrd1.Code, wOrd1.Body.String())
 	}
@@ -560,7 +626,9 @@ func TestTC11_DPExpirationReleasesCapacity(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": env.snackBoxID, "qty": 45},
 		},
-	}, nil)
+	}, map[string]string{
+		"Authorization": "Bearer " + env.customer2Token,
+	})
 	if wOrd2.Code != http.StatusCreated {
 		t.Fatalf("create order 2: expected 201, got %d (%s)", wOrd2.Code, wOrd2.Body.String())
 	}
@@ -693,7 +761,9 @@ func TestDecision_RoleRestrictions(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": env.snackBoxID, "qty": 60},
 		},
-	}, nil)
+	}, map[string]string{
+		"Authorization": "Bearer " + env.customerToken,
+	})
 	if wBig.Code != http.StatusCreated {
 		t.Fatalf("create big order: expected 201, got %d (%s)", wBig.Code, wBig.Body.String())
 	}
@@ -851,7 +921,9 @@ func TestCancelOrder_ReleasesCapacityAndCalculatesExposure(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": env.snackBoxID, "qty": 40},
 		},
-	}, nil)
+	}, map[string]string{
+		"Authorization": "Bearer " + env.customerToken,
+	})
 	if wNew.Code != http.StatusCreated {
 		t.Fatalf("create new order after cancel: expected 201, got %d (%s)", wNew.Code, wNew.Body.String())
 	}
@@ -913,7 +985,9 @@ func TestFullOrderLifecycle_AU1_ToCompleted(t *testing.T) {
 		"items": []map[string]any{
 			{"product_id": env.snackBoxID, "qty": 25},
 		},
-	}, nil)
+	}, map[string]string{
+		"Authorization": "Bearer " + env.customerToken,
+	})
 	if wCreate.Code != http.StatusCreated {
 		t.Fatalf("step 1 create order: expected 201, got %d (%s)", wCreate.Code, wCreate.Body.String())
 	}
@@ -1089,5 +1163,188 @@ func TestFullOrderLifecycle_AU1_ToCompleted(t *testing.T) {
 	_ = json.Unmarshal(wComplete.Body.Bytes(), &finalOrd)
 	if finalOrd.Data.Status != orders.StatusCompleted {
 		t.Fatalf("step 10 expected final status 'completed', got %q", finalOrd.Data.Status)
+	}
+}
+
+// TestTahap4APlus_CustomerAuthOrdersAndActiveLimit menguji seluruh ketentuan Tahap 4A+:
+//  1. POST /api/v1/auth/register berhasil (201 + cookie + token), duplikat email ditolak (409), validasi gagal (422).
+//  2. POST /api/v1/public/orders tanpa login -> 401; dengan peran non-customer -> 403.
+//  3. POST /api/v1/public/orders dengan login customer mengisi customer_id dan membaca nama/kontak dari profil bila kosong.
+//  4. Batas max_active_unpaid_orders (default 2): pesanan belum bayar DP ke-3 ditolak dengan 422; setelah salah satu dibayar DP, pesanan ke-3 berhasil.
+//  5. GET /api/v1/me/orders mengembalikan daftar pesanan milik pelanggan dengan field aman saja.
+//  6. Peran customer ditolak (403) pada endpoint internal.
+func TestTahap4APlus_CustomerAuthOrdersAndActiveLimit(t *testing.T) {
+	env := setupIsolatedTestEnv(t)
+
+	// 1a. Registrasi validasi gagal (kata sandi < 8 karakter, email salah) -> 422
+	wRegInvalid := performJSON(env.router, http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"name":     "Siti",
+		"email":    "bukan-email",
+		"contact":  "081200001111",
+		"password": "123",
+	}, nil)
+	if wRegInvalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("register invalid expected 422, got %d (%s)", wRegInvalid.Code, wRegInvalid.Body.String())
+	}
+
+	// 1b. Registrasi berhasil -> 201 Created + cookie sesi + user role customer
+	wRegOK := performJSON(env.router, http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"name":     "Siti Rahmawati",
+		"email":    "siti.rahma@demo.test",
+		"contact":  "081288889999",
+		"password": "PasswordAman123!",
+	}, nil)
+	if wRegOK.Code != http.StatusCreated {
+		t.Fatalf("register valid expected 201, got %d (%s)", wRegOK.Code, wRegOK.Body.String())
+	}
+	var regResp struct {
+		Data struct {
+			Token string    `json:"token"`
+			User  auth.User `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(wRegOK.Body.Bytes(), &regResp); err != nil {
+		t.Fatalf("unmarshal register response: %v", err)
+	}
+	if regResp.Data.User.Role != auth.RoleCustomer || regResp.Data.User.Contact != "081288889999" || regResp.Data.Token == "" {
+		t.Fatalf("unexpected registered user: %+v", regResp.Data)
+	}
+	sitiID := regResp.Data.User.ID
+	sitiHdr := map[string]string{"Authorization": "Bearer " + regResp.Data.Token}
+
+	// 1c. Registrasi email duplikat -> 409 Conflict
+	wRegDup := performJSON(env.router, http.MethodPost, "/api/v1/auth/register", map[string]any{
+		"name":     "Siti Kedua",
+		"email":    "SITI.RAHMA@demo.test",
+		"contact":  "081200009999",
+		"password": "PasswordAman123!",
+	}, nil)
+	if wRegDup.Code != http.StatusConflict {
+		t.Fatalf("register duplicate email expected 409, got %d (%s)", wRegDup.Code, wRegDup.Body.String())
+	}
+
+	// 2a. POST /public/orders tanpa login -> 401 Unauthorized
+	wUnauth := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"delivery_type": "pickup",
+		"event_date":    "2026-11-15",
+		"items":         []map[string]any{{"product_id": env.snackBoxID, "qty": 10}},
+	}, nil)
+	if wUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /public/orders unauthenticated expected 401, got %d (%s)", wUnauth.Code, wUnauth.Body.String())
+	}
+
+	// 2b. POST /public/orders dengan peran staff -> 403 Forbidden
+	wStaffOrd := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"customer_name":    "Staff",
+		"customer_contact": "0811",
+		"delivery_type":    "pickup",
+		"event_date":       "2026-11-15",
+		"items":            []map[string]any{{"product_id": env.snackBoxID, "qty": 10}},
+	}, map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wStaffOrd.Code != http.StatusForbidden {
+		t.Fatalf("POST /public/orders by staff expected 403, got %d (%s)", wStaffOrd.Code, wStaffOrd.Body.String())
+	}
+
+	// 3. POST /public/orders dengan login customer (tanpa mengisi customer_name & customer_contact -> dibaca dari profil Siti)
+	wOrd1 := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"delivery_type": "pickup",
+		"event_date":    "2026-11-15",
+		"items":         []map[string]any{{"product_id": env.snackBoxID, "qty": 10}},
+	}, sitiHdr)
+	if wOrd1.Code != http.StatusCreated {
+		t.Fatalf("order 1 by customer expected 201, got %d (%s)", wOrd1.Code, wOrd1.Body.String())
+	}
+	var ord1 struct {
+		Data orders.PublicOrderSummary `json:"data"`
+	}
+	_ = json.Unmarshal(wOrd1.Body.Bytes(), &ord1)
+	if ord1.Data.CustomerID == nil || *ord1.Data.CustomerID != sitiID {
+		t.Fatalf("expected customer_id=%s, got %v", sitiID, ord1.Data.CustomerID)
+	}
+
+	// 4. Pesanan aktif belum bayar DP ke-2 untuk Siti -> berhasil (201, masuk batas max_active_unpaid_orders = 2)
+	wOrd2 := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"customer_name":    "Siti Rahmawati (Kantor)",
+		"customer_contact": "081277770000",
+		"delivery_type":    "pickup",
+		"event_date":       "2026-11-16",
+		"items":            []map[string]any{{"product_id": env.snackBoxID, "qty": 10}},
+	}, sitiHdr)
+	if wOrd2.Code != http.StatusCreated {
+		t.Fatalf("order 2 by customer expected 201, got %d (%s)", wOrd2.Code, wOrd2.Body.String())
+	}
+
+	// Pesanan ke-3 sementara pesanan 1 & 2 belum bayar DP -> ditolak 422 (active_order_limit)
+	wOrd3Blocked := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"delivery_type": "pickup",
+		"event_date":    "2026-11-17",
+		"items":         []map[string]any{{"product_id": env.snackBoxID, "qty": 10}},
+	}, sitiHdr)
+	if wOrd3Blocked.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("3rd active unpaid order expected 422, got %d (%s)", wOrd3Blocked.Code, wOrd3Blocked.Body.String())
+	}
+	if !strings.Contains(wOrd3Blocked.Body.String(), "active_order_limit") {
+		t.Errorf("expected error code active_order_limit, got %s", wOrd3Blocked.Body.String())
+	}
+
+	// Setelah pesanan ke-1 dibayar DP (status berubah ke confirmed), Siti boleh membuat pesanan baru lagi!
+	wPay1 := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+ord1.Data.ID+"/payments", map[string]any{
+		"amount": ord1.Data.DPRequired,
+		"method": "transfer",
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wPay1.Code != http.StatusCreated {
+		t.Fatalf("pay DP order 1 expected 201, got %d (%s)", wPay1.Code, wPay1.Body.String())
+	}
+
+	wOrd3Allowed := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
+		"delivery_type": "pickup",
+		"event_date":    "2026-11-17",
+		"items":         []map[string]any{{"product_id": env.snackBoxID, "qty": 10}},
+	}, sitiHdr)
+	if wOrd3Allowed.Code != http.StatusCreated {
+		t.Fatalf("order 3 after paying DP on order 1 expected 201, got %d (%s)", wOrd3Allowed.Code, wOrd3Allowed.Body.String())
+	}
+
+	// 5. GET /api/v1/me/orders oleh Siti mengembalikan 3 pesanan milik Siti saja, hanya field aman
+	wMyOrders := performJSON(env.router, http.MethodGet, "/api/v1/me/orders", nil, sitiHdr)
+	if wMyOrders.Code != http.StatusOK {
+		t.Fatalf("GET /me/orders expected 200, got %d (%s)", wMyOrders.Code, wMyOrders.Body.String())
+	}
+	rawMyOrders := wMyOrders.Body.String()
+	for _, secretField := range []string{"unit_cost", "margin", "snapshot", "cash_lowest"} {
+		if strings.Contains(rawMyOrders, secretField) {
+			t.Errorf("GET /me/orders leaked secret field %q: %s", secretField, rawMyOrders)
+		}
+	}
+	var myOrdersResp struct {
+		Data []orders.PublicTrackResponse `json:"data"`
+	}
+	if err := json.Unmarshal(wMyOrders.Body.Bytes(), &myOrdersResp); err != nil {
+		t.Fatalf("unmarshal /me/orders: %v", err)
+	}
+	if len(myOrdersResp.Data) != 3 {
+		t.Fatalf("expected 3 orders in /me/orders for Siti, got %d", len(myOrdersResp.Data))
+	}
+
+	// 6. Peran customer ditolak (403 Forbidden) pada endpoint internal
+	internalEndpoints := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/api/v1/orders"},
+		{http.MethodPost, "/api/v1/orders"},
+		{http.MethodGet, "/api/v1/decision-queue"},
+		{http.MethodGet, "/api/v1/capacity/calendar"},
+		{http.MethodGet, "/api/v1/settings"},
+		{http.MethodPut, "/api/v1/settings"},
+		{http.MethodGet, "/api/v1/products"},
+		{http.MethodGet, "/api/v1/ingredients"},
+		{http.MethodGet, "/api/v1/users"},
+	}
+	for _, ep := range internalEndpoints {
+		w := performJSON(env.router, ep.method, ep.path, nil, sitiHdr)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("customer accessing internal %s %s expected 403, got %d (%s)", ep.method, ep.path, w.Code, w.Body.String())
+		}
 	}
 }

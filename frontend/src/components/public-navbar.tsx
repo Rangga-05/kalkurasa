@@ -1,8 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChefHat, Lock, PackageSearch, ShoppingBag, Store } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ChefHat,
+  ClipboardList,
+  LayoutDashboard,
+  LogIn,
+  LogOut,
+  PackageSearch,
+  ShoppingBag,
+  Store,
+  UserPlus,
+} from "lucide-react";
+import { getErrorMessage, getMe, logout } from "@/lib/api";
+import { getDashboardPathForRole } from "@/lib/format";
+import { useToast } from "@/components/providers";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -13,6 +27,35 @@ const NAV_ITEMS = [
 
 export function PublicNavbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  const meQuery = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: ({ signal }) => getMe(signal),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: logout,
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["auth-me"] });
+      queryClient.removeQueries({ queryKey: ["my-orders"] });
+      toast.info("Berhasil Keluar", "Sesi akun Anda telah diakhiri.");
+      if (pathname === "/pesanan-saya") {
+        router.replace("/login");
+      } else {
+        router.refresh();
+      }
+    },
+    onError: (err) => {
+      toast.error("Gagal Keluar", getErrorMessage(err));
+    },
+  });
+
+  const user = meQuery.data;
 
   return (
     <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur-sm">
@@ -36,7 +79,7 @@ export function PublicNavbar() {
 
         <nav
           aria-label="Navigasi publik"
-          className="flex items-center gap-1 sm:gap-2"
+          className="flex flex-wrap items-center justify-end gap-1 sm:gap-2"
         >
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -61,14 +104,77 @@ export function PublicNavbar() {
               </Link>
             );
           })}
-          <Link
-            href="/login"
-            className="ml-0.5 inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900 sm:ml-2 sm:px-3 sm:text-sm"
-          >
-            <Lock className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">Portal Internal</span>
-            <span className="sm:hidden">Staf</span>
-          </Link>
+
+          {user?.role === "customer" ? (
+            <>
+              <Link
+                href="/pesanan-saya"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+                  pathname === "/pesanan-saya"
+                    ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+                    : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                )}
+              >
+                <ClipboardList className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                <span>Pesanan Saya</span>
+              </Link>
+              <button
+                type="button"
+                disabled={logoutMutation.isPending}
+                onClick={() => logoutMutation.mutate()}
+                className="ml-0.5 inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900 sm:ml-1 sm:px-3 sm:text-sm cursor-pointer"
+                title={`Keluar (${user.name})`}
+              >
+                <LogOut className="h-3.5 w-3.5 shrink-0 text-rose-700" />
+                <span className="hidden sm:inline">Keluar</span>
+              </button>
+            </>
+          ) : user ? (
+            <>
+              <Link
+                href={getDashboardPathForRole(user.role)}
+                className="ml-0.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 sm:ml-1 sm:px-3 sm:text-sm"
+              >
+                <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">Dashboard Internal</span>
+                <span className="sm:hidden">Panel</span>
+              </Link>
+              <button
+                type="button"
+                disabled={logoutMutation.isPending}
+                onClick={() => logoutMutation.mutate()}
+                className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900 sm:px-3 sm:text-sm cursor-pointer"
+                title={`Keluar (${user.name})`}
+              >
+                <LogOut className="h-3.5 w-3.5 shrink-0 text-rose-700" />
+                <span className="hidden sm:inline">Keluar</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className={cn(
+                  "ml-0.5 inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-stone-50 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900 sm:ml-1 sm:px-3 sm:text-sm",
+                  pathname === "/login" && "border-amber-300 bg-amber-50 text-amber-900"
+                )}
+              >
+                <LogIn className="h-3.5 w-3.5 shrink-0" />
+                <span>Masuk</span>
+              </Link>
+              <Link
+                href="/daftar"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg bg-amber-700 px-2.5 py-1.5 text-xs font-medium text-white shadow-xs transition-colors hover:bg-amber-800 sm:px-3 sm:text-sm",
+                  pathname === "/daftar" && "ring-2 ring-amber-400"
+                )}
+              >
+                <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                <span>Daftar</span>
+              </Link>
+            </>
+          )}
         </nav>
       </div>
     </header>

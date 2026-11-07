@@ -14,17 +14,23 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Copy,
+  HelpCircle,
   Info,
   Loader2,
+  LogIn,
   Plus,
   ShoppingBag,
   Trash2,
+  UserCheck,
+  UserPlus,
 } from "lucide-react";
 import {
   getPublicProducts,
   checkPublicAvailability,
   createPublicOrder,
+  getMe,
   ApiError,
   getErrorMessage,
 } from "@/lib/api";
@@ -165,6 +171,17 @@ function OrderFormContent() {
     queryFn: ({ signal }) => getPublicProducts(signal),
   });
 
+  const meQuery = useQuery({
+    queryKey: ["auth-me"],
+    queryFn: ({ signal }) => getMe(signal),
+    retry: false,
+  });
+
+  const isCustomerLoggedIn = meQuery.data?.role === "customer";
+  const nextUrlParam = preselectedProductId
+    ? `/pesan?product=${encodeURIComponent(preselectedProductId)}`
+    : "/pesan";
+
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderFormSchema),
     defaultValues: {
@@ -177,6 +194,23 @@ function OrderFormContent() {
       notes: "",
     },
   });
+
+  // Isi otomatis nama dan kontak dari profil pelanggan bila sudah masuk sebagai customer (tetap dapat diedit)
+  useEffect(() => {
+    if (meQuery.data?.role !== "customer") return;
+    const currentName = form.getValues("customer_name");
+    const currentContact = form.getValues("customer_contact");
+    if (!currentName && meQuery.data.name) {
+      form.setValue("customer_name", meQuery.data.name, {
+        shouldValidate: true,
+      });
+    }
+    if (!currentContact && meQuery.data.contact) {
+      form.setValue("customer_contact", meQuery.data.contact, {
+        shouldValidate: true,
+      });
+    }
+  }, [meQuery.data, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -310,6 +344,18 @@ function OrderFormContent() {
     return count;
   }, [watchedItems]);
 
+  const selectedDayInfo = useMemo(() => {
+    if (!watchedEventDate || !availabilityQuery.data) return null;
+    return (
+      availabilityQuery.data.find((d) => d.date === watchedEventDate) ?? null
+    );
+  }, [watchedEventDate, availabilityQuery.data]);
+
+  const isLargeOrder = estimatedTotal >= 2_000_000 || totalUnits >= 50;
+  const isSelectedDateDense = selectedDayInfo
+    ? toNumber(selectedDayInfo.utilization_after) >= 0.7
+    : false;
+
   const createOrderMutation = useMutation({
     mutationFn: createPublicOrder,
     onSuccess: (summary) => {
@@ -369,6 +415,13 @@ function OrderFormContent() {
       description: "",
       variant: "amber" as const,
     };
+    const submittedUnits = submittedOrder.items.reduce(
+      (sum, it) => sum + it.qty,
+      0
+    );
+    const submittedTotalNum = toNumber(submittedOrder.total);
+    const isSubmittedLarge =
+      submittedTotalNum >= 2_000_000 || submittedUnits >= 50;
 
     return (
       <div className="mx-auto max-w-3xl space-y-6">
@@ -389,8 +442,9 @@ function OrderFormContent() {
               </CardTitle>
             </div>
             <CardDescription className="text-stone-700">
-              Simpan kode pesanan di bawah ini untuk melacak progres produksi,
-              melihat tagihan DP, atau merespons tawaran balik.
+              Simpan kode pesanan di bawah ini atau buka menu{" "}
+              <strong>Pesanan Saya</strong> untuk memantau progres, melihat
+              tagihan DP, dan merespons tawaran balik.
             </CardDescription>
           </CardHeader>
 
@@ -428,15 +482,62 @@ function OrderFormContent() {
               </div>
             </div>
 
-            {/* Penjelasan Status & Rekomendasi */}
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs leading-relaxed text-stone-700 sm:text-sm">
+            {/* Penjelasan Status dengan Bahasa Awam */}
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 text-xs leading-relaxed text-stone-700 sm:text-sm space-y-2">
               <p className="font-semibold text-stone-900">{statusMeta.label}</p>
-              <p className="mt-0.5">{statusMeta.description}</p>
-              {recMeta.description ? (
-                <p className="mt-1.5 text-xs text-stone-500">
-                  {recMeta.description}
-                </p>
-              ) : null}
+              {submittedOrder.status === "pending_decision" ? (
+                <div className="space-y-1.5 text-stone-700">
+                  <p>
+                    <strong>
+                      Mengapa pesanan saya berstatus &ldquo;Menunggu Konfirmasi
+                      Usaha&rdquo; dan belum langsung diterima?
+                    </strong>
+                  </p>
+                  <p>
+                    {isSubmittedLarge ? (
+                      <>
+                        Pesanan Anda berjumlah cukup besar (
+                        <strong>{submittedUnits} unit</strong> senilai{" "}
+                        <strong>{formatRupiah(submittedOrder.total)}</strong>,
+                        melewati ambang pesanan besar 50 unit atau Rp 2.000.000).
+                        Untuk pesanan skala ini, Pemilik/Manajer perlu memastikan
+                        ketersediaan bahan baku segar dan kesiapan tim dapur
+                        terlebih dahulu sebelum meminta Anda membayar uang muka
+                        (DP).
+                      </>
+                    ) : (
+                      <>
+                        Pada tanggal acara yang Anda pilih, jadwal produksi dapur
+                        cukup padat atau memerlukan pengecekan kesiapan bahan
+                        baku dan waktu persiapan oleh Manajer/Pemilik kami. Oleh
+                        karena itu, pesanan Anda tidak ditolak, melainkan
+                        diteruskan ke tim kami untuk dikonfirmasi terlebih
+                        dahulu.
+                      </>
+                    )}
+                  </p>
+                  <p className="text-xs text-stone-600">
+                    <strong>Langkah berikutnya:</strong> Anda{" "}
+                    <u>belum perlu mentransfer DP sekarang</u>. Begitu tim kami
+                    menyetujui jadwalnya, status pesanan akan berubah menjadi{" "}
+                    <strong>Disetujui — Menunggu DP</strong> (atau kami akan
+                    mengirimkan saran tanggal alternatif jika jadwal penuh).
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1 text-stone-700">
+                  <p>
+                    Jadwal dapur dan ketersediaan bahan pada tanggal pilihan Anda
+                    mencukupi, sehingga pesanan{" "}
+                    <strong>langsung disetujui secara otomatis</strong> dan slot
+                    produksi Anda sudah kami amankan sementara.
+                  </p>
+                  <p className="text-xs text-stone-600">
+                    Silakan selesaikan pembayaran uang muka (DP) sebelum tenggat
+                    waktu berakhir agar pesanan masuk ke jadwal produksi tetap.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Rincian Tanggal, Total, DP, Tenggat */}
@@ -524,8 +625,8 @@ function OrderFormContent() {
                       },
                     ],
                     event_date: "",
-                    customer_name: "",
-                    customer_contact: "",
+                    customer_name: meQuery.data?.name ?? "",
+                    customer_contact: meQuery.data?.contact ?? "",
                     delivery_type: "pickup",
                     address: "",
                     notes: "",
@@ -534,12 +635,23 @@ function OrderFormContent() {
               >
                 Buat Pesanan Lain
               </Button>
-              <Link href={`/lacak/${encodeURIComponent(submittedOrder.code)}`}>
-                <Button className="w-full gap-2 sm:w-auto">
-                  Buka Halaman Lacak Pesanan
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/pesanan-saya" className="flex-1 sm:flex-initial">
+                  <Button variant="outline" className="w-full gap-1.5">
+                    <ClipboardList className="h-4 w-4" />
+                    Pesanan Saya
+                  </Button>
+                </Link>
+                <Link
+                  href={`/lacak/${encodeURIComponent(submittedOrder.code)}`}
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Button className="w-full gap-2">
+                    Buka Halaman Lacak Pesanan
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -553,6 +665,56 @@ function OrderFormContent() {
       noValidate
       className="grid grid-cols-1 gap-6 lg:grid-cols-12"
     >
+      {/* Banner Status Login Pelanggan (Penuh Lebar di Atas Form) */}
+      <div className="lg:col-span-12">
+        {!meQuery.isLoading && !isCustomerLoggedIn ? (
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-xs text-stone-800 shadow-xs sm:flex-row sm:items-center sm:text-sm">
+            <div className="space-y-1">
+              <p className="font-bold text-amber-950">
+                Masuk atau Daftar Akun Pelanggan untuk Mengirim Pesanan
+              </p>
+              <p className="text-xs text-stone-700">
+                Anda tetap dapat memilih produk dan mengecek ketersediaan tanggal
+                di bawah ini. Untuk mengirim pesanan dan mengamankan slot dapur,
+                silakan masuk atau daftar akun pelanggan terlebih dahulu.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Link href={`/login?next=${encodeURIComponent(nextUrlParam)}`}>
+                <Button variant="outline" size="sm" className="gap-1.5 bg-white">
+                  <LogIn className="h-3.5 w-3.5" />
+                  Masuk
+                </Button>
+              </Link>
+              <Link href={`/daftar?next=${encodeURIComponent(nextUrlParam)}`}>
+                <Button size="sm" className="gap-1.5">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Daftar Akun Pelanggan
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ) : isCustomerLoggedIn && meQuery.data ? (
+          <div className="flex flex-col justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-950 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <UserCheck className="h-4 w-4 shrink-0 text-emerald-700" />
+              <span>
+                Anda memesan sebagai{" "}
+                <strong>{meQuery.data.name}</strong> ({meQuery.data.email}).
+                Nama dan nomor kontak telah diisi otomatis dari profil Anda dan
+                tetap dapat diubah bila diperlukan.
+              </span>
+            </div>
+            <Link
+              href="/pesanan-saya"
+              className="shrink-0 font-semibold text-emerald-800 underline underline-offset-2 hover:text-emerald-950"
+            >
+              Lihat Pesanan Saya →
+            </Link>
+          </div>
+        ) : null}
+      </div>
+
       {/* Kolom Kiri: Produk & Pemilih Tanggal */}
       <div className="space-y-6 lg:col-span-7">
         {serverFieldErrors.length > 0 ? (
@@ -763,24 +925,36 @@ function OrderFormContent() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* Legenda Status Hari */}
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-xs text-stone-700">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                Tersedia
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                Hampir Penuh
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                Penuh (Tidak Dapat Dipilih)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-stone-400" />
-                Di Bawah Lead Time
-              </span>
+            {/* Legenda Status Hari & Penjelasan Persentase Beban */}
+            <div className="space-y-2 rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-xs text-stone-700">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  Tersedia (&lt; 70%)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                  Padat (70% – 90%)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500" />
+                  Penuh (&gt; 90%, Tidak Dapat Dipilih)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-stone-400" />
+                  Di Bawah Lead Time
+                </span>
+              </div>
+              <p className="flex items-start gap-1.5 border-t border-stone-200/80 pt-1.5 text-[11px] text-stone-600">
+                <HelpCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+                <span>
+                  <strong>Apa arti &ldquo;Beban setelah pesanan ini&rdquo;?</strong>{" "}
+                  Angka tersebut menunjukkan persentase kapasitas harian dapur
+                  (jam oven &amp; tenaga kerja) yang terpakai jika pesanan Anda
+                  masuk pada tanggal itu. Pesanan dapat diterima hingga beban
+                  maksimal 90%.
+                </span>
+              </p>
             </div>
 
             {availabilityQuery.isLoading || availabilityQuery.isFetching ? (
@@ -817,16 +991,19 @@ function OrderFormContent() {
                       day.status === "red" ||
                       utilNum > 0.9);
                   const isUnderLeadTime = !day.available && !isFullCapacity;
-                  const isAlmostFull =
+                  const isDense =
                     day.available &&
                     (day.status === "yellow" ||
                       day.status === "red" ||
                       utilNum >= 0.7);
+                  const pctRounded = Math.round(utilNum * 100);
 
                   let statusText = "Tersedia";
                   if (isFullCapacity) statusText = "Penuh";
                   else if (isUnderLeadTime) statusText = "< Lead Time";
-                  else if (isAlmostFull) statusText = "Hampir Penuh";
+                  else if (isDense) statusText = "Padat";
+
+                  const tooltipText = `Beban setelah pesanan ini: ${pctRounded}% (${formatPercent(day.utilization_after)}). Persentase kapasitas harian dapur (oven & tenaga kerja) yang terpakai jika pesanan Anda dijadwalkan pada tanggal ini. Batas terima otomatis adalah 90%.`;
 
                   return (
                     <button
@@ -835,6 +1012,7 @@ function OrderFormContent() {
                       role="radio"
                       aria-checked={isSelected}
                       disabled={!day.available}
+                      title={tooltipText}
                       onClick={() =>
                         form.setValue("event_date", day.date, {
                           shouldValidate: true,
@@ -849,11 +1027,11 @@ function OrderFormContent() {
                           "border-amber-700 bg-amber-50 ring-2 ring-amber-700/30",
                         !isSelected &&
                           day.available &&
-                          !isAlmostFull &&
+                          !isDense &&
                           "border-emerald-200 bg-emerald-50/40 hover:border-emerald-400 hover:bg-emerald-50",
                         !isSelected &&
                           day.available &&
-                          isAlmostFull &&
+                          isDense &&
                           "border-amber-300 bg-amber-50/50 hover:border-amber-500 hover:bg-amber-50",
                         isFullCapacity &&
                           "border-rose-200 bg-rose-50/50 text-rose-900",
@@ -869,9 +1047,9 @@ function OrderFormContent() {
                           className={cn(
                             "h-2 w-2 rounded-full",
                             day.available &&
-                              !isAlmostFull &&
+                              !isDense &&
                               "bg-emerald-500",
-                            isAlmostFull && "bg-amber-500",
+                            isDense && "bg-amber-500",
                             isFullCapacity && "bg-rose-500",
                             isUnderLeadTime && "bg-stone-400"
                           )}
@@ -883,17 +1061,20 @@ function OrderFormContent() {
                           className={cn(
                             "text-[11px] font-semibold",
                             day.available &&
-                              !isAlmostFull &&
+                              !isDense &&
                               "text-emerald-800",
-                            isAlmostFull && "text-amber-800",
+                            isDense && "text-amber-800",
                             isFullCapacity && "text-rose-700",
                             isUnderLeadTime && "text-stone-500"
                           )}
                         >
                           {statusText}
                         </p>
-                        <p className="text-[10px] text-stone-500">
-                          Beban: {formatPercent(day.utilization_after)}
+                        <p
+                          title={tooltipText}
+                          className="text-[10px] leading-snug text-stone-600"
+                        >
+                          Beban setelah pesanan ini: {pctRounded}%
                         </p>
                       </div>
                     </button>
@@ -1075,6 +1256,39 @@ function OrderFormContent() {
               </div>
             </div>
 
+            {/* Catatan Pra-Kirim bila pesanan besar atau tanggal padat */}
+            {isLargeOrder || isSelectedDateDense ? (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-950 space-y-1">
+                <p className="font-semibold">
+                  Catatan Sebelum Mengirim Pesanan:
+                </p>
+                {isLargeOrder ? (
+                  <p>
+                    • Karena pesanan ini berjumlah{" "}
+                    <strong>{totalUnits} unit</strong> dengan nilai{" "}
+                    <strong>{formatRupiah(estimatedTotal)}</strong> (mencapai
+                    ambang pesanan besar &ge; 50 unit atau &ge; Rp 2.000.000),
+                    pesanan akan masuk dengan status{" "}
+                    <strong>Menunggu Konfirmasi Usaha</strong> agar Pemilik /
+                    Manajer dapat memastikan kesiapan bahan dan jadwal sebelum
+                    Anda diminta membayar DP.
+                  </p>
+                ) : null}
+                {isSelectedDateDense && selectedDayInfo ? (
+                  <p>
+                    • Tanggal yang Anda pilih berada pada kategori{" "}
+                    <strong>Padat</strong> (beban setelah pesanan ini:{" "}
+                    <strong>
+                      {Math.round(toNumber(selectedDayInfo.utilization_after) * 100)}
+                      %
+                    </strong>
+                    , mendekati batas 90%). Pesanan mungkin memerlukan peninjauan
+                    jadwal atau konfirmasi ketersediaan bahan oleh tim dapur.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="flex items-start gap-2 text-xs text-stone-600">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
               <span>
@@ -1083,24 +1297,54 @@ function OrderFormContent() {
               </span>
             </div>
 
-            <Button
-              type="submit"
-              size="lg"
-              disabled={createOrderMutation.isPending}
-              className="w-full gap-2"
-            >
-              {createOrderMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Memproses &amp; Mengevaluasi Pesanan...
-                </>
-              ) : (
-                <>
-                  <ShoppingBag className="h-4 w-4" />
-                  Kirim Pesanan Pre-Order
-                </>
-              )}
-            </Button>
+            {!isCustomerLoggedIn ? (
+              <div className="space-y-2 rounded-xl border border-amber-300 bg-white p-3 text-center">
+                <p className="text-xs font-medium text-stone-700">
+                  Silakan masuk atau daftar sebagai pelanggan terlebih dahulu
+                  untuk mengirim pesanan ini:
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Link href={`/login?next=${encodeURIComponent(nextUrlParam)}`}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-1.5"
+                    >
+                      <LogIn className="h-3.5 w-3.5" />
+                      Masuk
+                    </Button>
+                  </Link>
+                  <Link
+                    href={`/daftar?next=${encodeURIComponent(nextUrlParam)}`}
+                  >
+                    <Button type="button" size="sm" className="w-full gap-1.5">
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Daftar
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="submit"
+                size="lg"
+                disabled={createOrderMutation.isPending}
+                className="w-full gap-2"
+              >
+                {createOrderMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Memproses &amp; Mengevaluasi Pesanan...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="h-4 w-4" />
+                    Kirim Pesanan Pre-Order
+                  </>
+                )}
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>

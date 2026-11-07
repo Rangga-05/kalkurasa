@@ -145,8 +145,12 @@ export default function InternalAppLayout({
   useEffect(() => {
     if (meQuery.isError) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      return;
     }
-  }, [meQuery.isError, pathname, router]);
+    if (meQuery.data?.role === "customer") {
+      router.replace("/pesanan-saya");
+    }
+  }, [meQuery.isError, meQuery.data?.role, pathname, router]);
 
   useEffect(() => {
     setMobileMenuOpen(false);

@@ -233,6 +233,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   manager: "Manajer Operasional",
   staff: "Karyawan Dapur & Kurir",
   admin: "Administrator Sistem",
+  customer: "Pelanggan",
 };
 
 export const ROLE_DASHBOARD_PATH: Record<UserRole, string> = {
@@ -240,10 +241,12 @@ export const ROLE_DASHBOARD_PATH: Record<UserRole, string> = {
   manager: "/app/manajer",
   staff: "/app/karyawan",
   admin: "/app/admin",
+  customer: "/pesanan-saya",
 };
 
 export function getDashboardPathForRole(role?: string | null): string {
   if (!role) return "/login";
+  if (role === "customer") return "/pesanan-saya";
   return ROLE_DASHBOARD_PATH[role as UserRole] ?? "/app/owner";
 }
 

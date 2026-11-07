@@ -11,6 +11,7 @@ import type {
   PublicOrderSummary,
   PublicProduct,
   PublicTrackResponse,
+  RegisterRequest,
   User,
 } from "./types";
 
@@ -204,8 +205,21 @@ export async function respondCounterOffer(
 }
 
 // ============================================================================
-// Endpoint Autentikasi (/api/v1/auth/*)
+// Endpoint Autentikasi & Akun Pelanggan (/api/v1/auth/*, /api/v1/me/*)
 // ============================================================================
+
+/**
+ * POST /api/v1/auth/register
+ * Mendaftarkan akun pelanggan baru (role customer) dan langsung masuk (cookie sesi httpOnly).
+ */
+export async function register(
+  payload: RegisterRequest
+): Promise<LoginResponse> {
+  return requestJson<LoginResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
 
 /**
  * POST /api/v1/auth/login
@@ -234,6 +248,19 @@ export async function logout(): Promise<LogoutResponse> {
  */
 export async function getMe(signal?: AbortSignal): Promise<User> {
   return requestJson<User>("/auth/me", {
+    method: "GET",
+    signal,
+  });
+}
+
+/**
+ * GET /api/v1/me/orders
+ * Mengambil daftar pesanan milik pelanggan yang sedang masuk (field aman).
+ */
+export async function getMyOrders(
+  signal?: AbortSignal
+): Promise<PublicTrackResponse[]> {
+  return requestJson<PublicTrackResponse[]>("/me/orders", {
     method: "GET",
     signal,
   });

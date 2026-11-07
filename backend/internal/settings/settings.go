@@ -51,8 +51,9 @@ func defaultSettings() map[string]any {
 		"dp_deadline_hours":     24,
 		"big_order_total":       2000000,
 		"big_order_units":       50,
-		"shopping_lead_days":    2,
-		"demo_today":            nil,
+		"shopping_lead_days":       2,
+		"max_active_unpaid_orders": 2,
+		"demo_today":               nil,
 	}
 }
 
@@ -250,6 +251,8 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 		return parseInt(1, 720)
 	case "big_order_units":
 		return parseInt(1, 100000)
+	case "max_active_unpaid_orders":
+		return parseInt(1, 100)
 	case "demo_today":
 		trimmed := bytes.TrimSpace(raw)
 		if bytes.Equal(trimmed, []byte("null")) {

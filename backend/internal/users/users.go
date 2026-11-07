@@ -16,7 +16,7 @@ type Handler struct {
 	DB db.Conn
 }
 
-const userCols = `id::text, email, name, role, is_active, created_at`
+const userCols = `id::text, email, name, contact, role, is_active, created_at`
 
 type createUserRequest struct {
 	Email    string `json:"email"`
@@ -62,7 +62,7 @@ func (h *Handler) List(c *gin.Context) {
 	items := make([]auth.User, 0)
 	for rows.Next() {
 		var u auth.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.IsActive, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Contact, &u.Role, &u.IsActive, &u.CreatedAt); err != nil {
 			httpx.HandleError(c, err)
 			return
 		}
@@ -90,7 +90,7 @@ func (h *Handler) Get(c *gin.Context) {
 	var u auth.User
 	err := h.DB.QueryRow(c.Request.Context(),
 		`SELECT `+userCols+` FROM users WHERE id = $1::uuid`, id,
-	).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.IsActive, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Contact, &u.Role, &u.IsActive, &u.CreatedAt)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
@@ -139,7 +139,7 @@ func (h *Handler) Create(c *gin.Context) {
 			VALUES ($1, $2, $3, $4, $5)
 			RETURNING `+userCols,
 			email, name, role, pwHash, active,
-		).Scan(&out.ID, &out.Email, &out.Name, &out.Role, &out.IsActive, &out.CreatedAt)
+		).Scan(&out.ID, &out.Email, &out.Name, &out.Contact, &out.Role, &out.IsActive, &out.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -219,7 +219,7 @@ func (h *Handler) Update(c *gin.Context) {
 		var cur auth.User
 		err := tx.QueryRow(c.Request.Context(),
 			`SELECT `+userCols+` FROM users WHERE id = $1::uuid`, id,
-		).Scan(&cur.ID, &cur.Email, &cur.Name, &cur.Role, &cur.IsActive, &cur.CreatedAt)
+		).Scan(&cur.ID, &cur.Email, &cur.Name, &cur.Contact, &cur.Role, &cur.IsActive, &cur.CreatedAt)
 		if err != nil {
 			return err
 		}
@@ -240,7 +240,7 @@ func (h *Handler) Update(c *gin.Context) {
 				WHERE id = $1::uuid
 				RETURNING `+userCols,
 				id, newEmail, name, role, newActive, pwHash,
-			).Scan(&out.ID, &out.Email, &out.Name, &out.Role, &out.IsActive, &out.CreatedAt)
+			).Scan(&out.ID, &out.Email, &out.Name, &out.Contact, &out.Role, &out.IsActive, &out.CreatedAt)
 		} else {
 			err = tx.QueryRow(c.Request.Context(), `
 				UPDATE users
@@ -248,7 +248,7 @@ func (h *Handler) Update(c *gin.Context) {
 				WHERE id = $1::uuid
 				RETURNING `+userCols,
 				id, newEmail, name, role, newActive,
-			).Scan(&out.ID, &out.Email, &out.Name, &out.Role, &out.IsActive, &out.CreatedAt)
+			).Scan(&out.ID, &out.Email, &out.Name, &out.Contact, &out.Role, &out.IsActive, &out.CreatedAt)
 		}
 		if err != nil {
 			return err
@@ -294,7 +294,7 @@ func (h *Handler) Delete(c *gin.Context) {
 			UPDATE users SET is_active = false
 			WHERE id = $1::uuid
 			RETURNING `+userCols, id,
-		).Scan(&out.ID, &out.Email, &out.Name, &out.Role, &out.IsActive, &out.CreatedAt)
+		).Scan(&out.ID, &out.Email, &out.Name, &out.Contact, &out.Role, &out.IsActive, &out.CreatedAt)
 		if err != nil {
 			return err
 		}

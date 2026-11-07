@@ -1675,7 +1675,7 @@ func ListOrders(ctx context.Context, conn db.Conn, statusFilter, actorRole strin
 func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string) (*OrderDetail, error) {
 	var (
 		id, code, source, custName, custContact, deliveryType string
-		addrPtr, notesPtr, recPtr, recReasonPtr               *string
+		custIDPtr, addrPtr, notesPtr, recPtr, recReasonPtr    *string
 		eventDate, prodDate                                   time.Time
 		status                                                string
 		total, dpRequired, paid                               decimal.Decimal
@@ -1684,7 +1684,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		createdAt, updatedAt                                  time.Time
 	)
 	err := q.QueryRow(ctx, `
-		SELECT id::text, code, source, customer_name, customer_contact, delivery_type,
+		SELECT id::text, code, source, customer_id::text, customer_name, customer_contact, delivery_type,
 		       address, notes, event_date, production_date,
 		       status, total, dp_required, dp_deadline, paid,
 		       recommendation, recommendation_reason, counter_offer,
@@ -1692,7 +1692,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		FROM orders
 		WHERE id = $1::uuid
 	`, orderID).Scan(
-		&id, &code, &source, &custName, &custContact, &deliveryType,
+		&id, &code, &source, &custIDPtr, &custName, &custContact, &deliveryType,
 		&addrPtr, &notesPtr, &eventDate, &prodDate,
 		&status, &total, &dpRequired, &dpDeadline, &paid,
 		&recPtr, &recReasonPtr, &counterBytes,
@@ -1764,6 +1764,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		ID:                   id,
 		Code:                 code,
 		Source:               source,
+		CustomerID:           custIDPtr,
 		CustomerName:         custName,
 		CustomerContact:      custContact,
 		DeliveryType:         deliveryType,
@@ -1792,6 +1793,97 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		detail.RecommendationReason = ""
 	}
 	return detail, nil
+}
+
+// ListCustomerOrders memuat daftar pesanan milik pelanggan tertentu (GET /api/v1/me/orders)
+// hanya dengan field aman (PublicTrackResponse, tanpa unit_cost/margin/snapshot).
+func ListCustomerOrders(ctx context.Context, conn db.Conn, customerID string) ([]PublicTrackResponse, error) {
+	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+
+	rows, err := conn.Query(ctx, `
+		SELECT id::text, code, customer_name, delivery_type, event_date, status,
+		       total, dp_required, dp_deadline, paid, counter_offer,
+		       created_at, updated_at
+		FROM orders
+		WHERE customer_id = $1::uuid
+		ORDER BY created_at DESC, id DESC
+	`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type rowRec struct {
+		ID           string
+		Track        PublicTrackResponse
+		EventDate    time.Time
+		CounterBytes []byte
+	}
+	var rawList []rowRec
+	for rows.Next() {
+		var r rowRec
+		if err := rows.Scan(
+			&r.ID, &r.Track.Code, &r.Track.CustomerName, &r.Track.DeliveryType, &r.EventDate, &r.Track.Status,
+			&r.Track.Total, &r.Track.DPRequired, &r.Track.DPDeadline, &r.Track.Paid, &r.CounterBytes,
+			&r.Track.CreatedAt, &r.Track.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		rawList = append(rawList, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	out := make([]PublicTrackResponse, 0, len(rawList))
+	for _, r := range rawList {
+		tr := r.Track
+		tr.EventDate = engine.DateKey(r.EventDate)
+		tr.Total = tr.Total.Round(2)
+		tr.DPRequired = tr.DPRequired.Round(2)
+		tr.Paid = tr.Paid.Round(2)
+		if len(r.CounterBytes) > 0 && string(r.CounterBytes) != "null" {
+			var co CounterOfferDTO
+			if err := json.Unmarshal(r.CounterBytes, &co); err == nil && co.Date != "" {
+				tr.CounterOffer = &co
+			}
+		}
+
+		itemRows, err := conn.Query(ctx, `
+			SELECT oi.product_id::text, p.name, oi.qty, oi.unit_price
+			FROM order_items oi
+			JOIN products p ON p.id = oi.product_id
+			WHERE oi.order_id = $1::uuid
+			ORDER BY oi.id ASC
+		`, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		items := make([]PublicOrderItem, 0)
+		for itemRows.Next() {
+			var it PublicOrderItem
+			if err := itemRows.Scan(&it.ProductID, &it.ProductName, &it.Qty, &it.UnitPrice); err != nil {
+				itemRows.Close()
+				return nil, err
+			}
+			it.UnitPrice = it.UnitPrice.Round(2)
+			it.Subtotal = it.UnitPrice.Mul(decimal.NewFromInt(int64(it.Qty))).Round(2)
+			items = append(items, it)
+		}
+		if err := itemRows.Err(); err != nil {
+			itemRows.Close()
+			return nil, err
+		}
+		itemRows.Close()
+
+		tr.Items = items
+		out = append(out, tr)
+	}
+
+	return out, nil
 }
 
 func loadOrderItemsAndEval(ctx context.Context, q db.DBTX, orderID string, params SettingsParams) ([]OrderItemDetail, []engine.EvalItem, int, error) {
