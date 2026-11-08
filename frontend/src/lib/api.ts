@@ -426,6 +426,7 @@ export async function getOrders(
   if (params.event_date) qs.set("event_date", params.event_date);
   if (params.from) qs.set("from", params.from);
   if (params.to) qs.set("to", params.to);
+  if (params.search) qs.set("search", params.search);
   const query = qs.toString() ? `?${qs.toString()}` : "";
   return requestJson<OrderDetail[]>(`/orders${query}`, {
     method: "GET",

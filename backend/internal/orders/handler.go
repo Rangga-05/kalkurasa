@@ -614,6 +614,10 @@ func (h *Handler) ListOrders(c *gin.Context) {
 	eventDateFilter := strings.TrimSpace(c.Query("event_date"))
 	fromFilter := strings.TrimSpace(c.Query("from"))
 	toFilter := strings.TrimSpace(c.Query("to"))
+	searchFilter := strings.TrimSpace(c.Query("search"))
+	if searchFilter == "" {
+		searchFilter = strings.TrimSpace(c.Query("q"))
+	}
 
 	if dateFilter != "" {
 		if _, err := db.ParseDate(dateFilter); err != nil {
@@ -646,6 +650,7 @@ func (h *Handler) ListOrders(c *gin.Context) {
 		EventDate: eventDateFilter,
 		From:      fromFilter,
 		To:        toFilter,
+		Search:    searchFilter,
 		ActorRole: role,
 	})
 	if err != nil {

@@ -456,6 +456,7 @@ export interface OrderFilterParams {
   event_date?: string;
   from?: string;
   to?: string;
+  search?: string;
 }
 
 export interface TaskFilterParams {

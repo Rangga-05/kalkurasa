@@ -1426,6 +1426,45 @@ func TestTahap4B_TasksAndOrderDetailStaffRedaction(t *testing.T) {
 		t.Fatalf("expected 0 orders on 2026-11-25, got %d", len(listOther.Data))
 	}
 
+	// Fitur 5: Pencarian cepat order (search by code, with hash, and customer name)
+	wSearchCode := performJSON(env.router, http.MethodGet, "/api/v1/orders?search="+ord.Data.Code, nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wSearchCode.Code != http.StatusOK {
+		t.Fatalf("search by code: expected 200, got %d (%s)", wSearchCode.Code, wSearchCode.Body.String())
+	}
+	var searchCodeRes struct {
+		Data []orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wSearchCode.Body.Bytes(), &searchCodeRes)
+	if len(searchCodeRes.Data) != 1 || searchCodeRes.Data[0].ID != ord.Data.ID {
+		t.Fatalf("expected search by code to find 1 order, got %d", len(searchCodeRes.Data))
+	}
+
+	// Search with '#' prefix
+	wSearchHash := performJSON(env.router, http.MethodGet, "/api/v1/orders?search=%23"+ord.Data.Code, nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wSearchHash.Code != http.StatusOK {
+		t.Fatalf("search with hash: expected 200, got %d", wSearchHash.Code)
+	}
+	var searchHashRes struct {
+		Data []orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wSearchHash.Body.Bytes(), &searchHashRes)
+	if len(searchHashRes.Data) != 1 || searchHashRes.Data[0].ID != ord.Data.ID {
+		t.Fatalf("expected search with hash prefix to find 1 order, got %d", len(searchHashRes.Data))
+	}
+
+	// Search with non-matching term should return 0
+	wSearchEmpty := performJSON(env.router, http.MethodGet, "/api/v1/orders?search=NONEXISTENT_QUERY_XYZ", nil,
+		map[string]string{"Authorization": "Bearer " + env.managerToken})
+	var searchEmptyRes struct {
+		Data []orders.OrderDetail `json:"data"`
+	}
+	_ = json.Unmarshal(wSearchEmpty.Body.Bytes(), &searchEmptyRes)
+	if len(searchEmptyRes.Data) != 0 {
+		t.Fatalf("expected 0 orders for non-existent search, got %d", len(searchEmptyRes.Data))
+	}
+
 	// 2. GET /api/v1/orders/:id oleh manager -> wajib memuat items, evaluation.gates, payments, tasks, audits
 	wDetMgr := performJSON(env.router, http.MethodGet, "/api/v1/orders/"+ord.Data.ID, nil,
 		map[string]string{"Authorization": "Bearer " + env.managerToken})

@@ -6,8 +6,11 @@ import {
   AlertTriangle,
   Calendar,
   CheckCircle2,
+  Copy,
   PackagePlus,
+  Printer,
   RefreshCw,
+  Share2,
   ShoppingBag,
   ShoppingCart,
   X,
@@ -27,6 +30,11 @@ import {
   toDateKeyWIB,
   toNumber,
 } from "@/lib/format";
+import {
+  buildWhatsAppShoppingText,
+  getWhatsAppShareUrl,
+} from "@/lib/whatsapp";
+import { ShoppingListPrint } from "@/components/shopping-list-print";
 import { useInternalSession } from "@/components/internal/use-internal-session";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
@@ -146,52 +154,130 @@ export default function BelanjaPage() {
     (i) => i.id === selectedIngredientId
   );
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900">
-            Daftar Belanja Bahan & Penerimaan Stok
-          </h1>
-          <p className="text-sm text-stone-600">
-            Kebutuhan bahan otomatis dari pesanan aktif (
-            <code className="rounded bg-stone-200/70 px-1 py-0.5 text-xs">
-              confirmed
-            </code>{" "}
-            &{" "}
-            <code className="rounded bg-stone-200/70 px-1 py-0.5 text-xs">
-              in_production
-            </code>
-            ) menggunakan aturan pembulatan satuan beli.
-          </p>
-        </div>
+  const [copiedWa, setCopiedWa] = useState(false);
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => shoppingQuery.refetch()}
-            disabled={shoppingQuery.isFetching}
-            className="gap-1.5"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${shoppingQuery.isFetching ? "animate-spin" : ""}`}
-            />
-            Segarkan
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => openPurchaseForItem()}
-            className="gap-1.5"
-          >
-            <PackagePlus className="h-4 w-4" />
-            Catat Pembelian Bahan
-          </Button>
+  const handleCopyWhatsApp = async () => {
+    if (!data) return;
+    const text = buildWhatsAppShoppingText({
+      data,
+      fromDate,
+      toDate,
+      isStaff,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedWa(true);
+      toast.success(
+        "Daftar Belanja Disalin!",
+        "Teks daftar belanja berhasil disalin ke clipboard dan siap dikirim via WhatsApp."
+      );
+      setTimeout(() => setCopiedWa(false), 2500);
+    } catch {
+      toast.error("Gagal Menyalin", "Izin clipboard tidak diberikan oleh browser.");
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!data) return;
+    const text = buildWhatsAppShoppingText({
+      data,
+      fromDate,
+      toDate,
+      isStaff,
+    });
+    const url = getWhatsAppShareUrl(text);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <>
+      <div className="space-y-6 print:hidden">
+        {/* Header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-stone-900">
+              Daftar Belanja Bahan &amp; Penerimaan Stok
+            </h1>
+            <p className="text-sm text-stone-600">
+              Kebutuhan bahan otomatis dari pesanan aktif (
+              <code className="rounded bg-stone-200/70 px-1 py-0.5 text-xs">
+                confirmed
+              </code>{" "}
+              &amp;{" "}
+              <code className="rounded bg-stone-200/70 px-1 py-0.5 text-xs">
+                in_production
+              </code>
+              ) menggunakan aturan pembulatan satuan beli.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              disabled={!data || items.length === 0}
+              className="gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <Printer className="h-4 w-4 text-stone-600" />
+              Cetak Lembar Belanja
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleCopyWhatsApp()}
+              disabled={!data || items.length === 0}
+              className="gap-1.5 cursor-pointer shadow-2xs"
+              title="Salin daftar belanja dalam format pesan WhatsApp"
+            >
+              {copiedWa ? (
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <Copy className="h-4 w-4 text-stone-600" />
+              )}
+              {copiedWa ? "Tersalin!" : "Salin ke WA"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleShareWhatsApp}
+              disabled={!data || items.length === 0}
+              className="gap-1.5 border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 cursor-pointer shadow-2xs font-semibold"
+              title="Buka WhatsApp untuk langsung mengirim daftar belanja ini"
+            >
+              <Share2 className="h-4 w-4 text-emerald-700" />
+              Kirim ke WhatsApp
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => shoppingQuery.refetch()}
+              disabled={shoppingQuery.isFetching}
+              className="gap-1.5"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${shoppingQuery.isFetching ? "animate-spin" : ""}`}
+              />
+              Segarkan
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => openPurchaseForItem()}
+              className="gap-1.5"
+            >
+              <PackagePlus className="h-4 w-4" />
+              Catat Pembelian Bahan
+            </Button>
+          </div>
         </div>
-      </div>
 
       {/* Filter Rentang Tanggal Acara */}
       <Card className="p-4">
@@ -640,5 +726,16 @@ export default function BelanjaPage() {
         </div>
       ) : null}
     </div>
+
+    {/* Lembar Checklist Cetak Belanja Resmi (@media print) */}
+    {data ? (
+      <ShoppingListPrint
+        data={data}
+        fromDate={fromDate}
+        toDate={toDate}
+        isStaff={isStaff}
+      />
+    ) : null}
+  </>
   );
 }

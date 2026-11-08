@@ -1656,6 +1656,7 @@ type OrderListFilter struct {
 	EventDate string // YYYY-MM-DD
 	From      string // YYYY-MM-DD (event_date >= From)
 	To        string // YYYY-MM-DD (event_date <= To)
+	Search    string // Query pencarian: mencocokkan kode (#DEMO...), nama pelanggan, kontak, atau nama produk
 	ActorRole string
 }
 
@@ -1717,6 +1718,26 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 		}
 		if filter.To != "" && d.EventDate > filter.To {
 			continue
+		}
+		if filter.Search != "" {
+			qLower := strings.ToLower(strings.TrimSpace(filter.Search))
+			qLower = strings.TrimPrefix(qLower, "#")
+			match := false
+			if strings.Contains(strings.ToLower(d.Code), qLower) ||
+				strings.Contains(strings.ToLower(d.CustomerName), qLower) ||
+				strings.Contains(strings.ToLower(d.CustomerContact), qLower) {
+				match = true
+			} else {
+				for _, item := range d.Items {
+					if strings.Contains(strings.ToLower(item.ProductName), qLower) {
+						match = true
+						break
+					}
+				}
+			}
+			if !match {
+				continue
+			}
 		}
 		out = append(out, *d)
 	}

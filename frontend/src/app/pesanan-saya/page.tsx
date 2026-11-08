@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -13,10 +14,12 @@ import {
   Phone,
   Plus,
   RefreshCw,
+  Search,
   ShoppingBag,
   Sparkles,
   Truck,
   UserCheck,
+  X,
 } from "lucide-react";
 import { getErrorMessage, getMe, getMyOrders } from "@/lib/api";
 import {
@@ -57,7 +60,26 @@ export default function MyOrdersPage() {
   });
 
   const user = meQuery.data;
-  const orders = ordersQuery.data ?? [];
+  const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data]);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredOrders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase().replace(/^#/, "");
+    if (!q) return orders;
+    return orders.filter((o) => {
+      const code = (o.code || "").toLowerCase();
+      const statusMeta = getOrderStatusMeta(o.status);
+      const statusLabel = statusMeta.label.toLowerCase();
+      const items = (o.items || [])
+        .map((i) => (i.product_name || "").toLowerCase())
+        .join(" ");
+      return (
+        code.includes(q) ||
+        statusLabel.includes(q) ||
+        items.includes(q)
+      );
+    });
+  }, [orders, searchQuery]);
 
   const activeUnpaidCount = orders.filter(
     (o) =>
@@ -202,7 +224,47 @@ export default function MyOrdersPage() {
           </Card>
         ) : (
           <div className="space-y-4">
-            {orders.map((order) => {
+            {/* Search Bar Pelanggan */}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari kode pesanan (#DEMO...) atau nama menu..."
+                className="w-full rounded-xl border border-stone-200 bg-white py-2.5 pl-10 pr-10 text-xs font-medium text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                  title="Hapus pencarian"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {filteredOrders.length === 0 ? (
+              <Card className="border-stone-200 bg-white">
+                <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+                  <Search className="h-8 w-8 text-stone-400" />
+                  <p className="mt-3 text-sm font-semibold text-stone-800">
+                    Tidak ada pesanan yang sesuai dengan &ldquo;{searchQuery}&rdquo;
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    Hapus Pencarian
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredOrders.map((order) => {
               const statusMeta = getOrderStatusMeta(order.status);
               const totalNum = toNumber(order.total);
               const dpRequiredNum = toNumber(order.dp_required);
@@ -364,7 +426,7 @@ export default function MyOrdersPage() {
                   </CardContent>
                 </Card>
               );
-            })}
+            }))}
           </div>
         )}
       </main>
