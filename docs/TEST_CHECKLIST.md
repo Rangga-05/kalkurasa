@@ -46,7 +46,7 @@ Dokumen ini memuat panduan langkah demi langkah untuk pengujian manual antarmuka
 | **CUST-01** | Formulir Pemesanan (`/pesan`) | Login sebagai `customer@demo.test`, buka `/pesan`. Pilih produk (misal: "Snack Box", 50 box), pilih tanggal acara (minimal H+2 dari hari ini). | Formulir menampilkan ringkasan perkiraan harga, input tanggal menghormati batas *lead time*, tombol kirim aktif. | [ ] |
 | **CUST-02** | Validasi Lead Time | Di formulir `/pesan`, ubah tanggal acara menjadi H+1 atau hari ini. | Formulir menampilkan peringatan validasi: "Tanggal acara terlalu dekat (minimal H+2)" dan tombol kirim dinonaktifkan. | [ ] |
 | **CUST-03** | Batas Slot Pesanan Belum DP | Login sebagai `pelanggan3@demo.test` (yang sudah memiliki 2 pesanan aktif berstatus menunggu DP). Buka `/pesan` dan kirim pesanan baru. | Sistem menolak pengajuan: muncul pesan kesalahan jelas bahwa batas 2 pesanan aktif belum DP telah tercapai. | [ ] |
-| **CUST-04** | Pelacakan Publik (`/lacak/[kode]`) | Salin kode pesanan demo (contoh: `ORD-...`), buka peramban dalam mode *Incognito* (tanpa login), buka `/lacak/[kode]`. | Status pesanan, tanggal acara, dan riwayat linimasa tampil lengkap tanpa memerlukan otentikasi login. | [ ] |
+| **CUST-04** | Pelacakan Publik (`/lacak/[kode]`) | Salin kode pesanan demo (contoh: `DEMOS1FULL` atau `DEMOS3DPMN`), buka peramban dalam mode *Incognito* (tanpa login), buka `/lacak/[kode]`. | Status pesanan, tanggal acara, dan riwayat linimasa tampil lengkap tanpa memerlukan otentikasi login. | [ ] |
 | **CUST-05** | Tanggapi Tawaran Balik | Login sebagai `pelanggan2@demo.test` (memiliki pesanan dengan tawaran balik tanggal/harga). Buka `/pesanan-saya`. | Muncul kartu tawaran balik dengan opsi: **"Terima Tawaran Balik"** (memperbarui tanggal/harga dan lanjut ke DP) atau **"Batalkan Pesanan"**. | [ ] |
 
 ---
@@ -95,11 +95,11 @@ Berikut adalah pengujian 5 skenario inti sesuai spesifikasi lomba GTNIC 2026:
 
 | Skenario | Judul Skenario | Langkah Verifikasi UI | Indikator Keberhasilan | Status |
 |---|---|---|---|---|
-| **S1** | **Pesanan 100 Snack Box di Hari Penuh** | Cari pesanan S1 di `/app/keputusan` atau detail pesanan bersangkutan. | Gerbang G1 (Kapasitas) bertanda **GAGAL / MERAH** (utilisasi tenaga kerja melebihi 90%). Mesin menyiapkan **tawaran balik tanggal alternatif** (H+1) yang kapasitasnya masih mencukupi (<90%). | [ ] |
-| **S2** | **Permintaan Harga Murah (Margin Rendah)** | Buka pesanan S2 dengan permintaan harga Rp 21.000 per box. | Gerbang G2 (Margin) bertanda **GAGAL / MERAH** (margin kotor hanya 9,5%, di bawah batas minimum 20%). Mesin menyarankan harga minimal **Rp 23.750**. | [ ] |
-| **S3** | **DP Dinamis dari Titik Terendah Kas** | Periksa pesanan S3 pada halaman detail pesanan. | Tagihan DP minimal menampilkan **Rp 600.000** (berdasarkan titik terendah proyeksi kas), dan DP yang ditagihkan adalah **Rp 712.500** (30% dari total tagihan pesanan Rp 2.375.000). | [ ] |
-| **S4** | **Daftar Belanja Bahan & Pembulatan** | Buka `/app/belanja` untuk tanggal produksi S4. | Kebutuhan tepung terhitung bersih 12,84 kg (memperhitungkan stok awal & buffer 10%), dan sistem merekomendasikan pembelian bulat sebanyak **13 kg**. | [ ] |
-| **S5** | **Eksposur Pembatalan Pesanan** | Buka pesanan S5 yang dibatalkan setelah belanja bahan dilakukan. | Layar pembatalan menampilkan perhitungan eksposur pembatalan tepat senilai **Rp 587.500** (total belanja bahan terikat Rp 1.300.000 dikurangi DP diterima Rp 712.500). | [ ] |
+| **S1** | **Pesanan 100 Snack Box di Hari Penuh** | Cari pesanan S1 (kode: `DEMOS1FULL`, terjadwal di `Today+5`) di `/app/keputusan` atau detail pesanan bersangkutan. | Gerbang G1 (Kapasitas) bertanda **GAGAL / MERAH** (utilisasi tenaga kerja 155,5% melebihi batas 90%). Mesin menyiapkan **tawaran balik tanggal alternatif** ke hari berikutnya (`Today+6` / Minggu) dengan utilisasi yang aman (88,2% < 90%). | [ ] |
+| **S2** | **Permintaan Harga Murah (Margin Rendah)** | Buka pesanan S2 (kode: `DEMOS2DISC`) dengan permintaan harga Rp 21.000 per box. | Gerbang G2 (Margin) bertanda **GAGAL / MERAH** (margin kotor hanya 9,5%, di bawah batas minimum 20%). Mesin menyarankan harga minimal **Rp 23.750**. | [ ] |
+| **S3** | **DP Dinamis dari Titik Terendah Kas** | Periksa pesanan S3 (kode: `DEMOS3DPMN`) pada halaman detail pesanan. | Tagihan DP minimal menampilkan **Rp 600.000** (berdasarkan titik terendah proyeksi kas tanpa DP), dan DP yang ditagihkan adalah **Rp 712.500** (30% dari total tagihan pesanan Rp 2.375.000). | [ ] |
+| **S4** | **Daftar Belanja Bahan & Pembulatan** | Buka `/app/belanja` untuk tanggal produksi S4 (pesanan 6 Tart `DEMOS4TART` bersama S3 `DEMOS3DPMN`). | Kebutuhan tepung terhitung bersih 12,84 kg (memperhitungkan stok awal & buffer 10%), dan sistem merekomendasikan pembelian bulat sebanyak **13 kg**. | [ ] |
+| **S5** | **Eksposur Pembatalan Pesanan** | Buka pesanan S5 (kode: `DEMOS5CNCL`) yang dibatalkan setelah belanja bahan dilakukan. | Layar pembatalan menampilkan perhitungan eksposur pembatalan tepat senilai **Rp 587.500** (total belanja bahan terikat Rp 1.300.000 dikurangi DP diterima Rp 712.500). | [ ] |
 
 ---
 

@@ -137,7 +137,7 @@ Setelah kedua layanan aktif, lakukan verifikasi operasional secara berurutan:
   Buka `https://<domain-frontend>/api/healthz` di peramban. Halaman harus mengembalikan status JSON `{"status":"ok"}`. Ini membuktikan fitur *Next.js Rewrites* berhasil meneruskan permintaan ke backend.
 
 - [ ] **2. Pemeriksaan Halaman Publik:**
-  Akses halaman utama `https://<domain-frontend>/`, halaman katalog produk, formulir `/pesan`, dan halaman pelacakan `/lacak/ORD-SAMPLE`. Seluruh styling Tailwind CSS 3 harus termuat sempurna tanpa error visual atau kegagalan aset.
+  Akses halaman utama `https://<domain-frontend>/`, halaman katalog produk, formulir `/pesan`, dan halaman pelacakan `/lacak/DEMOS1FULL`. Seluruh styling Tailwind CSS 4 harus termuat sempurna tanpa error visual atau kegagalan aset.
 
 - [ ] **3. Pengujian Otentikasi & Cookie:**
   - Buka `/login`, masukkan akun `owner@demo.test` beserta kata sandi yang disetel saat seed.
@@ -169,7 +169,7 @@ Setelah kedua layanan aktif, lakukan verifikasi operasional secara berurutan:
 - **Solusi:** Pastikan `COOKIE_SECURE=true` pada variabel lingkungan backend dan peramban hanya memanggil rute internal `/api/*` dari domain frontend.
 
 ### Masalah C: Perubahan Skema Baru di Masa Mendatang
-- **Prosedur:** Tulis berkas migrasi baru berformat SQL di `backend/migrations/` dengan penomoran urut (contoh: `019_nama_tabel.sql`). Jalankan `go run ./cmd/migrate` menggunakan `DATABASE_URL_MIGRATE`.
+- **Prosedur:** Tulis berkas migrasi baru berformat SQL di `backend/migrations/` dengan penomoran urut (contoh: `003_nama_tabel.sql`). Jalankan `go run ./cmd/migrate` menggunakan `DATABASE_URL_MIGRATE`.
 
 ---
 *Kalkurasa — Panduan Resmi Penerapan Sistem (GTNIC 2026).*

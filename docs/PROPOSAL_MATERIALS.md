@@ -55,7 +55,7 @@ Tempel diagram ER dari [README.md bagian 5](../README.md#5-diagram-relasi-tabel)
 | Teknologi | Alasan |
 |---|---|
 | Next.js 15 + React 19 + TypeScript | Routing per peran, middleware, tipe aman antar-halaman |
-| Tailwind CSS 3 | Antarmuka konsisten dan cepat dibangun, responsif |
+| Tailwind CSS 4 | Antarmuka konsisten dan cepat dibangun, responsif |
 | Go + Gin | Performa, biner tunggal, cocok untuk engine perhitungan |
 | PostgreSQL (Supabase) + pgx | Transaksi dan penguncian baris untuk konsistensi kapasitas |
 | shopspring/decimal | Presisi uang, tanpa galat float |
