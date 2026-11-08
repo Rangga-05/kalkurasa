@@ -191,9 +191,9 @@ export default function InternalAppLayout({
     : [];
 
   return (
-    <div className="flex flex-1 bg-stone-100/70">
+    <div className="flex flex-1 bg-stone-100/70 print:bg-white print:block">
       {/* Sidebar Desktop */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-stone-200 bg-white lg:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-stone-200 bg-white lg:flex print:hidden">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
           <Link
             href={user ? getDashboardPathForRole(user.role) : "/app"}
@@ -287,8 +287,8 @@ export default function InternalAppLayout({
       </aside>
 
       {/* Konten Utama + Header Mobile */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur-sm lg:hidden">
+      <div className="flex min-w-0 flex-1 flex-col print:block print:w-full">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur-sm lg:hidden print:hidden">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -316,7 +316,7 @@ export default function InternalAppLayout({
 
         {/* Drawer Navigasi Mobile */}
         {mobileMenuOpen ? (
-          <div className="border-b border-stone-200 bg-white px-4 py-4 shadow-md lg:hidden">
+          <div className="border-b border-stone-200 bg-white px-4 py-4 shadow-md lg:hidden print:hidden">
             <nav className="space-y-1">
               {filteredNav.map((item) => {
                 const Icon = item.icon;
@@ -370,7 +370,7 @@ export default function InternalAppLayout({
           </div>
         ) : null}
 
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8 print:p-0 print:max-w-none print:w-full">
           {meQuery.isLoading || (meQuery.isError && isAuthError) ? (
             <div className="space-y-4">
               <Skeleton className="h-8 w-64" />

@@ -13,11 +13,13 @@ import {
   History,
   Loader2,
   Play,
+  Printer,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { useInternalSession } from "@/components/internal/use-internal-session";
 import { GateBadges } from "@/components/internal/gate-badges";
+import { OrderInvoicePrint } from "@/components/order-invoice-print";
 import {
   OrderStatusBadge,
   OrderTimeline,
@@ -296,46 +298,77 @@ export default function OrderDetailPage({
   const impact = order.evaluation?.impact;
 
   return (
-    <div className="space-y-6">
-      {/* Navigasi Atas & Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <Link
-            href="/app/pesanan"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 hover:text-stone-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Kembali ke Daftar Pesanan
-          </Link>
-          <div className="mt-2 flex flex-wrap items-center gap-2.5">
-            <h1 className="font-mono text-2xl font-extrabold text-stone-900">
-              #{order.code}
-            </h1>
-            <OrderStatusBadge status={order.status} />
-            <span className="rounded-full bg-stone-200/70 px-2.5 py-0.5 text-xs font-medium text-stone-700">
-              {order.source === "manual" ? "Pesanan Manual" : "Pesanan Publik"}
-            </span>
-            {!isStaff && order.is_big_order && (
-              <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-800">
-                Pesanan Besar
+    <>
+      <div className="space-y-6 print:hidden">
+        {/* Navigasi Atas & Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <Link
+              href="/app/pesanan"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 hover:text-stone-900"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Kembali ke Daftar Pesanan
+            </Link>
+            <div className="mt-2 flex flex-wrap items-center gap-2.5">
+              <h1 className="font-mono text-2xl font-extrabold text-stone-900">
+                #{order.code}
+              </h1>
+              <OrderStatusBadge status={order.status} />
+              <span className="rounded-full bg-stone-200/70 px-2.5 py-0.5 text-xs font-medium text-stone-700">
+                {order.source === "manual" ? "Pesanan Manual" : "Pesanan Publik"}
               </span>
-            )}
+              {!isStaff && order.is_big_order && (
+                <span className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-800">
+                  Pesanan Besar
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-stone-500">
+              Dibuat pada {formatDateTimeWIB(order.created_at)} • Terakhir
+              diperbarui {formatDateTimeWIB(order.updated_at)}
+            </p>
           </div>
-          <p className="mt-1 text-xs text-stone-500">
-            Dibuat pada {formatDateTimeWIB(order.created_at)} • Terakhir
-            diperbarui {formatDateTimeWIB(order.updated_at)}
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void loadDetail()}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Segarkan
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {isStaff ? (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 cursor-pointer shadow-2xs"
+              >
+                <Printer className="h-3.5 w-3.5 text-stone-600" />
+                Cetak Lembar Kerja Dapur
+              </button>
+            ) : isFullyPaid ? (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100 cursor-pointer shadow-2xs"
+              >
+                <Printer className="h-3.5 w-3.5 text-emerald-700" />
+                Cetak Nota Lunas
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                title={`Nota lunas baru dapat dicetak setelah pesanan lunas. Sisa tagihan: ${formatRupiah(remainingNum)}`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-100 px-3.5 py-2 text-xs font-semibold text-stone-400 cursor-not-allowed shadow-2xs"
+              >
+                <Printer className="h-3.5 w-3.5 text-stone-400" />
+                Cetak Nota (Menunggu Pelunasan)
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void loadDetail()}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Segarkan
+            </button>
 
           {canCancel && (
             <button
@@ -1217,5 +1250,12 @@ export default function OrderDetailPage({
         </div>
       )}
     </div>
+
+    {/* Nota Invoice Cetak Resmi (@media print) */}
+    <OrderInvoicePrint
+      order={order}
+      hideFinancials={isStaff}
+    />
+  </>
   );
 }

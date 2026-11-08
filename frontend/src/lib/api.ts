@@ -1023,5 +1023,16 @@ export async function deleteUser(
   );
 }
 
+/**
+ * POST /api/v1/admin/reset-demo
+ * Mereset dan mengisi ulang 40 pesanan demo deterministik dan kata sandi pengguna (khusus Admin).
+ */
+export async function resetDemoData(): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>("/admin/reset-demo", {
+    method: "POST",
+  });
+}
+
+
 
 

@@ -13,6 +13,7 @@ import {
   Info,
   MapPin,
   Package,
+  Printer,
   RefreshCw,
   ShoppingBag,
   Truck,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/format";
 import { PublicNavbar } from "@/components/public-navbar";
 import { OrderTimeline } from "@/components/order-timeline";
+import { OrderInvoicePrint } from "@/components/order-invoice-print";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +105,7 @@ export default function TrackOrderDetailPage({
   const paidNum = toNumber(order?.paid);
   const remainingDP = Math.max(0, dpRequiredNum - paidNum);
   const remainingTotal = Math.max(0, totalNum - paidNum);
+  const isFullyPaid = totalNum > 0 && remainingTotal <= 0;
 
   const productNameById = new Map<string, string>();
   if (order) {
@@ -115,8 +118,8 @@ export default function TrackOrderDetailPage({
     <div className="flex flex-1 flex-col">
       <PublicNavbar />
 
-      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8 print:p-0 print:m-0 print:max-w-none print:w-full">
+        <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
           <Link
             href="/lacak"
             className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 hover:text-stone-900 sm:text-sm"
@@ -126,18 +129,44 @@ export default function TrackOrderDetailPage({
           </Link>
 
           {orderQuery.data ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => orderQuery.refetch()}
-              disabled={orderQuery.isFetching}
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${orderQuery.isFetching ? "animate-spin" : ""}`}
-              />
-              Muat Ulang Status
-            </Button>
+            <div className="flex items-center gap-2">
+              {isFullyPaid ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.print()}
+                  className="gap-1.5 cursor-pointer border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 font-semibold"
+                >
+                  <Printer className="h-3.5 w-3.5 text-emerald-700" />
+                  Cetak Nota Lunas
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  title={`Nota lunas resmi baru dapat dicetak setelah sisa pembayaran (${formatRupiah(remainingTotal)}) dilunasi.`}
+                  className="gap-1.5 opacity-60 cursor-not-allowed text-stone-500"
+                >
+                  <Printer className="h-3.5 w-3.5 text-stone-400" />
+                  Cetak Nota (Tersedia Setelah Lunas)
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => orderQuery.refetch()}
+                disabled={orderQuery.isFetching}
+              >
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${orderQuery.isFetching ? "animate-spin" : ""}`}
+                />
+                Muat Ulang Status
+              </Button>
+            </div>
           ) : null}
         </div>
 
@@ -172,7 +201,8 @@ export default function TrackOrderDetailPage({
         {/* Data Pesanan */}
         {order && statusMeta ? (
           <>
-            {/* Header Ringkasan */}
+            <div className="space-y-6 print:hidden">
+              {/* Header Ringkasan */}
             <Card className="border-stone-200/90">
               <CardHeader className="pb-4">
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -467,6 +497,16 @@ export default function TrackOrderDetailPage({
                         {formatRupiah(remainingTotal)}
                       </span>
                     </div>
+
+                    {isFullyPaid ? (
+                      <p className="pt-1 text-center text-xs font-semibold text-emerald-800">
+                        ✓ Pembayaran telah Lunas. Anda dapat mencetak Nota Lunas sebagai bukti serah terima pesanan.
+                      </p>
+                    ) : (
+                      <p className="pt-1 text-center text-[11px] text-stone-500">
+                        *Nota resmi pengambilan / pengantaran dapat dicetak setelah pembayaran Lunas.
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -546,8 +586,12 @@ export default function TrackOrderDetailPage({
                 </Button>
               </Link>
             </div>
-          </>
-        ) : null}
+          </div>
+
+          {/* Nota Invoice Cetak Resmi (@media print) */}
+          <OrderInvoicePrint order={order} />
+        </>
+      ) : null}
       </main>
     </div>
   );

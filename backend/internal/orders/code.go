@@ -29,14 +29,15 @@ func GenerateCode() (string, error) {
 	return string(out), nil
 }
 
-// NormalizeCode merapikan kode pesanan menjadi huruf besar dan memeriksa panjang/alfabetnya.
+// NormalizeCode merapikan kode pesanan menjadi huruf besar dan memeriksa panjang serta karakter alfanumerik (A-Z, 0-9).
 func NormalizeCode(raw string) (string, bool) {
 	s := strings.ToUpper(strings.TrimSpace(raw))
 	if len(s) != OrderCodeLen {
 		return "", false
 	}
 	for i := 0; i < len(s); i++ {
-		if !strings.ContainsRune(base32Alphabet, rune(s[i])) {
+		c := s[i]
+		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
 			return "", false
 		}
 	}

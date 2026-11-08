@@ -58,7 +58,7 @@ export function PublicNavbar() {
   const user = meQuery.data;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur-sm print:hidden">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-3 py-3 sm:px-6">
         <Link
           href="/"

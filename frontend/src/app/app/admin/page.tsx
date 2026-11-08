@@ -8,8 +8,10 @@ import {
   ChefHat,
   Coins,
   Cpu,
+  Database,
   FileSpreadsheet,
   RefreshCw,
+  RotateCcw,
   Save,
   ShieldCheck,
   Users,
@@ -22,6 +24,7 @@ import {
   getResources,
   getSettings,
   getUsers,
+  resetDemoData,
   updateSettings,
 } from "@/lib/api";
 import {
@@ -77,8 +80,28 @@ export default function AdminDashboardPage() {
   const [platformFee, setPlatformFee] = useState<string>("2000");
   const [savingFee, setSavingFee] = useState(false);
 
+  const [resettingDemo, setResettingDemo] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleResetDemo = async () => {
+    setResettingDemo(true);
+    try {
+      await resetDemoData();
+      toast.success(
+        "Data Demo Berhasil Dimuat Ulang",
+        "40 pesanan katering (lunas & belum lunas) serta kata sandi akun demo telah disetel ulang sesuai konfigurasi backend."
+      );
+      setShowResetConfirm(false);
+      await loadAdminDashboard();
+    } catch (err) {
+      toast.error("Gagal Reset Demo", getErrorMessage(err));
+    } finally {
+      setResettingDemo(false);
+    }
+  };
 
   const loadAdminDashboard = useCallback(async () => {
     setLoading(true);
@@ -273,6 +296,60 @@ export default function AdminDashboardPage() {
               {savingFee ? "Menyimpan..." : "Simpan Tarif"}
             </Button>
           </form>
+        </div>
+      </Card>
+
+      {/* KONTROL ADMIN 2: Reset & Muat Ulang Data Demo Katering */}
+      <Card className="border-stone-200 bg-stone-50/60 p-5 shadow-xs">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-amber-700" />
+              <h2 className="text-base font-bold text-stone-900">
+                Data Demo Katering &amp; Skenario Transaksi (40 Pesanan)
+              </h2>
+              <Badge variant="slate">Lingkungan Pengujian</Badge>
+            </div>
+            <p className="max-w-2xl text-xs leading-relaxed text-stone-600">
+              Muat ulang seluruh 40 pesanan deterministik (termasuk pesanan Lunas yang siap dicetak nota, pesanan Belum Lunas / DP saja, pesanan dalam produksi, hingga pembatalan) dan setel ulang kata sandi semua akun demo (<code className="font-mono text-stone-800">@demo.test</code>) sesuai nilai <code className="font-mono text-stone-800">SEED_DEMO_PASSWORD</code> pada berkas backend <code className="font-mono">.env</code>.
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {showResetConfirm ? (
+              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs">
+                <span className="font-medium text-rose-900">Yakin reset database?</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={resettingDemo}
+                  onClick={() => void handleResetDemo()}
+                  className="gap-1"
+                >
+                  <RotateCcw className={`h-3 w-3 ${resettingDemo ? "animate-spin" : ""}`} />
+                  {resettingDemo ? "Mereset..." : "Ya, Reset Sekarang"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resettingDemo}
+                  onClick={() => setShowResetConfirm(false)}
+                >
+                  Batal
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowResetConfirm(true)}
+                className="gap-1.5 border-stone-300 text-stone-700 hover:bg-stone-100"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-stone-500" />
+                Reset &amp; Muat Ulang Data Demo
+              </Button>
+            )}
+          </div>
         </div>
       </Card>
 
