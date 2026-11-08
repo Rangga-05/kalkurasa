@@ -2127,17 +2127,18 @@ func TestTahap6_KPICalculationsAndDashboardsAndAuditLogsRBAC(t *testing.T) {
 	}
 }
 
-// TestTaxPct_DynamicCalculationAndPublicTracking menguji kalkulasi PPN dinamis:
-// 1. Pengaturan tax_pct = 0.11 (11%) di settings.
-// 2. Pembuatan pesanan publik/manual menghasilkan Subtotal, PPN (tax_amount), dan Total yang tepat.
-// 3. GET /api/v1/public/config mengembalikan tax_pct publik yang aman.
-// 4. Lacak pesanan publik (GET /api/v1/public/orders/:code) menyajikan rincian subtotal & PPN tanpa membocorkan margin/biaya.
-func TestTaxPct_DynamicCalculationAndPublicTracking(t *testing.T) {
+// TestTaxPctAndPlatformFee_DynamicCalculationAndPublicTracking menguji kalkulasi PPN & biaya aplikasi:
+// 1. Pengaturan tax_pct = 0.11 (11%) dan platform_fee = 2000 (Rp 2.000) di settings.
+// 2. Pembuatan pesanan publik/manual menghasilkan Subtotal, PPN (tax_amount), Biaya Aplikasi (platform_fee), dan Total yang tepat.
+// 3. GET /api/v1/public/config mengembalikan tax_pct & platform_fee publik yang aman.
+// 4. Lacak pesanan publik (GET /api/v1/public/orders/:code) menyajikan rincian subtotal, PPN, dan platform_fee tanpa membocorkan margin/biaya hpp.
+func TestTaxPctAndPlatformFee_DynamicCalculationAndPublicTracking(t *testing.T) {
 	env := setupIsolatedTestEnv(t)
 
-	// 1. Set tax_pct = 0.11 di settings memDB
+	// 1. Set tax_pct = 0.11 dan platform_fee = 2000 di settings memDB
 	env.db.mu.Lock()
 	env.db.settings["tax_pct"] = "0.11"
+	env.db.settings["platform_fee"] = "2000"
 	env.db.mu.Unlock()
 
 	// 2. Verifikasi GET /api/v1/public/config
@@ -2147,7 +2148,8 @@ func TestTaxPct_DynamicCalculationAndPublicTracking(t *testing.T) {
 	}
 	var cfgResp struct {
 		Data struct {
-			TaxPct decimal.Decimal `json:"tax_pct"`
+			TaxPct      decimal.Decimal `json:"tax_pct"`
+			PlatformFee decimal.Decimal `json:"platform_fee"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(wCfg.Body.Bytes(), &cfgResp); err != nil {
@@ -2156,11 +2158,14 @@ func TestTaxPct_DynamicCalculationAndPublicTracking(t *testing.T) {
 	if !cfgResp.Data.TaxPct.Equal(decimal.RequireFromString("0.11")) {
 		t.Fatalf("expected public config tax_pct 0.11, got %s", cfgResp.Data.TaxPct)
 	}
+	if !cfgResp.Data.PlatformFee.Equal(decimal.NewFromInt(2000)) {
+		t.Fatalf("expected public config platform_fee 2000, got %s", cfgResp.Data.PlatformFee)
+	}
 
 	// 3. Buat pesanan publik 10 box @ 25.000 = Subtotal 250.000
-	// PPN 11% = 27.500, Total = 277.500
+	// PPN 11% = 27.500, Biaya Layanan = 2.000, Total = 279.500
 	wCreate := performJSON(env.router, http.MethodPost, "/api/v1/public/orders", map[string]any{
-		"customer_name":    "Pelanggan Uji PPN",
+		"customer_name":    "Pelanggan Uji PPN & Biaya Layanan",
 		"customer_contact": "081299990001",
 		"delivery_type":    "pickup",
 		"event_date":       "2026-11-20",
@@ -2169,7 +2174,7 @@ func TestTaxPct_DynamicCalculationAndPublicTracking(t *testing.T) {
 		},
 	}, map[string]string{"Authorization": "Bearer " + env.customerToken})
 	if wCreate.Code != http.StatusCreated {
-		t.Fatalf("create public order with PPN: expected 201, got %d (%s)", wCreate.Code, wCreate.Body.String())
+		t.Fatalf("create public order with PPN & fee: expected 201, got %d (%s)", wCreate.Code, wCreate.Body.String())
 	}
 	var created struct {
 		Data orders.PublicOrderSummary `json:"data"`
@@ -2178,7 +2183,7 @@ func TestTaxPct_DynamicCalculationAndPublicTracking(t *testing.T) {
 		t.Fatalf("unmarshal created order: %v", err)
 	}
 
-	// 4. Lacak pesanan publik: verifikasi subtotal, tax_amount, total
+	// 4. Lacak pesanan publik: verifikasi subtotal, tax_amount, platform_fee, total
 	wTrack := performJSON(env.router, http.MethodGet, "/api/v1/public/orders/"+created.Data.Code, nil, nil)
 	if wTrack.Code != http.StatusOK {
 		t.Fatalf("track order: expected 200, got %d (%s)", wTrack.Code, wTrack.Body.String())
@@ -2191,13 +2196,17 @@ func TestTaxPct_DynamicCalculationAndPublicTracking(t *testing.T) {
 	}
 	expectedSubtotal := decimal.NewFromInt(250_000)
 	expectedTax := decimal.NewFromInt(27_500)
-	expectedTotal := decimal.NewFromInt(277_500)
+	expectedFee := decimal.NewFromInt(2_000)
+	expectedTotal := decimal.NewFromInt(279_500)
 
 	if trackResp.Data.Subtotal == nil || !trackResp.Data.Subtotal.Equal(expectedSubtotal) {
 		t.Fatalf("expected subtotal %s, got %v", expectedSubtotal, trackResp.Data.Subtotal)
 	}
 	if trackResp.Data.TaxAmount == nil || !trackResp.Data.TaxAmount.Equal(expectedTax) {
 		t.Fatalf("expected tax amount %s, got %v", expectedTax, trackResp.Data.TaxAmount)
+	}
+	if trackResp.Data.PlatformFee == nil || !trackResp.Data.PlatformFee.Equal(expectedFee) {
+		t.Fatalf("expected platform fee %s, got %v", expectedFee, trackResp.Data.PlatformFee)
 	}
 	if !trackResp.Data.Total.Equal(expectedTotal) {
 		t.Fatalf("expected total %s, got %s", expectedTotal, trackResp.Data.Total)

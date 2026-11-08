@@ -729,7 +729,8 @@ export default function OrderDetailPage({
 
           {!isStaff && (
             <div className="mt-3 flex flex-col items-end gap-1 text-xs text-stone-600">
-              {order.tax_amount && toNumber(order.tax_amount) > 0 ? (
+              {((order.tax_amount && toNumber(order.tax_amount) > 0) ||
+                (order.platform_fee && toNumber(order.platform_fee) > 0)) ? (
                 <>
                   <div className="flex gap-4">
                     <span>Subtotal Produk:</span>
@@ -737,14 +738,24 @@ export default function OrderDetailPage({
                       {formatRupiah(order.subtotal ?? 0)}
                     </span>
                   </div>
-                  <div className="flex gap-4">
-                    <span>
-                      PPN ({Math.round(toNumber(order.tax_pct ?? 0) * 100)}%):
-                    </span>
-                    <span className="font-semibold text-stone-900">
-                      {formatRupiah(order.tax_amount)}
-                    </span>
-                  </div>
+                  {order.tax_amount && toNumber(order.tax_amount) > 0 ? (
+                    <div className="flex gap-4">
+                      <span>
+                        PPN ({Math.round(toNumber(order.tax_pct ?? 0) * 100)}%):
+                      </span>
+                      <span className="font-semibold text-stone-900">
+                        {formatRupiah(order.tax_amount)}
+                      </span>
+                    </div>
+                  ) : null}
+                  {order.platform_fee && toNumber(order.platform_fee) > 0 ? (
+                    <div className="flex gap-4">
+                      <span>Biaya Layanan Aplikasi:</span>
+                      <span className="font-semibold text-stone-900">
+                        {formatRupiah(order.platform_fee)}
+                      </span>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
               <div className="flex gap-4 border-t border-stone-200 pt-1 text-sm font-bold text-stone-900">

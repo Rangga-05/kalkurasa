@@ -69,6 +69,7 @@ func (h *Handler) PublicProducts(c *gin.Context) {
 // PublicConfigResponse memuat konfigurasi publik yang aman untuk formulir pemesanan.
 type PublicConfigResponse struct {
 	TaxPct        decimal.Decimal `json:"tax_pct"`
+	PlatformFee   decimal.Decimal `json:"platform_fee"`
 	LeadTimeDays  int             `json:"lead_time_days"`
 	DPPct         decimal.Decimal `json:"dp_pct"`
 	BigOrderTotal decimal.Decimal `json:"big_order_total"`
@@ -88,6 +89,7 @@ func (h *Handler) PublicConfig(c *gin.Context) {
 	}
 	httpx.OK(c, PublicConfigResponse{
 		TaxPct:        params.TaxPct,
+		PlatformFee:   params.PlatformFee,
 		LeadTimeDays:  params.EvalParams.LeadTimeDays,
 		DPPct:         params.EvalParams.DPPct,
 		BigOrderTotal: params.BigOrderTotal,
@@ -421,6 +423,7 @@ type PublicTrackResponse struct {
 	Subtotal     *decimal.Decimal  `json:"subtotal,omitempty"`
 	TaxPct       *decimal.Decimal  `json:"tax_pct,omitempty"`
 	TaxAmount    *decimal.Decimal  `json:"tax_amount,omitempty"`
+	PlatformFee  *decimal.Decimal  `json:"platform_fee,omitempty"`
 	Total        decimal.Decimal   `json:"total"`
 	DPRequired   decimal.Decimal   `json:"dp_required"`
 	DPDeadline   *time.Time        `json:"dp_deadline"`
@@ -520,8 +523,26 @@ func (h *Handler) TrackPublicOrder(c *gin.Context) {
 	}
 	out.Items = items
 
-	// Hitung rincian subtotal & PPN dari items dan selisih total
-	if len(items) > 0 {
+	// Muat rincian biaya dari snapshot jika ada
+	var snapBytes []byte
+	_ = h.DB.QueryRow(ctx, `SELECT snapshot FROM orders WHERE id = $1::uuid`, orderID).Scan(&snapBytes)
+	if len(snapBytes) > 0 && string(snapBytes) != "null" {
+		var snap struct {
+			Subtotal    *decimal.Decimal `json:"subtotal"`
+			TaxPct      *decimal.Decimal `json:"tax_pct"`
+			TaxAmount   *decimal.Decimal `json:"tax_amount"`
+			PlatformFee *decimal.Decimal `json:"platform_fee"`
+		}
+		if err := json.Unmarshal(snapBytes, &snap); err == nil {
+			out.Subtotal = snap.Subtotal
+			out.TaxPct = snap.TaxPct
+			out.TaxAmount = snap.TaxAmount
+			out.PlatformFee = snap.PlatformFee
+		}
+	}
+
+	// Fallback hitung subtotal & selisih jika snapshot tidak memuat rincian
+	if out.Subtotal == nil && len(items) > 0 {
 		var calcSub decimal.Decimal
 		for _, it := range items {
 			calcSub = calcSub.Add(it.Subtotal)

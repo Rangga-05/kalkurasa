@@ -346,14 +346,19 @@ function OrderFormContent() {
     return sum;
   }, [watchedItems, productMap]);
 
+  const platformFee = useMemo(() => {
+    return toNumber(publicConfigQuery.data?.platform_fee ?? 0);
+  }, [publicConfigQuery.data]);
+
   const estimatedTax = useMemo(() => {
     if (taxRate <= 0) return 0;
     return Math.round(estimatedSubtotal * taxRate);
   }, [estimatedSubtotal, taxRate]);
 
   const estimatedTotal = useMemo(() => {
-    return estimatedSubtotal + estimatedTax;
-  }, [estimatedSubtotal, estimatedTax]);
+    if (estimatedSubtotal <= 0) return 0;
+    return estimatedSubtotal + estimatedTax + platformFee;
+  }, [estimatedSubtotal, estimatedTax, platformFee]);
 
   const totalUnits = useMemo(() => {
     let count = 0;
@@ -1266,7 +1271,7 @@ function OrderFormContent() {
                     : "Belum dipilih"}
                 </span>
               </div>
-              {taxRate > 0 ? (
+              {taxRate > 0 || platformFee > 0 ? (
                 <>
                   <div className="flex justify-between text-stone-600">
                     <span>Subtotal Produk</span>
@@ -1274,12 +1279,22 @@ function OrderFormContent() {
                       {formatRupiah(estimatedSubtotal)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-stone-600">
-                    <span>PPN ({Math.round(taxRate * 100)}%)</span>
-                    <span className="font-semibold text-stone-900">
-                      {formatRupiah(estimatedTax)}
-                    </span>
-                  </div>
+                  {taxRate > 0 && (
+                    <div className="flex justify-between text-stone-600">
+                      <span>PPN ({Math.round(taxRate * 100)}%)</span>
+                      <span className="font-semibold text-stone-900">
+                        {formatRupiah(estimatedTax)}
+                      </span>
+                    </div>
+                  )}
+                  {platformFee > 0 && (
+                    <div className="flex justify-between text-stone-600">
+                      <span>Biaya Layanan Aplikasi</span>
+                      <span className="font-semibold text-stone-900">
+                        {formatRupiah(platformFee)}
+                      </span>
+                    </div>
+                  )}
                 </>
               ) : null}
               <div className="border-t border-stone-200 pt-2.5 flex items-baseline justify-between">

@@ -54,6 +54,7 @@ func defaultSettings() map[string]any {
 		"shopping_lead_days":       2,
 		"max_active_unpaid_orders": 2,
 		"tax_pct":                  0.0,
+		"platform_fee":             2000.0,
 		"demo_today":               nil,
 	}
 }
@@ -73,7 +74,7 @@ func (h *Handler) Get(c *gin.Context) {
 	}
 
 	u := auth.CurrentUser(c)
-	if u != nil && u.Role != auth.RoleOwner {
+	if u != nil && u.Role != auth.RoleOwner && u.Role != auth.RoleAdmin {
 		for k := range cashKeys {
 			delete(out, k)
 		}
@@ -172,6 +173,17 @@ func (h *Handler) Put(c *gin.Context) {
 	}
 
 	actor := auth.CurrentUser(c)
+	if _, hasFee := normalized["platform_fee"]; hasFee {
+		if actor == nil || actor.Role != auth.RoleAdmin {
+			delete(normalized, "platform_fee")
+			delete(parsedVals, "platform_fee")
+			if len(normalized) == 0 {
+				v.Add("Hanya Administrator Sistem yang berwenang mengubah tarif biaya layanan aplikasi.")
+				v.Respond(c)
+				return
+			}
+		}
+	}
 	var updated map[string]any
 
 	err = db.WithTx(c.Request.Context(), h.DB, func(tx pgx.Tx) error {
@@ -242,7 +254,7 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 		return parseDec(decimal.Zero, decimal.RequireFromString("0.95"), false, 4)
 	case "waste_pct", "shopping_buffer_pct", "dp_pct", "tax_pct":
 		return parseDec(decimal.Zero, one, false, 4)
-	case "labor_rate_per_minute", "cash_buffer", "fixed_cost_daily", "opening_cash":
+	case "labor_rate_per_minute", "cash_buffer", "fixed_cost_daily", "opening_cash", "platform_fee":
 		return parseDec(decimal.Zero, maxMoney, false, 4)
 	case "big_order_total":
 		return parseDec(decimal.Zero, maxMoney, true, 4)

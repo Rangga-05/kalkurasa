@@ -22,6 +22,8 @@ interface SettingFieldDef {
   step?: string;
   min?: string;
   max?: string;
+  readOnly?: boolean;
+  badge?: string;
 }
 
 const SETTING_GROUPS: {
@@ -186,7 +188,7 @@ const SETTING_GROUPS: {
   {
     title: "Pajak & Ketentuan Transaksi",
     description:
-      "Tarif Pajak Pertambahan Nilai (PPN) yang dikenakan pada kalkulasi pesanan pelanggan.",
+      "Tarif Pajak Pertambahan Nilai (PPN) dan Biaya Layanan Aplikasi yang dikenakan pada pesanan pelanggan.",
     fields: [
       {
         key: "tax_pct",
@@ -195,6 +197,16 @@ const SETTING_GROUPS: {
         step: "0.01",
         min: "0",
         max: "1",
+      },
+      {
+        key: "platform_fee",
+        label: "Biaya Layanan Aplikasi (Rp)",
+        helper:
+          "Dikelola oleh Administrator Sistem. Pemilik usaha dapat memantau besaran tarif aktif saat ini.",
+        step: "100",
+        min: "0",
+        readOnly: true,
+        badge: "Dikelola Admin Platform",
       },
     ],
   },
@@ -328,12 +340,19 @@ export default function PengaturanPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {group.fields.map((field) => (
                   <div key={field.key} className="space-y-1">
-                    <label
-                      htmlFor={`setting-${field.key}`}
-                      className="block text-xs font-semibold text-stone-800"
-                    >
-                      {field.label}
-                    </label>
+                    <div className="flex items-center justify-between gap-1">
+                      <label
+                        htmlFor={`setting-${field.key}`}
+                        className="block text-xs font-semibold text-stone-800"
+                      >
+                        {field.label}
+                      </label>
+                      {field.badge && (
+                        <span className="rounded-md border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
+                          {field.badge}
+                        </span>
+                      )}
+                    </div>
                     <Input
                       id={`setting-${field.key}`}
                       type="number"
@@ -341,7 +360,14 @@ export default function PengaturanPage() {
                       min={field.min}
                       max={field.max}
                       value={formValues[field.key] ?? ""}
+                      disabled={field.readOnly}
+                      className={
+                        field.readOnly
+                          ? "cursor-not-allowed border-stone-200 bg-stone-50 text-stone-600"
+                          : ""
+                      }
                       onChange={(e) => {
+                        if (field.readOnly) return;
                         const val = e.target.value;
                         setFormValues((prev) => ({
                           ...prev,

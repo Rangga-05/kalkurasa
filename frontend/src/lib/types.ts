@@ -171,6 +171,7 @@ export interface PublicTrackResponse {
   subtotal?: DecimalValue;
   tax_pct?: DecimalValue;
   tax_amount?: DecimalValue;
+  platform_fee?: DecimalValue;
   total: DecimalValue;
   dp_required: DecimalValue;
   dp_deadline: string | null;
@@ -182,6 +183,7 @@ export interface PublicTrackResponse {
 
 export interface PublicConfig {
   tax_pct: DecimalValue;
+  platform_fee: DecimalValue;
 }
 
 export interface CounterResponseRequest {
@@ -294,6 +296,7 @@ export interface OrderDetail {
   subtotal?: DecimalValue;
   tax_pct?: DecimalValue;
   tax_amount?: DecimalValue;
+  platform_fee?: DecimalValue;
   total?: DecimalValue;
   total_units: number;
   is_big_order?: boolean;

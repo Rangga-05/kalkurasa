@@ -180,6 +180,7 @@ func main() {
 		{key: "shopping_lead_days", jsonVal: "2"},
 		{key: "max_active_unpaid_orders", jsonVal: "2"},
 		{key: "tax_pct", jsonVal: "0.11"},
+		{key: "platform_fee", jsonVal: "2000"},
 		{key: "demo_today", jsonVal: "null"},
 	}
 	for _, s := range settingsSeed {

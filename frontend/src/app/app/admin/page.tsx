@@ -6,9 +6,11 @@ import {
   ArrowRight,
   Boxes,
   ChefHat,
+  Coins,
   Cpu,
   FileSpreadsheet,
   RefreshCw,
+  Save,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -18,13 +20,16 @@ import {
   getIngredients,
   getProducts,
   getResources,
+  getSettings,
   getUsers,
+  updateSettings,
 } from "@/lib/api";
 import {
   AUDIT_ACTION_LABELS,
   AUDIT_ENTITY_LABELS,
   formatDateTimeWIB,
   formatNumber,
+  formatRupiah,
   ROLE_LABELS,
 } from "@/lib/format";
 import type {
@@ -38,6 +43,8 @@ import type {
 import { ErrorState, TableSkeleton } from "@/components/ui/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/providers";
 import {
   Card,
   CardContent,
@@ -59,12 +66,16 @@ function summarizeAuditDetail(detail: Record<string, unknown>): string {
 }
 
 export default function AdminDashboardPage() {
+  const toast = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [totalAudits, setTotalAudits] = useState(0);
+
+  const [platformFee, setPlatformFee] = useState<string>("2000");
+  const [savingFee, setSavingFee] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -73,13 +84,14 @@ export default function AdminDashboardPage() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [usersRes, prodsRes, ingsRes, resList, auditsRes] =
+      const [usersRes, prodsRes, ingsRes, resList, auditsRes, settingsRes] =
         await Promise.all([
           getUsers({ page: 1, limit: 100 }),
           getProducts(),
           getIngredients(),
           getResources(),
           getAuditLogs({ page: 1, limit: 10 }),
+          getSettings(),
         ]);
       setUsers(usersRes.data);
       setProducts(prodsRes);
@@ -87,6 +99,9 @@ export default function AdminDashboardPage() {
       setResources(resList);
       setAuditLogs(auditsRes.data);
       setTotalAudits(auditsRes.meta.total);
+      if (settingsRes?.platform_fee !== undefined) {
+        setPlatformFee(String(settingsRes.platform_fee));
+      }
     } catch (err) {
       setErrorMsg(
         getErrorMessage(err, "Gagal memuat data Dashboard Administrator.")
@@ -95,6 +110,33 @@ export default function AdminDashboardPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleSaveFee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingFee(true);
+    try {
+      const num = Number.parseFloat(platformFee);
+      if (isNaN(num) || num < 0) {
+        toast.error(
+          "Format Tidak Valid",
+          "Tarif biaya aplikasi harus berupa angka non-negatif."
+        );
+        return;
+      }
+      await updateSettings({ platform_fee: num });
+      toast.success(
+        "Tarif Aplikasi Diperbarui",
+        `Biaya layanan aplikasi berhasil diatur menjadi ${formatRupiah(num)} per transaksi.`
+      );
+    } catch (err) {
+      toast.error(
+        "Gagal Menyimpan",
+        getErrorMessage(err, "Gagal memperbarui tarif aplikasi.")
+      );
+    } finally {
+      setSavingFee(false);
+    }
+  };
 
   useEffect(() => {
     void loadAdminDashboard();
@@ -193,6 +235,46 @@ export default function AdminDashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* KONTROL ADMIN: Konfigurasi Tarif Biaya Layanan Aplikasi */}
+      <Card className="border-amber-200/90 bg-linear-to-r from-amber-50/70 via-stone-50/40 to-white p-5 shadow-xs">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Coins className="h-5 w-5 text-amber-700" />
+              <h2 className="text-base font-bold text-stone-900">
+                Tarif Biaya Layanan Aplikasi (Platform Fee)
+              </h2>
+              <Badge variant="amber">Wewenang Khusus Admin</Badge>
+            </div>
+            <p className="max-w-2xl text-xs leading-relaxed text-stone-600">
+              Biaya tetap per transaksi yang dikenakan kepada pelanggan pada kalkulasi pesanan.
+              Pemilik Usaha (Owner) dapat memantau besaran tarif ini secara transparan di menu Parameter Usaha tanpa wewenang mengubahnya secara sepihak.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveFee} className="flex shrink-0 items-center gap-2.5">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
+                Rp
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step="100"
+                value={platformFee}
+                onChange={(e) => setPlatformFee(e.target.value)}
+                className="w-36 pl-9 text-sm font-bold text-stone-900"
+                required
+              />
+            </div>
+            <Button type="submit" size="sm" disabled={savingFee}>
+              <Save className="h-3.5 w-3.5" />
+              {savingFee ? "Menyimpan..." : "Simpan Tarif"}
+            </Button>
+          </form>
+        </div>
+      </Card>
 
       {/* ELEMEN 1: Ringkasan Akun Pengguna Aktif */}
       <Card>

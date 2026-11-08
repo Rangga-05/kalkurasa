@@ -281,6 +281,7 @@ func SeedDemoData(ctx context.Context, conn db.Conn, demoPassword string, actorI
 			{key: "shopping_lead_days", val: "2"},
 			{key: "max_active_unpaid_orders", val: "2"},
 			{key: "tax_pct", val: "0.11"},
+			{key: "platform_fee", val: "2000"},
 		}
 		for _, s := range settingsSeed {
 			if _, err := tx.Exec(ctx, `

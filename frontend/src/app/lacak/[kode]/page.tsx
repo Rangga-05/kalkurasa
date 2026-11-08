@@ -414,7 +414,8 @@ export default function TrackOrderDetailPage({
                   </div>
 
                   <div className="space-y-2 rounded-xl bg-stone-50 p-4 text-sm ring-1 ring-stone-200/80">
-                    {order.tax_amount && toNumber(order.tax_amount) > 0 ? (
+                    {((order.tax_amount && toNumber(order.tax_amount) > 0) ||
+                      (order.platform_fee && toNumber(order.platform_fee) > 0)) ? (
                       <>
                         <div className="flex justify-between text-stone-600">
                           <span>Subtotal Produk</span>
@@ -422,14 +423,24 @@ export default function TrackOrderDetailPage({
                             {formatRupiah(order.subtotal ?? 0)}
                           </span>
                         </div>
-                        <div className="flex justify-between text-stone-600">
-                          <span>
-                            PPN ({Math.round(toNumber(order.tax_pct ?? 0) * 100)}%)
-                          </span>
-                          <span className="font-semibold text-stone-900">
-                            {formatRupiah(order.tax_amount)}
-                          </span>
-                        </div>
+                        {order.tax_amount && toNumber(order.tax_amount) > 0 ? (
+                          <div className="flex justify-between text-stone-600">
+                            <span>
+                              PPN ({Math.round(toNumber(order.tax_pct ?? 0) * 100)}%)
+                            </span>
+                            <span className="font-semibold text-stone-900">
+                              {formatRupiah(order.tax_amount)}
+                            </span>
+                          </div>
+                        ) : null}
+                        {order.platform_fee && toNumber(order.platform_fee) > 0 ? (
+                          <div className="flex justify-between text-stone-600">
+                            <span>Biaya Layanan Aplikasi</span>
+                            <span className="font-semibold text-stone-900">
+                              {formatRupiah(order.platform_fee)}
+                            </span>
+                          </div>
+                        ) : null}
                       </>
                     ) : null}
                     <div className="flex justify-between text-stone-600">

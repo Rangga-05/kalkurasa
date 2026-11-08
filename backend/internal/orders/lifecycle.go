@@ -1831,19 +1831,22 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	var subtotalPtr *decimal.Decimal
 	var taxPctPtr *decimal.Decimal
 	var taxAmountPtr *decimal.Decimal
+	var platformFeePtr *decimal.Decimal
 	if actorRole != auth.RoleStaff {
 		if len(snapshotBytes) > 0 && string(snapshotBytes) != "null" {
 			var snap struct {
-				Evaluation EvaluationDTO    `json:"evaluation"`
-				Subtotal   *decimal.Decimal `json:"subtotal"`
-				TaxPct     *decimal.Decimal `json:"tax_pct"`
-				TaxAmount  *decimal.Decimal `json:"tax_amount"`
+				Evaluation  EvaluationDTO    `json:"evaluation"`
+				Subtotal    *decimal.Decimal `json:"subtotal"`
+				TaxPct      *decimal.Decimal `json:"tax_pct"`
+				TaxAmount   *decimal.Decimal `json:"tax_amount"`
+				PlatformFee *decimal.Decimal `json:"platform_fee"`
 			}
 			if err := json.Unmarshal(snapshotBytes, &snap); err == nil {
 				evalDTO = snap.Evaluation
 				subtotalPtr = snap.Subtotal
 				taxPctPtr = snap.TaxPct
 				taxAmountPtr = snap.TaxAmount
+				platformFeePtr = snap.PlatformFee
 			}
 		}
 		if evalDTO.Recommendation == "" {
@@ -2029,6 +2032,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		Subtotal:             subtotalPtr,
 		TaxPct:               taxPctPtr,
 		TaxAmount:            taxAmountPtr,
+		PlatformFee:          platformFeePtr,
 		Total:                total.Round(2),
 		TotalUnits:           totalUnits,
 		IsBigOrder:           isBig,
@@ -2055,6 +2059,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		detail.Subtotal = nil
 		detail.TaxPct = nil
 		detail.TaxAmount = nil
+		detail.PlatformFee = nil
 		detail.Total = decimal.Zero
 		detail.DPRequired = decimal.Zero
 		detail.Paid = decimal.Zero

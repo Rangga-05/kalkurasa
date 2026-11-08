@@ -42,6 +42,7 @@ type SettingsParams struct {
 	WastePct              decimal.Decimal
 	ShoppingBufferPct     decimal.Decimal
 	TaxPct                decimal.Decimal
+	PlatformFee           decimal.Decimal
 	DPDeadlineHours       int
 	BigOrderTotal         decimal.Decimal
 	BigOrderUnits         int
@@ -67,6 +68,7 @@ func DefaultSettingsParams() SettingsParams {
 		WastePct:              decimal.RequireFromString("0.05"),
 		ShoppingBufferPct:     decimal.RequireFromString("0.10"),
 		TaxPct:                decimal.Zero,
+		PlatformFee:           decimal.Zero,
 		DPDeadlineHours:       24,
 		BigOrderTotal:         decimal.NewFromInt(2_000_000),
 		BigOrderUnits:         50,
@@ -140,6 +142,8 @@ func LoadSettingsParams(ctx context.Context, q db.DBTX) (SettingsParams, error) 
 			p.MaxActiveUnpaidOrders = parseInt(raw, p.MaxActiveUnpaidOrders)
 		case "tax_pct":
 			p.TaxPct = parseDec(raw, p.TaxPct)
+		case "platform_fee":
+			p.PlatformFee = parseDec(raw, p.PlatformFee)
 		}
 	}
 	return p, rows.Err()
@@ -705,6 +709,7 @@ type OrderDetail struct {
 	Subtotal             *decimal.Decimal  `json:"subtotal,omitempty"`
 	TaxPct               *decimal.Decimal  `json:"tax_pct,omitempty"`
 	TaxAmount            *decimal.Decimal  `json:"tax_amount,omitempty"`
+	PlatformFee          *decimal.Decimal  `json:"platform_fee,omitempty"`
 	Total                decimal.Decimal   `json:"total"`
 	TotalUnits           int               `json:"total_units"`
 	IsBigOrder           bool              `json:"is_big_order"`
@@ -966,14 +971,15 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		}
 		evalDTO := ToEvaluationDTO(evalRes)
 
-		// Hitung subtotal dan PPN (tax_pct)
+		// Hitung subtotal, PPN (tax_pct), dan biaya layanan (platform_fee)
 		subtotal := evalRes.Total.Round(4)
 		taxPct := params.TaxPct
 		taxAmount := decimal.Zero
 		if taxPct.GreaterThan(decimal.Zero) {
 			taxAmount = subtotal.Mul(taxPct).Round(0)
 		}
-		finalTotal := subtotal.Add(taxAmount)
+		platformFee := params.PlatformFee.Round(0)
+		finalTotal := subtotal.Add(taxAmount).Add(platformFee)
 
 		// Bagian 8.1 butir 5: Tentukan status awal
 		allGatesPassed := evalRes.Recommendation == engine.RecAccept
@@ -1004,6 +1010,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			"subtotal":     subtotal,
 			"tax_pct":      taxPct,
 			"tax_amount":   taxAmount,
+			"platform_fee": platformFee,
 			"total":        finalTotal,
 			"evaluation":   evalDTO,
 			"params": map[string]any{
@@ -1014,6 +1021,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 				"opening_cash":      params.EvalParams.OpeningCash,
 				"dp_pct":            params.EvalParams.DPPct,
 				"tax_pct":           params.TaxPct,
+				"platform_fee":      params.PlatformFee,
 				"lead_time_days":    params.EvalParams.LeadTimeDays,
 				"big_order_total":   params.BigOrderTotal,
 				"big_order_units":   params.BigOrderUnits,
@@ -1152,6 +1160,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			Subtotal:             &subtotal,
 			TaxPct:               &taxPct,
 			TaxAmount:            &taxAmount,
+			PlatformFee:          &platformFee,
 			Total:                finalTotal.Round(2),
 			TotalUnits:           totalUnits,
 			IsBigOrder:           !underBigOrder,
