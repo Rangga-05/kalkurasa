@@ -37,25 +37,25 @@ const SETTING_GROUPS: {
       "Batas rasio utilisasi harian sumber daya (0.00 – 1.00) dan tarif tenaga kerja per menit.",
     fields: [
       {
-        key: "capacity_yellow",
+        key: "status_green_below",
+        label: "Ambang Hijau Kapasitas (Rasio)",
+        helper: "Contoh: 0.70 (utilisasi di bawah 70% ditandai hijau/longgar)",
+        step: "0.01",
+        min: "0.01",
+        max: "1",
+      },
+      {
+        key: "status_yellow_below",
         label: "Ambang Kuning Kapasitas (Rasio)",
-        helper: "Contoh: 0.75 (75% utilisasi mulai ditandai kuning)",
+        helper: "Contoh: 0.90 (utilisasi 70% s/d 90% ditandai kuning/padat)",
         step: "0.01",
         min: "0.01",
         max: "1",
       },
       {
-        key: "capacity_red",
-        label: "Ambang Merah Kapasitas (Rasio)",
-        helper: "Contoh: 0.90 (90% utilisasi ditandai padat/merah)",
-        step: "0.01",
-        min: "0.01",
-        max: "1",
-      },
-      {
-        key: "capacity_hard_limit",
-        label: "Batas Keras Kapasitas G1 (Rasio)",
-        helper: "Contoh: 1.00 (100% kapasitas harian maksimum)",
+        key: "capacity_limit",
+        label: "Batas Terima Kapasitas G1 (Rasio)",
+        helper: "Contoh: 0.90 (90% batas maksimum pesanan diterima otomatis)",
         step: "0.01",
         min: "0.01",
         max: "1.5",
@@ -63,7 +63,7 @@ const SETTING_GROUPS: {
       {
         key: "labor_rate_per_minute",
         label: "Tarif Tenaga Kerja per Menit (Rp)",
-        helper: "Contoh: 400 (dipakai oleh engine.UnitCost)",
+        helper: "Contoh: 400 (dipakai oleh kalkulasi HPP engine.UnitCost)",
         step: "1",
         min: "0",
       },
@@ -72,20 +72,12 @@ const SETTING_GROUPS: {
   {
     title: "Gerbang Margin & Harga (G2)",
     description:
-      "Batas margin kotor minimum untuk meloloskan pesanan dan target margin usaha.",
+      "Batas margin kotor minimum untuk meloloskan pesanan katering.",
     fields: [
       {
-        key: "min_margin",
+        key: "margin_min",
         label: "Margin Minimum G2 (Rasio)",
-        helper: "Contoh: 0.20 (20% margin minimum)",
-        step: "0.01",
-        min: "0",
-        max: "0.99",
-      },
-      {
-        key: "target_margin",
-        label: "Target Margin Ideal (Rasio)",
-        helper: "Contoh: 0.25 (25% target margin kotor)",
+        helper: "Contoh: 0.20 (20% margin kotor minimum kelayakan pesanan)",
         step: "0.01",
         min: "0",
         max: "0.99",
@@ -177,11 +169,11 @@ const SETTING_GROUPS: {
         min: "0",
       },
       {
-        key: "counter_horizon_days",
-        label: "Horizon Pencarian Tanggal Tawaran Balik (Hari)",
-        helper: "Contoh: 7 (mencari tanggal pengganti hingga +7 hari)",
+        key: "lead_time_days",
+        label: "Lead Time Minimum Pesanan (Hari sebelum Acara)",
+        helper: "Contoh: 2 (pesanan minimal dipesan H-2 sebelum acara)",
         step: "1",
-        min: "1",
+        min: "0",
       },
     ],
   },
@@ -251,30 +243,70 @@ export default function PengaturanPage() {
     },
   });
 
+  const parseNum = (val: string | undefined, defaultVal: number): number => {
+    if (!val) return defaultVal;
+    const cleaned = String(val).replace(",", ".");
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isNaN(parsed) ? defaultVal : parsed;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    const yellow = Number.parseFloat(formValues.capacity_yellow ?? "0.75");
-    const red = Number.parseFloat(formValues.capacity_red ?? "0.90");
-    const hard = Number.parseFloat(formValues.capacity_hard_limit ?? "1.00");
-    if (yellow >= red || red > hard) {
+    const green = parseNum(formValues.status_green_below, 0.70);
+    const yellow = parseNum(formValues.status_yellow_below, 0.90);
+    if (green >= yellow) {
       setFormError(
-        "Urutan ambang kapasitas harus memenuhi: Ambang Kuning < Ambang Merah <= Batas Keras."
+        "Ambang Hijau harus lebih kecil dari Ambang Kuning Kapasitas."
       );
       return;
     }
 
-    const minMargin = Number.parseFloat(formValues.min_margin ?? "0.20");
-    const targetMargin = Number.parseFloat(formValues.target_margin ?? "0.25");
-    if (minMargin > targetMargin) {
-      setFormError(
-        "Margin Minimum (G2) tidak boleh lebih besar dari Target Margin Ideal."
-      );
-      return;
+    // Hanya kirim field yang resmi didukung backend
+    const allowedKeys = [
+      "status_green_below",
+      "status_yellow_below",
+      "capacity_limit",
+      "labor_rate_per_minute",
+      "margin_min",
+      "opening_cash",
+      "cash_buffer",
+      "fixed_cost_daily",
+      "dp_pct",
+      "dp_deadline_hours",
+      "big_order_total",
+      "big_order_units",
+      "max_active_unpaid_orders",
+      "shopping_buffer_pct",
+      "shopping_lead_days",
+      "lead_time_days",
+      "tax_pct",
+    ];
+
+    const payload: Record<string, unknown> = {};
+    for (const key of allowedKeys) {
+      const v = formValues[key];
+      if (v === undefined || v === null) continue;
+      payload[key] = String(v).trim().replace(",", ".");
+    }
+    if (payload.big_order_units) {
+      payload.big_order_units = Math.round(parseNum(String(payload.big_order_units), 50));
+    }
+    if (payload.lead_time_days) {
+      payload.lead_time_days = Math.round(parseNum(String(payload.lead_time_days), 2));
+    }
+    if (payload.shopping_lead_days) {
+      payload.shopping_lead_days = Math.round(parseNum(String(payload.shopping_lead_days), 2));
+    }
+    if (payload.dp_deadline_hours) {
+      payload.dp_deadline_hours = Math.round(parseNum(String(payload.dp_deadline_hours), 24));
+    }
+    if (payload.max_active_unpaid_orders) {
+      payload.max_active_unpaid_orders = Math.round(parseNum(String(payload.max_active_unpaid_orders), 2));
     }
 
-    saveMutation.mutate(formValues);
+    saveMutation.mutate(payload);
   };
 
   return (

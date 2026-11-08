@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -154,13 +156,20 @@ func (h *Handler) Put(c *gin.Context) {
 		decimals[k] = decVal
 	}
 
-	if val, ok := normalized["big_order_amount"]; ok {
-		normalized["big_order_total"] = val
-		delete(normalized, "big_order_amount")
+	aliasMap := map[string]string{
+		"capacity_hard_limit": "capacity_limit",
+		"capacity_red":        "capacity_limit",
+		"capacity_yellow":     "status_yellow_below",
+		"min_margin":          "margin_min",
+		"big_order_amount":    "big_order_total",
 	}
-	if val, ok := parsedVals["big_order_amount"]; ok {
-		parsedVals["big_order_total"] = val
-		delete(parsedVals, "big_order_amount")
+	for aliasKey, canonicalKey := range aliasMap {
+		if val, ok := normalized[aliasKey]; ok {
+			normalized[canonicalKey] = val
+		}
+		if val, ok := parsedVals[aliasKey]; ok {
+			parsedVals[canonicalKey] = val
+		}
 	}
 
 	if g, okG := decimals["status_green_below"]; okG {
@@ -229,8 +238,19 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 	parseDec := func(min, max decimal.Decimal, minExcl bool, maxScale int32) (string, any, decimal.Decimal) {
 		var d decimal.Decimal
 		if err := json.Unmarshal(raw, &d); err != nil {
-			v.Add(fmt.Sprintf("%s harus berupa angka.", key))
-			return "", nil, decimal.Zero
+			var s string
+			if err2 := json.Unmarshal(raw, &s); err2 == nil {
+				sClean := strings.ReplaceAll(strings.TrimSpace(s), ",", ".")
+				if parsedDec, err3 := decimal.NewFromString(sClean); err3 == nil {
+					d = parsedDec
+				} else {
+					v.Add(fmt.Sprintf("%s harus berupa angka.", key))
+					return "", nil, decimal.Zero
+				}
+			} else {
+				v.Add(fmt.Sprintf("%s harus berupa angka.", key))
+				return "", nil, decimal.Zero
+			}
 		}
 		res := v.Dec(key, &d, httpx.DecOpts{
 			Min:          min,
@@ -246,8 +266,26 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 	parseInt := func(min, max int) (string, any, decimal.Decimal) {
 		var n int
 		if err := json.Unmarshal(raw, &n); err != nil {
-			v.Add(fmt.Sprintf("%s harus berupa bilangan bulat.", key))
-			return "", nil, decimal.Zero
+			var s string
+			if err2 := json.Unmarshal(raw, &s); err2 == nil {
+				sClean := strings.ReplaceAll(strings.TrimSpace(s), ",", ".")
+				if parsedInt, err3 := strconv.Atoi(sClean); err3 == nil {
+					n = parsedInt
+				} else if f, err4 := strconv.ParseFloat(sClean, 64); err4 == nil {
+					n = int(f)
+				} else {
+					v.Add(fmt.Sprintf("%s harus berupa bilangan bulat.", key))
+					return "", nil, decimal.Zero
+				}
+			} else {
+				var f float64
+				if err5 := json.Unmarshal(raw, &f); err5 == nil {
+					n = int(f)
+				} else {
+					v.Add(fmt.Sprintf("%s harus berupa bilangan bulat.", key))
+					return "", nil, decimal.Zero
+				}
+			}
 		}
 		res := v.Int(key, &n, min, max)
 		return fmt.Sprintf("%d", res), res, decimal.NewFromInt(int64(res))
@@ -257,9 +295,9 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 	maxMoney := decimal.NewFromInt(999_999_999_999)
 
 	switch key {
-	case "capacity_limit", "status_green_below", "status_yellow_below":
+	case "capacity_limit", "capacity_red", "capacity_hard_limit", "status_green_below", "status_yellow_below", "capacity_yellow":
 		return parseDec(decimal.Zero, one, true, 4)
-	case "margin_min":
+	case "margin_min", "min_margin", "target_margin":
 		return parseDec(decimal.Zero, decimal.RequireFromString("0.95"), false, 4)
 	case "waste_pct", "shopping_buffer_pct", "dp_pct", "tax_pct":
 		return parseDec(decimal.Zero, one, false, 4)
@@ -267,7 +305,7 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 		return parseDec(decimal.Zero, maxMoney, false, 4)
 	case "big_order_total", "big_order_amount":
 		return parseDec(decimal.Zero, maxMoney, true, 4)
-	case "lead_time_days", "shopping_lead_days":
+	case "lead_time_days", "shopping_lead_days", "counter_horizon_days":
 		return parseInt(0, 60)
 	case "dp_deadline_hours":
 		return parseInt(1, 720)
