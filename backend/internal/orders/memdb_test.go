@@ -659,6 +659,16 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 		trimmed := strings.Trim(raw, `"`)
 		return &memRow{vals: []any{&trimmed}}
 
+	case strings.Contains(q, "from resources where code = 'labor'"):
+		rid := "00000000-0000-0000-0000-000000000001"
+		return &memRow{vals: []any{rid}}
+
+	case strings.Contains(q, "from products p left join product_loads") || strings.Contains(q, "from products p"):
+		pid := "20000000-0000-4000-8000-000000000002"
+		pname := "Tart Ulang Tahun"
+		oldLoad := decimal.NewFromInt(90)
+		return &memRow{vals: []any{pid, pname, oldLoad}}
+
 	case strings.HasPrefix(q, "insert into rate_limits"):
 		key := fmt.Sprint(args[0])
 		tx.db.mu.Lock()

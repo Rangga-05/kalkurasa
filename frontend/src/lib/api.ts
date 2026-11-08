@@ -1044,6 +1044,31 @@ export async function cleanTransactions(): Promise<Record<string, unknown>> {
   });
 }
 
+export interface RecalibrateWorkloadResult {
+  message: string;
+  product_id: string;
+  product_name: string;
+  old_minutes: string | number;
+  new_minutes: string | number;
+}
+
+/**
+ * POST /api/v1/capacity/recalibrate
+ * Memperbarui standar durasi pengerjaan produk berdasarkan rekomendasi deviasi aktual (Khusus Manajer & Owner).
+ */
+export async function recalibrateWorkload(payload: {
+  product_id?: string;
+  new_minutes: string | number;
+}): Promise<RecalibrateWorkloadResult> {
+  return requestJson<RecalibrateWorkloadResult>("/capacity/recalibrate", {
+    method: "POST",
+    body: JSON.stringify({
+      product_id: payload.product_id || undefined,
+      new_minutes: String(payload.new_minutes),
+    }),
+  });
+}
+
 
 
 

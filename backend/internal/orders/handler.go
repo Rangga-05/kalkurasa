@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 
+	"kalkurasa/backend/internal/audit"
 	"kalkurasa/backend/internal/auth"
 	"kalkurasa/backend/internal/db"
 	"kalkurasa/backend/internal/engine"
@@ -947,6 +948,130 @@ func (h *Handler) CapacityDay(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, detail)
+}
+
+type recalibrateWorkloadRequest struct {
+	ProductID  string          `json:"product_id"`
+	NewMinutes decimal.Decimal `json:"new_minutes" binding:"required"`
+}
+
+// RecalibrateWorkload menangani POST /api/v1/capacity/recalibrate (owner & manager).
+// Memperbarui standar durasi tenaga kerja (labor) produk berdasarkan hasil evaluasi aktual staf dapur.
+func (h *Handler) RecalibrateWorkload(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Autentikasi diperlukan.")
+		return
+	}
+	if actor.Role != auth.RoleOwner && actor.Role != auth.RoleManager && actor.Role != auth.RoleAdmin {
+		httpx.Forbidden(c, "Hanya Manajer atau Pemilik Usaha yang dapat mengkalibrasi beban kerja.")
+		return
+	}
+
+	var req recalibrateWorkloadRequest
+	if !httpx.BindJSON(c, &req) {
+		return
+	}
+
+	v := httpx.NewValidation()
+	newMins := v.Dec("Durasi kerja baru (new_minutes)", &req.NewMinutes, httpx.DecOpts{
+		Min:          decimal.NewFromInt(1),
+		Max:          decimal.NewFromInt(1440),
+		MinExclusive: false,
+		MaxScale:     2,
+	})
+
+	productID := strings.TrimSpace(req.ProductID)
+	if productID != "" && !httpx.ValidUUID(productID) {
+		v.Add("product_id harus berformat UUID yang valid.")
+	}
+	if !v.OK() {
+		v.Respond(c)
+		return
+	}
+
+	ctx := c.Request.Context()
+	var (
+		targetProdID string
+		prodName     string
+		laborResID   string
+		oldLoad      decimal.Decimal
+	)
+
+	err := db.WithTx(ctx, h.DB, func(tx pgx.Tx) error {
+		// Cari resource dengan code = 'labor'
+		if err := tx.QueryRow(ctx, `SELECT id::text FROM resources WHERE code = 'labor' LIMIT 1`).Scan(&laborResID); err != nil {
+			return fmt.Errorf("sumber daya tenaga kerja (labor) tidak ditemukan: %w", err)
+		}
+
+		// Jika productID kosong, cari produk kue tart default yang memiliki beban labor
+		if productID == "" {
+			err := tx.QueryRow(ctx, `
+				SELECT p.id::text, p.name, COALESCE(pl.load, 90.0)
+				FROM products p
+				LEFT JOIN product_loads pl ON pl.product_id = p.id AND pl.resource_id = $1::uuid
+				WHERE p.is_active = true AND (p.category = 'kue_tart' OR p.name ILIKE '%tart%')
+				ORDER BY p.id ASC
+				LIMIT 1
+			`, laborResID).Scan(&targetProdID, &prodName, &oldLoad)
+			if err != nil {
+				return fmt.Errorf("produk untuk kalibrasi tidak ditemukan: %w", err)
+			}
+		} else {
+			targetProdID = productID
+			err := tx.QueryRow(ctx, `
+				SELECT p.name, COALESCE(pl.load, 0)
+				FROM products p
+				LEFT JOIN product_loads pl ON pl.product_id = p.id AND pl.resource_id = $2::uuid
+				WHERE p.id = $1::uuid
+			`, targetProdID, laborResID).Scan(&prodName, &oldLoad)
+			if err != nil {
+				return fmt.Errorf("produk tidak ditemukan: %w", err)
+			}
+		}
+
+		// Upsert product_loads
+		_, err := tx.Exec(ctx, `
+			INSERT INTO product_loads (product_id, resource_id, load)
+			VALUES ($1::uuid, $2::uuid, $3)
+			ON CONFLICT (product_id, resource_id) DO UPDATE
+			SET load = EXCLUDED.load
+		`, targetProdID, laborResID, newMins)
+		if err != nil {
+			return fmt.Errorf("gagal memperbarui beban produk: %w", err)
+		}
+
+		// Audit log
+		if err := audit.Log(ctx, tx, actor.ID, audit.ActionMaster, "product_loads", targetProdID, map[string]any{
+			"action":       "recalibrate_workload",
+			"product_name": prodName,
+			"old_minutes":  oldLoad,
+			"new_minutes":  newMins,
+			"actor_role":   actor.Role,
+			"actor_name":   actor.Name,
+		}); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	httpx.OK(c, gin.H{
+		"message":      fmt.Sprintf("Standar durasi pengerjaan %s berhasil disetel menjadi %s menit.", prodName, newMins.StringFixed(0)),
+		"product_id":   targetProdID,
+		"product_name": prodName,
+		"old_minutes":  oldLoad,
+		"new_minutes":  newMins,
+	})
 }
 
 // ListTasks menangani GET /api/v1/tasks (filter: mine, status, type, date/due_date, from, to).

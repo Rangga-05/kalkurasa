@@ -2252,4 +2252,34 @@ func TestTaxPctAndPlatformFee_DynamicCalculationAndPublicTracking(t *testing.T) 
 	}
 }
 
+func TestRecalibrateWorkload_ManagerAndOwner(t *testing.T) {
+	env := setupIsolatedTestEnv(t)
+
+	// 1. Staff mencoba kalibrasi -> harus 403 Forbidden
+	wStaff := performJSON(env.router, http.MethodPost, "/api/v1/capacity/recalibrate", map[string]any{
+		"new_minutes": 102,
+	}, map[string]string{"Authorization": "Bearer " + env.staffToken})
+	if wStaff.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for staff, got %d", wStaff.Code)
+	}
+
+	// 2. Manager mengkalibrasi durasi kerja produk (S6) -> 200 OK
+	wMgr := performJSON(env.router, http.MethodPost, "/api/v1/capacity/recalibrate", map[string]any{
+		"new_minutes": 102,
+	}, map[string]string{"Authorization": "Bearer " + env.managerToken})
+	if wMgr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for manager, got %d (%s)", wMgr.Code, wMgr.Body.String())
+	}
+	var res struct {
+		Data struct {
+			Message    string          `json:"message"`
+			NewMinutes decimal.Decimal `json:"new_minutes"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(wMgr.Body.Bytes(), &res)
+	if !res.Data.NewMinutes.Equal(decimal.NewFromInt(102)) {
+		t.Fatalf("expected new_minutes 102, got %s", res.Data.NewMinutes)
+	}
+}
+
 

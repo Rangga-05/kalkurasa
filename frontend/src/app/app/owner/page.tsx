@@ -29,6 +29,8 @@ import { DecisionCard } from "@/components/internal/decision-card";
 import { CashProjectionChart } from "@/components/internal/cash-projection-chart";
 import { CapacityCalendar } from "@/components/internal/capacity-calendar";
 import { OrderStatusBadge } from "@/components/internal/order-timeline";
+import { WorkloadRecalibrationCard } from "@/components/internal/workload-recalibration-card";
+import { BusinessImpactSimulation } from "@/components/internal/business-impact-simulation";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/states";
 import { useToast } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
@@ -165,34 +167,14 @@ export default function OwnerDashboardPage() {
         </div>
       </div>
 
-      {/* Peringatan Kalibrasi Durasi Produksi bila aktif */}
-      {kpi.calibration.should_recalibrate ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-xs text-amber-950">
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-            <div>
-              <p className="font-bold">
-                Saran Kalibrasi Durasi Tenaga Kerja Aktif (
-                {kpi.calibration.order_count} sampel selesai)
-              </p>
-              <p className="mt-0.5 text-amber-900">
-                Rata-rata durasi aktual ({kpi.calibration.avg_actual_minutes}{" "}
-                menit) menyimpang{" "}
-                <strong>{formatPercent(kpi.calibration.deviation)}</strong> dari
-                estimasi standar ({kpi.calibration.estimated_minutes} menit).
-                Pertimbangkan penyesuaian beban tenaga pada Master Produk.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/app/produk"
-            className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-white px-3 py-1.5 font-semibold text-amber-900 hover:bg-amber-100"
-          >
-            Tinjau Beban Produk
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      ) : null}
+      {/* Peringatan & Penyesuaian Rekalibrasi Beban Kerja (Skenario S6) */}
+      {kpi.calibration && (
+        <WorkloadRecalibrationCard
+          calibration={kpi.calibration}
+          onSuccess={() => void loadDashboard()}
+          userRole="owner"
+        />
+      )}
 
       {/* ELEMEN 1: Ringkasan 7 KPI Spesifikasi */}
       <section aria-label="Ringkasan Indikator Kinerja Utama" className="space-y-3">
@@ -608,6 +590,11 @@ export default function OwnerDashboardPage() {
           ) : null}
         </div>
       </div>
+
+      {/* ELEMEN 6: Simulasi Dampak Bisnis 30 Hari */}
+      <section aria-label="Simulasi Dampak Bisnis 30 Hari">
+        <BusinessImpactSimulation />
+      </section>
     </div>
   );
 }

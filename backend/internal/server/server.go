@@ -142,6 +142,7 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 			protected.GET("/decision-queue", manageOrders, ordersHandler.DecisionQueue)
 			protected.GET("/capacity/calendar", manageOrders, ordersHandler.CapacityCalendar)
 			protected.GET("/capacity/day/:date", manageOrders, ordersHandler.CapacityDay)
+			protected.POST("/capacity/recalibrate", manageOrders, ordersHandler.RecalibrateWorkload)
 
 			// Operational tasks (Tahap 4B: owner, manager, staff; no prices/margins/cash)
 			protected.GET("/tasks", transitionOrders, ordersHandler.ListTasks)

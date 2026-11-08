@@ -32,6 +32,8 @@ import type { ManagerDashboardResult, OrderDetail } from "@/lib/types";
 import { CapacityCalendar } from "@/components/internal/capacity-calendar";
 import { DecisionCard } from "@/components/internal/decision-card";
 import { OrderStatusBadge } from "@/components/internal/order-timeline";
+import { WorkloadRecalibrationCard } from "@/components/internal/workload-recalibration-card";
+import { BusinessImpactSimulation } from "@/components/internal/business-impact-simulation";
 import { ErrorState, TableSkeleton } from "@/components/ui/states";
 import { useToast } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
@@ -175,6 +177,15 @@ export default function ManagerDashboardPage() {
           </Button>
         </div>
       </div>
+
+      {/* Peringatan & Penyesuaian Rekalibrasi Beban Kerja (Skenario S6) */}
+      {data.kpi?.calibration && (
+        <WorkloadRecalibrationCard
+          calibration={data.kpi.calibration}
+          onSuccess={() => void loadDashboard()}
+          userRole="manager"
+        />
+      )}
 
       {/* ELEMEN 1: Ringkasan KPI (Ketepatan Waktu & Utilisasi) */}
       <section aria-label="Ringkasan KPI Operasional" className="space-y-3">
@@ -570,6 +581,11 @@ export default function ManagerDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ELEMEN 5: Simulasi Dampak Bisnis 30 Hari */}
+      <section aria-label="Simulasi Dampak Bisnis 30 Hari">
+        <BusinessImpactSimulation />
+      </section>
     </div>
   );
 }
