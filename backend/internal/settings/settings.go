@@ -154,6 +154,15 @@ func (h *Handler) Put(c *gin.Context) {
 		decimals[k] = decVal
 	}
 
+	if val, ok := normalized["big_order_amount"]; ok {
+		normalized["big_order_total"] = val
+		delete(normalized, "big_order_amount")
+	}
+	if val, ok := parsedVals["big_order_amount"]; ok {
+		parsedVals["big_order_total"] = val
+		delete(parsedVals, "big_order_amount")
+	}
+
 	if g, okG := decimals["status_green_below"]; okG {
 		if y, okY := decimals["status_yellow_below"]; okY {
 			if !g.LessThan(y) {
@@ -256,7 +265,7 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 		return parseDec(decimal.Zero, one, false, 4)
 	case "labor_rate_per_minute", "cash_buffer", "fixed_cost_daily", "opening_cash", "platform_fee":
 		return parseDec(decimal.Zero, maxMoney, false, 4)
-	case "big_order_total":
+	case "big_order_total", "big_order_amount":
 		return parseDec(decimal.Zero, maxMoney, true, 4)
 	case "lead_time_days", "shopping_lead_days":
 		return parseInt(0, 60)

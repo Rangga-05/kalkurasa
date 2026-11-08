@@ -141,7 +141,7 @@ const SETTING_GROUPS: {
       "Batas kewenangan persetujuan Manajer vs Owner, buffer belanja bahan, dan batas pesanan belum bayar.",
     fields: [
       {
-        key: "big_order_amount",
+        key: "big_order_total",
         label: "Ambang Nominal Pesanan Besar (Rp)",
         helper: "Pesanan >= nilai ini wajib diputuskan oleh Owner",
         step: "1",
