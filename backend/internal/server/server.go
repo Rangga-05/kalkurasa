@@ -236,6 +236,7 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 				ordersHandler.KPI,
 			)
 			protected.POST("/admin/reset-demo", adminOnly, ordersHandler.ResetDemo)
+			protected.POST("/admin/clean-transactions", adminOnly, ordersHandler.CleanTransactions)
 			protected.GET("/audit-logs",
 				auth.RequireRole(auth.RoleOwner, auth.RoleAdmin),
 				ordersHandler.AuditLogs,

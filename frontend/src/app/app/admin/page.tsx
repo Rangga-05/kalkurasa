@@ -9,17 +9,22 @@ import {
   Coins,
   Cpu,
   Database,
+  Download,
   FileSpreadsheet,
   RefreshCw,
   RotateCcw,
   Save,
   ShieldCheck,
+  Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 import {
+  cleanTransactions,
   getAuditLogs,
   getErrorMessage,
   getIngredients,
+  getOrders,
   getProducts,
   getResources,
   getSettings,
@@ -27,6 +32,7 @@ import {
   resetDemoData,
   updateSettings,
 } from "@/lib/api";
+import { exportOrdersToCSV } from "@/lib/export-csv";
 import {
   AUDIT_ACTION_LABELS,
   AUDIT_ENTITY_LABELS,
@@ -83,8 +89,51 @@ export default function AdminDashboardPage() {
   const [resettingDemo, setResettingDemo] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+  const [cleaningTransactions, setCleaningTransactions] = useState(false);
+  const [showCleanConfirm, setShowCleanConfirm] = useState(false);
+  const [exportingBackup, setExportingBackup] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleExportBackup = async () => {
+    setExportingBackup(true);
+    try {
+      const allOrders = await getOrders();
+      if (!allOrders || allOrders.length === 0) {
+        toast.info("Tidak Ada Data", "Belum ada pesanan tersimpan di database.");
+        return;
+      }
+      const res = exportOrdersToCSV(allOrders, "kalkurasa-cadangan-pesanan");
+      if (res.success) {
+        toast.success(
+          "Pencadangan Berhasil",
+          `${res.count} rekaman pesanan telah diunduh ke berkas "${res.filename}".`
+        );
+      }
+    } catch (err) {
+      toast.error("Gagal Mengunduh Cadangan", getErrorMessage(err));
+    } finally {
+      setExportingBackup(false);
+    }
+  };
+
+  const handleCleanTransactions = async () => {
+    setCleaningTransactions(true);
+    try {
+      await cleanTransactions();
+      toast.success(
+        "Database Dibersihkan (Siap Produksi Riil)",
+        "Seluruh data transaksi demo/uji coba telah dibersihkan. Sistem kini siap digunakan untuk operasional nyata."
+      );
+      setShowCleanConfirm(false);
+      await loadAdminDashboard();
+    } catch (err) {
+      toast.error("Gagal Membersihkan Database", getErrorMessage(err));
+    } finally {
+      setCleaningTransactions(false);
+    }
+  };
 
   const handleResetDemo = async () => {
     setResettingDemo(true);
@@ -299,56 +348,147 @@ export default function AdminDashboardPage() {
         </div>
       </Card>
 
-      {/* KONTROL ADMIN 2: Reset & Muat Ulang Data Demo Katering */}
-      <Card className="border-stone-200 bg-stone-50/60 p-5 shadow-xs">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
+      {/* KONTROL ADMIN 2: Pemeliharaan Database & Pencadangan Data */}
+      <Card className="border-stone-200 bg-white p-5 shadow-xs">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1 border-b border-stone-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Database className="h-5 w-5 text-amber-700" />
-              <h2 className="text-base font-bold text-stone-900">
-                Data Demo Katering &amp; Skenario Transaksi (40 Pesanan)
-              </h2>
-              <Badge variant="slate">Lingkungan Pengujian</Badge>
+              <div>
+                <h2 className="text-base font-bold text-stone-900">
+                  Pemeliharaan Database &amp; Portabilitas Data (Go-Live Ready)
+                </h2>
+                <p className="text-xs text-stone-600">
+                  Kelola pencadangan arsip transaksi (Excel/CSV), muat ulang skenario uji coba GTNIC 2026, atau bersihkan seluruh data demo untuk persiapan operasional riil.
+                </p>
+              </div>
             </div>
-            <p className="max-w-2xl text-xs leading-relaxed text-stone-600">
-              Muat ulang seluruh 40 pesanan deterministik (termasuk pesanan Lunas yang siap dicetak nota, pesanan Belum Lunas / DP saja, pesanan dalam produksi, hingga pembatalan) dan setel ulang kata sandi semua akun demo (<code className="font-mono text-stone-800">@demo.test</code>) sesuai nilai <code className="font-mono text-stone-800">SEED_DEMO_PASSWORD</code> pada berkas backend <code className="font-mono">.env</code>.
-            </p>
+            <Badge variant="slate" className="self-start sm:self-center">
+              Wewenang Khusus Admin
+            </Badge>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            {showResetConfirm ? (
-              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2 text-xs">
-                <span className="font-medium text-rose-900">Yakin reset database?</span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={resettingDemo}
-                  onClick={() => void handleResetDemo()}
-                  className="gap-1"
-                >
-                  <RotateCcw className={`h-3 w-3 ${resettingDemo ? "animate-spin" : ""}`} />
-                  {resettingDemo ? "Mereset..." : "Ya, Reset Sekarang"}
-                </Button>
+          <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
+            {/* Opsi 1: Ekspor Cadangan Lengkap */}
+            <div className="flex flex-col justify-between rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+                  Pencadangan Arsip (CSV)
+                </div>
+                <p className="text-xs leading-relaxed text-stone-600">
+                  Unduh seluruh rekaman transaksi katering ke format spreadsheet Excel/CSV sebelum melakukan bersih-bersih database.
+                </p>
+              </div>
+              <div className="mt-4 pt-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={resettingDemo}
-                  onClick={() => setShowResetConfirm(false)}
+                  disabled={exportingBackup}
+                  onClick={() => void handleExportBackup()}
+                  className="w-full gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
                 >
-                  Batal
+                  <Download className={`h-3.5 w-3.5 ${exportingBackup ? "animate-spin" : ""}`} />
+                  {exportingBackup ? "Mengunduh..." : "Unduh Cadangan Lengkap"}
                 </Button>
               </div>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowResetConfirm(true)}
-                className="gap-1.5 border-stone-300 text-stone-700 hover:bg-stone-100"
-              >
-                <RotateCcw className="h-3.5 w-3.5 text-stone-500" />
-                Reset &amp; Muat Ulang Data Demo
-              </Button>
-            )}
+            </div>
+
+            {/* Opsi 2: Reset ke Data Demo GTNIC */}
+            <div className="flex flex-col justify-between rounded-xl border border-stone-200 bg-stone-50/70 p-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-stone-900">
+                  <Sparkles className="h-4 w-4 text-amber-600" />
+                  Mode Simulasi Demo (40 Pesanan)
+                </div>
+                <p className="text-xs leading-relaxed text-stone-600">
+                  Muat ulang 40 pesanan deterministik (Lunas, Belum Lunas, Dalam Produksi) dan setel ulang password akun demo untuk presentasi juri.
+                </p>
+              </div>
+              <div className="mt-4 pt-2">
+                {showResetConfirm ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={resettingDemo}
+                      onClick={() => void handleResetDemo()}
+                      className="flex-1 text-xs"
+                    >
+                      <RotateCcw className={`h-3 w-3 ${resettingDemo ? "animate-spin" : ""}`} />
+                      {resettingDemo ? "Mereset..." : "Ya, Reset Demo"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={resettingDemo}
+                      onClick={() => setShowResetConfirm(false)}
+                      className="text-xs"
+                    >
+                      Batal
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowResetConfirm(true)}
+                    className="w-full gap-1.5 border-stone-300 text-stone-700 hover:bg-stone-200"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 text-stone-500" />
+                    Reset ke Data Demo
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Opsi 3: Bersihkan Database (Mode Produksi Riil) */}
+            <div className="flex flex-col justify-between rounded-xl border border-rose-200/80 bg-rose-50/30 p-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-rose-950">
+                  <Trash2 className="h-4 w-4 text-rose-600" />
+                  Mode Bersih / Siap Produksi
+                </div>
+                <p className="text-xs leading-relaxed text-stone-600">
+                  Kosongkan seluruh transaksi demo agar katering siap menerima pesanan riil pertama pelanggan tanpa sisa data simulasi.
+                </p>
+              </div>
+              <div className="mt-4 pt-2">
+                {showCleanConfirm ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={cleaningTransactions}
+                      onClick={() => void handleCleanTransactions()}
+                      className="flex-1 bg-rose-700 text-xs hover:bg-rose-800"
+                    >
+                      <Trash2 className={`h-3 w-3 ${cleaningTransactions ? "animate-spin" : ""}`} />
+                      {cleaningTransactions ? "Membersihkan..." : "Ya, Kosongkan"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={cleaningTransactions}
+                      onClick={() => setShowCleanConfirm(false)}
+                      className="text-xs"
+                    >
+                      Batal
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowCleanConfirm(true)}
+                    className="w-full gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                    Bersihkan Data Transaksi
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </Card>

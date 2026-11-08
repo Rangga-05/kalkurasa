@@ -141,6 +141,52 @@ func (h *Handler) ResetDemo(c *gin.Context) {
 	httpx.OK(c, summary)
 }
 
+// CleanTransactions menangani POST /api/v1/admin/clean-transactions (khusus peran admin).
+// Menghapus seluruh pesanan, pembayaran, tugas operasional, entri kas, dan audit log
+// agar sistem berada dalam kondisi bersih (clean slate) siap untuk operasional produksi riil.
+func (h *Handler) CleanTransactions(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	actor := auth.CurrentUser(c)
+	if actor == nil {
+		httpx.Unauthorized(c, "Autentikasi diperlukan.")
+		return
+	}
+	if actor.Role != auth.RoleAdmin {
+		httpx.Forbidden(c, "Hanya administrator yang dapat membersihkan data transaksi.")
+		return
+	}
+
+	clearedTables := []string{
+		"audit_logs", "stock_movements", "purchases", "cash_entries", "tasks", "payments",
+		"order_evaluations", "order_items", "orders", "day_locks", "rate_limits",
+	}
+
+	err := db.WithTx(c.Request.Context(), h.DB, func(tx pgx.Tx) error {
+		for _, tbl := range clearedTables {
+			if _, err := tx.Exec(c.Request.Context(), "DELETE FROM "+tbl); err != nil {
+				return fmt.Errorf("clean table %s: %w", tbl, err)
+			}
+		}
+		// Catat satu audit log perdana yang menandai dimulainya mode produksi bersih
+		_ = audit.Log(c.Request.Context(), tx, actor.ID, "clean_transactions", "system", "", map[string]any{
+			"message": "Seluruh data transaksi dan simulasi pesanan dibersihkan oleh Admin untuk operasional riil.",
+		})
+		return nil
+	})
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+
+	httpx.OK(c, gin.H{
+		"message":        "Seluruh data transaksi berhasil dibersihkan. Sistem kini siap digunakan untuk operasional riil (clean slate).",
+		"tables_cleared": clearedTables,
+	})
+}
+
 // SeedDemoData mengisi ulang katalog (tanpa mengubah biaya Snack Box Rp 19.000) dan
 // membuat 40 pesanan demo deterministik beserta pembayaran, tugas, pergerakan stok,
 // entri kas, dan audit log secara idempoten dalam satu transaksi.

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Calendar,
   ExternalLink,
+  FileSpreadsheet,
   Filter,
   Loader2,
   Plus,
@@ -31,11 +32,13 @@ import {
   formatRupiah,
   toDateKeyWIB,
 } from "@/lib/format";
-import type {
+import {
   DeliveryType,
   OrderDetail,
   PublicProduct,
 } from "@/lib/types";
+import { exportOrdersToCSV } from "@/lib/export-csv";
+import { useToast } from "@/components/providers";
 
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Semua Status" },
@@ -63,6 +66,7 @@ const DEMO_PRESET_QUICK_SEARCH = [
 
 export default function OrdersListPage() {
   const router = useRouter();
+  const toast = useToast();
   const { user } = useInternalSession();
   const isStaff = user?.role === "staff";
   const canCreateManual = user?.role === "owner" || user?.role === "manager";
@@ -127,6 +131,21 @@ export default function OrdersListPage() {
       setLoading(false);
     }
   }, [statusFilter, dateFilter]);
+
+  const handleExportCSV = () => {
+    const listToExport = filteredOrders.length > 0 ? filteredOrders : orders;
+    if (listToExport.length === 0) {
+      toast.error("Tidak Ada Data", "Tidak ada pesanan yang dapat diekspor.");
+      return;
+    }
+    const res = exportOrdersToCSV(listToExport, "kalkurasa-pesanan");
+    if (res.success) {
+      toast.success(
+        "Ekspor Excel / CSV Berhasil",
+        `${res.count} pesanan telah diunduh ke dalam berkas "${res.filename}".`
+      );
+    }
+  };
 
   useEffect(() => {
     void loadOrders();
@@ -220,6 +239,17 @@ export default function OrdersListPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={orders.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-2xs transition hover:bg-stone-50 disabled:opacity-50"
+            title="Unduh laporan pesanan ke format CSV / Excel"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+            Ekspor CSV / Excel
+          </button>
+
           <button
             type="button"
             onClick={() => void loadOrders()}

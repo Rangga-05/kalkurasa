@@ -1034,6 +1034,16 @@ export async function resetDemoData(): Promise<Record<string, unknown>> {
   });
 }
 
+/**
+ * POST /api/v1/admin/clean-transactions
+ * Membersihkan seluruh transaksi pesanan, tugas, kas, dan audit log untuk mode produksi riil (khusus Admin).
+ */
+export async function cleanTransactions(): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>("/admin/clean-transactions", {
+    method: "POST",
+  });
+}
+
 
 
 
