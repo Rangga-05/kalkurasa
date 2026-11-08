@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -9,12 +9,12 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { formatPercent, toNumber } from "@/lib/format";
-import { recalibrateWorkload } from "@/lib/api";
+import { getProducts, recalibrateWorkload } from "@/lib/api";
 import { useToast } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { CalibrationSuggestion } from "@/lib/types";
+import type { CalibrationSuggestion, Product } from "@/lib/types";
 
 interface WorkloadRecalibrationCardProps {
   calibration: CalibrationSuggestion;
@@ -33,9 +33,49 @@ export function WorkloadRecalibrationCard({
   const avgActual = Math.round(toNumber(calibration.avg_actual_minutes) || 102);
   const estimated = Math.round(toNumber(calibration.estimated_minutes) || 90);
 
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [selectedProductName, setSelectedProductName] = useState<string>("Tart Ulang Tahun");
+
   const [adjustedMinutes, setAdjustedMinutes] = useState<string>(String(avgActual));
   const [submitting, setSubmitting] = useState(false);
-  const [justApplied, setJustApplied] = useState<number | null>(null);
+  const [justApplied, setJustApplied] = useState<{ name: string; mins: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getProducts()
+      .then((prods) => {
+        if (!active) return;
+        setProducts(prods);
+        const tart = prods.find((p) => p.name.toLowerCase().includes("tart"));
+        if (tart) {
+          setSelectedProductId(tart.id);
+          setSelectedProductName(tart.name);
+        } else if (prods.length > 0) {
+          setSelectedProductId(prods[0].id);
+          setSelectedProductName(prods[0].name);
+        }
+      })
+      .catch(() => {
+        // Abaikan kegagalan jaringan sementara
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const isTartSelected = selectedProductName.toLowerCase().includes("tart");
+
+  const handleProductChange = (id: string) => {
+    setSelectedProductId(id);
+    const prod = products.find((p) => p.id === id);
+    if (prod) {
+      setSelectedProductName(prod.name);
+      if (prod.name.toLowerCase().includes("tart")) {
+        setAdjustedMinutes(String(avgActual));
+      }
+    }
+  };
 
   if (!calibration.should_recalibrate && !justApplied) {
     return null;
@@ -51,13 +91,14 @@ export function WorkloadRecalibrationCard({
     setSubmitting(true);
     try {
       const res = await recalibrateWorkload({
+        product_id: selectedProductId || undefined,
         new_minutes: minsNum,
       });
       toast.success(
         "Beban Kerja Berhasil Dikalibrasi",
-        res.message || `Standar durasi kerja berhasil diperbarui menjadi ${minsNum} menit.`
+        res.message || `Standar durasi kerja ${selectedProductName} berhasil diperbarui menjadi ${minsNum} menit.`
       );
-      setJustApplied(minsNum);
+      setJustApplied({ name: selectedProductName, mins: minsNum });
       onSuccess?.();
     } catch (err: unknown) {
       const message =
@@ -75,8 +116,8 @@ export function WorkloadRecalibrationCard({
       className={`rounded-2xl border border-amber-300 bg-linear-to-r from-amber-50/90 via-amber-50/50 to-white p-5 text-amber-950 shadow-xs ${className}`}
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        {/* Kolom Kiri: Deteksi Deviasi Riil */}
-        <div className="space-y-2">
+        {/* Kolom Kiri: Deteksi Deviasi Riil & Pemilih Menu */}
+        <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-900">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />
@@ -87,29 +128,61 @@ export function WorkloadRecalibrationCard({
             </Badge>
           </div>
 
-          <h3 className="text-base font-bold text-stone-900">
-            Penyesuaian Waktu Produksi: Tart Ulang Tahun
-          </h3>
-
-          <p className="max-w-2xl text-xs leading-relaxed text-stone-700">
-            Berdasarkan <strong>{calibration.order_count} pesanan selesai</strong> terakhir, durasi pengerjaan riil staf dapur rata-rata memakan waktu{" "}
-            <strong className="text-amber-900">{calibration.avg_actual_minutes} menit</strong>, menyimpang{" "}
-            <strong className="text-rose-700">+{formatPercent(calibration.deviation)}</strong> dari estimasi standar awal ({calibration.estimated_minutes} menit).
-          </p>
-
-          <div className="flex flex-wrap items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-white/90 px-3 py-1.5 shadow-2xs">
-              <Clock className="h-3.5 w-3.5 text-stone-500" />
-              <span className="text-stone-600">Standar Awal:</span>
-              <strong className="font-semibold text-stone-900">{estimated} menit/unit</strong>
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-white/90 px-3 py-1.5 shadow-2xs">
-              <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
-              <span className="text-stone-600">Rata-rata Riil Staf:</span>
-              <strong className="font-semibold text-amber-900">{avgActual} menit/unit</strong>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h3 className="text-base font-bold text-stone-900">
+              Penyesuaian Waktu Produksi:
+            </h3>
+            {/* Dropdown Pemilihan Menu Produk */}
+            <div className="relative inline-flex items-center">
+              <select
+                value={selectedProductId}
+                onChange={(e) => handleProductChange(e.target.value)}
+                aria-label="Pilih Menu Produk untuk Kalibrasi Waktu Kerja"
+                className="cursor-pointer rounded-xl border border-amber-400 bg-white py-1 pl-3 pr-8 text-xs font-bold text-amber-950 shadow-2xs hover:border-amber-500 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                {products.length > 0 ? (
+                  products.map((p) => {
+                    const isTart = p.name.toLowerCase().includes("tart");
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {isTart ? "(⚠️ Terdeteksi Deviasi S6)" : ""}
+                      </option>
+                    );
+                  })
+                ) : (
+                  <option value="">Tart Ulang Tahun (⚠️ Terdeteksi Deviasi S6)</option>
+                )}
+              </select>
             </div>
           </div>
+
+          {isTartSelected ? (
+            <p className="max-w-2xl text-xs leading-relaxed text-stone-700">
+              Berdasarkan <strong>{calibration.order_count} pesanan selesai</strong> terakhir, durasi pengerjaan riil staf dapur rata-rata memakan waktu{" "}
+              <strong className="text-amber-900">{calibration.avg_actual_minutes} menit</strong>, menyimpang{" "}
+              <strong className="text-rose-700">+{formatPercent(calibration.deviation)}</strong> dari estimasi standar awal ({calibration.estimated_minutes} menit).
+            </p>
+          ) : (
+            <p className="max-w-2xl text-xs leading-relaxed text-stone-700">
+              Sesuaikan standar durasi kerja (menit pengerjaan koki) per unit <strong>{selectedProductName}</strong> untuk memperbarui kalkulasi kapasitas dan utilisasi dapur harian.
+            </p>
+          )}
+
+          {isTartSelected && (
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-white/90 px-3 py-1.5 shadow-2xs">
+                <Clock className="h-3.5 w-3.5 text-stone-500" />
+                <span className="text-stone-600">Standar Awal:</span>
+                <strong className="font-semibold text-stone-900">{estimated} menit/unit</strong>
+              </div>
+
+              <div className="flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-white/90 px-3 py-1.5 shadow-2xs">
+                <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
+                <span className="text-stone-600">Rata-rata Riil Staf:</span>
+                <strong className="font-semibold text-amber-900">{avgActual} menit/unit</strong>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Kolom Kanan: Kontrol Penyesuaian oleh Manajer */}
@@ -117,7 +190,7 @@ export function WorkloadRecalibrationCard({
           <div className="flex items-center justify-between gap-2">
             <label className="flex items-center gap-1 text-xs font-bold text-stone-800">
               <Sliders className="h-3.5 w-3.5 text-amber-600" />
-              Durasi Kerja Baru:
+              Durasi Kerja ({selectedProductName}):
             </label>
             <span className="text-[11px] text-stone-500">Bisa diubah Manajer</span>
           </div>
@@ -153,10 +226,10 @@ export function WorkloadRecalibrationCard({
           <div className="flex flex-wrap items-center gap-1.5 pt-1">
             <span className="text-[10px] font-medium text-stone-500">Pilihan cepat:</span>
             {[
-              { label: `${avgActual} m (Riil)`, val: String(avgActual) },
-              { label: "100 m", val: "100" },
-              { label: "95 m", val: "95" },
-              { label: "105 m", val: "105" },
+              { label: isTartSelected ? `${avgActual} m (Riil)` : "30 m", val: isTartSelected ? String(avgActual) : "30" },
+              { label: isTartSelected ? "100 m" : "45 m", val: isTartSelected ? "100" : "45" },
+              { label: isTartSelected ? "95 m" : "60 m", val: isTartSelected ? "95" : "60" },
+              { label: isTartSelected ? "105 m" : "90 m", val: isTartSelected ? "105" : "90" },
             ].map((p) => (
               <button
                 key={p.val}
@@ -176,7 +249,7 @@ export function WorkloadRecalibrationCard({
           {justApplied && (
             <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-emerald-700">
               <CheckCircle2 className="h-3 w-3 shrink-0" />
-              Standar durasi berhasil disetel ke {justApplied} menit.
+              Standar durasi {justApplied.name} disetel ke {justApplied.mins} menit.
             </p>
           )}
         </div>
