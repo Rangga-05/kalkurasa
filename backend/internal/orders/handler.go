@@ -180,9 +180,12 @@ type orderItemReq struct {
 type createOrderRequest struct {
 	CustomerName    string         `json:"customer_name"`
 	CustomerContact string         `json:"customer_contact"`
+	CustomerPhone   string         `json:"customer_phone"`
+	Phone           string         `json:"phone"`
 	DeliveryType    string         `json:"delivery_type"`
 	Address         string         `json:"address"`
 	Notes           string         `json:"notes"`
+	Note            string         `json:"note"`
 	EventDate       string         `json:"event_date"`
 	ProductionDate  string         `json:"production_date"`
 	Items           []orderItemReq `json:"items"`
@@ -191,7 +194,14 @@ type createOrderRequest struct {
 func validateOrderRequest(req createOrderRequest, allowManualFields bool) (CreateOrderInput, *httpx.Validation) {
 	v := httpx.NewValidation()
 	custName := v.Str("Nama pelanggan", req.CustomerName, 120)
-	custContact := v.Str("Kontak pelanggan", req.CustomerContact, 80)
+	rawContact := strings.TrimSpace(req.CustomerContact)
+	if rawContact == "" && req.CustomerPhone != "" {
+		rawContact = strings.TrimSpace(req.CustomerPhone)
+	}
+	if rawContact == "" && req.Phone != "" {
+		rawContact = strings.TrimSpace(req.Phone)
+	}
+	custContact := v.Str("Kontak pelanggan", rawContact, 80)
 	deliveryType := v.OneOf("Metode pengambilan (delivery_type)", strings.TrimSpace(req.DeliveryType), "delivery", "pickup")
 	var address string
 	if deliveryType == "delivery" {
@@ -199,7 +209,11 @@ func validateOrderRequest(req createOrderRequest, allowManualFields bool) (Creat
 	} else {
 		address = v.OptStr("Alamat pengantaran", req.Address, 500)
 	}
-	notes := v.OptStr("Catatan", req.Notes, 1000)
+	rawNotes := req.Notes
+	if rawNotes == "" && req.Note != "" {
+		rawNotes = req.Note
+	}
+	notes := v.OptStr("Catatan", rawNotes, 1000)
 
 	eventDate, errEv := db.ParseDate(strings.TrimSpace(req.EventDate))
 	if errEv != nil {
@@ -687,6 +701,8 @@ func (h *Handler) GetOrder(c *gin.Context) {
 type decisionRequest struct {
 	Action         string           `json:"action"`
 	OverrideReason string           `json:"override_reason"`
+	Reason         string           `json:"reason"`
+	Note           string           `json:"note"`
 	Counter        *CounterOfferDTO `json:"counter,omitempty"`
 }
 
@@ -702,7 +718,14 @@ func (h *Handler) DecideOrder(c *gin.Context) {
 	}
 	v := httpx.NewValidation()
 	action := v.OneOf("Aksi keputusan (action)", strings.TrimSpace(req.Action), "accept", "counter", "reject")
-	overrideReason := v.OptStr("Alasan override (override_reason)", req.OverrideReason, 500)
+	reasonText := req.OverrideReason
+	if reasonText == "" && req.Reason != "" {
+		reasonText = req.Reason
+	}
+	if reasonText == "" && req.Note != "" {
+		reasonText = req.Note
+	}
+	overrideReason := v.OptStr("Alasan override (override_reason)", reasonText, 500)
 	if !v.OK() {
 		v.Respond(c)
 		return

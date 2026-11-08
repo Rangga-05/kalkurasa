@@ -36,6 +36,7 @@ type recipeUpsertRequest struct {
 	IngredientID string            `json:"ingredient_id"`
 	QtyPerUnit   *decimal.Decimal  `json:"qty_per_unit"`
 	Items        []recipeItemInput `json:"items"`
+	Recipes      []recipeItemInput `json:"recipes"`
 	ReplaceAll   bool              `json:"replace_all"`
 }
 
@@ -112,6 +113,9 @@ func (h *Handler) UpsertRecipe(c *gin.Context) {
 	}
 
 	rawItems := req.Items
+	if len(rawItems) == 0 && len(req.Recipes) > 0 {
+		rawItems = req.Recipes
+	}
 	if len(rawItems) == 0 && (req.IngredientID != "" || req.QtyPerUnit != nil) {
 		rawItems = []recipeItemInput{
 			{IngredientID: req.IngredientID, QtyPerUnit: req.QtyPerUnit},

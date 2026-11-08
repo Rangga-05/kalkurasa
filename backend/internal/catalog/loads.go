@@ -26,8 +26,9 @@ type ProductLoad struct {
 }
 
 type productLoadInput struct {
-	ResourceID string           `json:"resource_id"`
-	Load       *decimal.Decimal `json:"load"`
+	ResourceID  string           `json:"resource_id"`
+	Load        *decimal.Decimal `json:"load"`
+	LoadPerUnit *decimal.Decimal `json:"load_per_unit"`
 }
 
 type productLoadUpsertRequest struct {
@@ -35,6 +36,7 @@ type productLoadUpsertRequest struct {
 	ResourceID string             `json:"resource_id"`
 	Load       *decimal.Decimal   `json:"load"`
 	Items      []productLoadInput `json:"items"`
+	Loads      []productLoadInput `json:"loads"`
 	ReplaceAll bool               `json:"replace_all"`
 }
 
@@ -110,6 +112,9 @@ func (h *Handler) UpsertProductLoad(c *gin.Context) {
 	}
 
 	rawItems := req.Items
+	if len(rawItems) == 0 && len(req.Loads) > 0 {
+		rawItems = req.Loads
+	}
 	if len(rawItems) == 0 && (req.ResourceID != "" || req.Load != nil) {
 		rawItems = []productLoadInput{
 			{ResourceID: req.ResourceID, Load: req.Load},
@@ -141,7 +146,11 @@ func (h *Handler) UpsertProductLoad(c *gin.Context) {
 		} else {
 			seen[rid] = true
 		}
-		ld := v.Dec(fmt.Sprintf("Beban produksi #%d (load)", idx+1), it.Load, loadOpts)
+		loadVal := it.Load
+		if loadVal == nil && it.LoadPerUnit != nil {
+			loadVal = it.LoadPerUnit
+		}
+		ld := v.Dec(fmt.Sprintf("Beban produksi #%d (load)", idx+1), loadVal, loadOpts)
 		clean = append(clean, cleanLoad{ResourceID: rid, Load: ld})
 	}
 

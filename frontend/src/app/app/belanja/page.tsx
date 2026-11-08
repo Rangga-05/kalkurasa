@@ -79,9 +79,11 @@ export default function BelanjaPage() {
   const purchaseMutation = useMutation({
     mutationFn: recordPurchase,
     onSuccess: (res) => {
+      const delta = res.added_use_units ?? res.delta_use_units ?? 0;
+      const after = res.new_stock ?? res.stock_after ?? 0;
       toast.success(
         "Pembelian Bahan Tercatat",
-        `Stok ${res.ingredient_name} bertambah +${formatNumber(res.added_use_units)} menjadi ${formatNumber(res.new_stock)}.`
+        `Stok ${res.ingredient_name} bertambah +${formatNumber(delta)} menjadi ${formatNumber(after)}.`
       );
       setPurchaseModalOpen(false);
       setFormError(null);
@@ -137,12 +139,15 @@ export default function BelanjaPage() {
       return;
     }
 
+    const unitPriceNum = qtyNum > 0 ? costNum / qtyNum : costNum;
     purchaseMutation.mutate({
       ingredient_id: selectedIngredientId,
       qty_buy_units: String(qtyNum),
+      unit_price: String(unitPriceNum.toFixed(2)),
       total_cost: String(costNum),
       purchased_at: purchasedAt || todayStr,
       supplier: supplier.trim() || undefined,
+      note: supplier.trim() ? `Pemasok: ${supplier.trim()}` : undefined,
     });
   };
 

@@ -152,27 +152,33 @@ export default function ProdukPage() {
       recipes: DraftRecipeRow[];
       loads: DraftLoadRow[];
     }) => {
+      const cleanRecipes = recipes
+        .filter(
+          (r) => r.ingredient_id && Number.parseFloat(r.qty_per_unit) > 0
+        )
+        .map((r) => ({
+          ingredient_id: r.ingredient_id,
+          qty_per_unit: r.qty_per_unit,
+        }));
       await upsertProductRecipes(productId, {
         replace_all: true,
-        items: recipes
-          .filter(
-            (r) => r.ingredient_id && Number.parseFloat(r.qty_per_unit) > 0
-          )
-          .map((r) => ({
-            ingredient_id: r.ingredient_id,
-            qty_per_unit: r.qty_per_unit,
-          })),
+        items: cleanRecipes,
+        recipes: cleanRecipes,
       });
+
+      const cleanLoads = loads
+        .filter(
+          (l) => l.resource_id && Number.parseFloat(l.load_per_unit) >= 0
+        )
+        .map((l) => ({
+          resource_id: l.resource_id,
+          load: l.load_per_unit,
+          load_per_unit: l.load_per_unit,
+        }));
       await upsertProductLoads(productId, {
         replace_all: true,
-        loads: loads
-          .filter(
-            (l) => l.resource_id && Number.parseFloat(l.load_per_unit) >= 0
-          )
-          .map((l) => ({
-            resource_id: l.resource_id,
-            load_per_unit: l.load_per_unit,
-          })),
+        items: cleanLoads,
+        loads: cleanLoads,
       });
     },
     onSuccess: () => {
@@ -274,6 +280,7 @@ export default function ProdukPage() {
         category,
         price,
         packaging_cost: packagingCost,
+        overhead_cost: overheadPerUnit,
         overhead_per_unit: overheadPerUnit,
         waste_pct: wastePct,
         lead_time_days: Number.isFinite(leadNum) ? leadNum : 1,
@@ -287,6 +294,7 @@ export default function ProdukPage() {
           category,
           price,
           packaging_cost: packagingCost,
+          overhead_cost: overheadPerUnit,
           overhead_per_unit: overheadPerUnit,
           waste_pct: wastePct,
           lead_time_days: Number.isFinite(leadNum) ? leadNum : 1,

@@ -38,15 +38,16 @@ func (ing *Ingredient) stripForRole(role string) {
 }
 
 type ingredientRequest struct {
-	Name        string           `json:"name"`
-	UseUnit     string           `json:"use_unit"`
-	BuyUnit     string           `json:"buy_unit"`
-	BuyUnitSize *decimal.Decimal `json:"buy_unit_size"`
-	BuyPrice    *decimal.Decimal `json:"buy_price"`
-	Stock       *decimal.Decimal `json:"stock"`
-	MinStock    *decimal.Decimal `json:"min_stock"`
-	Rounding    string           `json:"rounding"`
-	IsActive    *bool            `json:"is_active"`
+	Name         string           `json:"name"`
+	UseUnit      string           `json:"use_unit"`
+	BuyUnit      string           `json:"buy_unit"`
+	BuyUnitSize  *decimal.Decimal `json:"buy_unit_size"`
+	BuyPrice     *decimal.Decimal `json:"buy_price"`
+	Stock        *decimal.Decimal `json:"stock"`
+	MinStock     *decimal.Decimal `json:"min_stock"`
+	Rounding     string           `json:"rounding"`
+	RoundingRule string           `json:"rounding_rule"`
+	IsActive     *bool            `json:"is_active"`
 }
 
 func validateIngredientRequest(req ingredientRequest) (Ingredient, decimal.Decimal, *httpx.Validation) {
@@ -65,6 +66,9 @@ func validateIngredientRequest(req ingredientRequest) (Ingredient, decimal.Decim
 	minStock := v.Dec("Stok minimum", req.MinStock, httpx.MoneyOpts(false, true))
 
 	rounding := req.Rounding
+	if rounding == "" && req.RoundingRule != "" {
+		rounding = req.RoundingRule
+	}
 	if rounding == "" {
 		rounding = "loose"
 	} else {

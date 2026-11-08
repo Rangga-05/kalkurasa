@@ -1054,6 +1054,9 @@ type recordPurchaseRequest struct {
 	IngredientID string           `json:"ingredient_id"`
 	QtyBuyUnits  *decimal.Decimal `json:"qty_buy_units"`
 	UnitPrice    *decimal.Decimal `json:"unit_price"`
+	TotalCost    *decimal.Decimal `json:"total_cost"`
+	PurchasedAt  *string          `json:"purchased_at"`
+	Supplier     *string          `json:"supplier"`
 	Note         string           `json:"note"`
 }
 
@@ -1089,8 +1092,15 @@ func (h *Handler) RecordPurchase(c *gin.Context) {
 	if req.UnitPrice != nil {
 		up := v.Dec("Harga beli per satuan (unit_price)", req.UnitPrice, httpx.MoneyOpts(false, true))
 		unitPricePtr = &up
+	} else if req.TotalCost != nil && req.QtyBuyUnits != nil && req.QtyBuyUnits.IsPositive() {
+		tc := v.Dec("Total biaya beli (total_cost)", req.TotalCost, httpx.MoneyOpts(false, true))
+		up := tc.DivRound(*req.QtyBuyUnits, 2)
+		unitPricePtr = &up
 	}
 	note := v.OptStr("Catatan pembelian", req.Note, 300)
+	if note == "" && req.Supplier != nil && *req.Supplier != "" {
+		note = "Pemasok: " + strings.TrimSpace(*req.Supplier)
+	}
 
 	if !v.OK() {
 		v.Respond(c)
@@ -1115,6 +1125,7 @@ func (h *Handler) RecordPurchase(c *gin.Context) {
 type stockAdjustRequest struct {
 	IngredientID string           `json:"ingredient_id"`
 	Delta        *decimal.Decimal `json:"delta"`
+	Qty          *decimal.Decimal `json:"qty"`
 	NewStock     *decimal.Decimal `json:"new_stock"`
 	Reason       string           `json:"reason"`
 }
@@ -1147,7 +1158,11 @@ func (h *Handler) AdjustStock(c *gin.Context) {
 	} else if len(reason) > 300 {
 		v.Add("Alasan koreksi stok maksimal 300 karakter.")
 	}
-	if req.Delta == nil && req.NewStock == nil {
+	deltaPtr := req.Delta
+	if deltaPtr == nil && req.Qty != nil {
+		deltaPtr = req.Qty
+	}
+	if deltaPtr == nil && req.NewStock == nil {
 		v.Add("Perubahan stok (delta) atau stok akhir (new_stock) wajib diisi.")
 	}
 	if !v.OK() {
@@ -1157,7 +1172,7 @@ func (h *Handler) AdjustStock(c *gin.Context) {
 
 	res, err := AdjustStock(c.Request.Context(), h.DB, StockAdjustInput{
 		IngredientID: ingID,
-		Delta:        req.Delta,
+		Delta:        deltaPtr,
 		NewStock:     req.NewStock,
 		Reason:       reason,
 		ActorID:      u.ID,

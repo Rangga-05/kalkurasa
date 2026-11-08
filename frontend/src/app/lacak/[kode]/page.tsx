@@ -521,7 +521,32 @@ export default function TrackOrderDetailPage({
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm">
-                  {order.dp_deadline ? (
+                  {isFullyPaid ? (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-center">
+                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                      <p className="mt-2 text-sm font-bold text-emerald-900">
+                        Pembayaran Lunas (100%)
+                      </p>
+                      <p className="mt-1 text-xs text-emerald-800">
+                        Seluruh tagihan pesanan sebesar <strong>{formatRupiah(order.total)}</strong> telah dibayar lunas.
+                      </p>
+                      <p className="mt-2 text-[11px] text-stone-600">
+                        Terima kasih! Pesanan Anda saat ini sedang diproses oleh tim dapur kami sesuai jadwal.
+                      </p>
+                    </div>
+                  ) : remainingDP <= 0 ? (
+                    <div className="rounded-xl border border-teal-200 bg-teal-50/80 p-4">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-teal-700" />
+                        <span className="text-xs font-bold text-teal-900">Uang Muka (DP) Terverifikasi</span>
+                      </div>
+                      <p className="mt-1 text-xs text-stone-700">
+                        Pembayaran DP sebesar <strong>{formatRupiah(order.paid)}</strong> telah diterima. Sisa pelunasan sebesar <strong>{formatRupiah(remainingTotal)}</strong> dapat dibayarkan saat pesanan siap diambil/diantar.
+                      </p>
+                    </div>
+                  ) : order.dp_deadline ? (
                     <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5">
                       <p className="text-xs font-medium text-amber-800">
                         Tenggat Pembayaran DP
@@ -540,30 +565,32 @@ export default function TrackOrderDetailPage({
                     </div>
                   ) : null}
 
-                  <div className="space-y-2.5 rounded-xl border border-stone-200 bg-stone-50/70 p-4 text-xs leading-relaxed text-stone-700">
-                    <p className="font-semibold text-stone-900">
-                      Instruksi Pembayaran Manual (Simulasi):
-                    </p>
-                    <ol className="list-decimal space-y-1.5 pl-4">
-                      <li>
-                        Transfer sesuai nominal DP (
-                        <strong>{formatRupiah(order.dp_required)}</strong>) atau
-                        pelunasan ke rekening simulasi{" "}
-                        <strong>Bank Nusantara 123-456-7890</strong> a.n.{" "}
-                        <strong>Dapur Kalkurasa</strong>.
-                      </li>
-                      <li>
-                        Cantumkan kode pesanan{" "}
-                        <strong className="font-mono">{order.code}</strong> pada
-                        berita transfer.
-                      </li>
-                      <li>
-                        Konfirmasikan bukti bayar kepada Manajer/Admin agar
-                        pembayaran dicatat ke sistem dan status pesanan berubah
-                        menjadi <strong>Terkonfirmasi</strong>.
-                      </li>
-                    </ol>
-                  </div>
+                  {!isFullyPaid ? (
+                    <div className="space-y-2.5 rounded-xl border border-stone-200 bg-stone-50/70 p-4 text-xs leading-relaxed text-stone-700">
+                      <p className="font-semibold text-stone-900">
+                        Instruksi Pembayaran Manual (Simulasi):
+                      </p>
+                      <ol className="list-decimal space-y-1.5 pl-4">
+                        <li>
+                          Transfer sesuai nominal DP (
+                          <strong>{formatRupiah(order.dp_required)}</strong>) atau
+                          pelunasan ke rekening simulasi{" "}
+                          <strong>Bank Nusantara 123-456-7890</strong> a.n.{" "}
+                          <strong>Dapur Kalkurasa</strong>.
+                        </li>
+                        <li>
+                          Cantumkan kode pesanan{" "}
+                          <strong className="font-mono">{order.code}</strong> pada
+                          berita transfer.
+                        </li>
+                        <li>
+                          Konfirmasikan bukti bayar kepada Manajer/Admin agar
+                          pembayaran dicatat ke sistem dan status pesanan berubah
+                          menjadi <strong>Terkonfirmasi</strong>.
+                        </li>
+                      </ol>
+                    </div>
+                  ) : null}
 
                   {order.status === "pending_decision" ? (
                     <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50/80 p-3 text-xs text-sky-900">

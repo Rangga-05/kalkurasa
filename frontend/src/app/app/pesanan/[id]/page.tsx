@@ -449,19 +449,27 @@ export default function OrderDetailPage({
             <div className="flex flex-wrap items-center gap-3">
               {/* confirmed -> in_production (manager, owner) */}
               {order.status === "confirmed" && canManage && (
-                <button
-                  type="button"
-                  disabled={submittingTransition}
-                  onClick={() => handleTransition("in_production")}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {submittingTransition ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" />
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {order.tasks?.some((t) => t.type === "shop" && t.status !== "done") && (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-100/80 px-3 py-1.5 text-xs font-medium text-amber-900">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                      Tugas Belanja belum selesai. Pastikan bahan sudah tersedia di dapur.
+                    </span>
                   )}
-                  Mulai Produksi (In Production)
-                </button>
+                  <button
+                    type="button"
+                    disabled={submittingTransition}
+                    onClick={() => handleTransition("in_production")}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {submittingTransition ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    Mulai Produksi (In Production)
+                  </button>
+                </div>
               )}
 
               {order.status === "confirmed" && isStaff && (
@@ -472,15 +480,21 @@ export default function OrderDetailPage({
 
               {/* in_production -> ready (staff, manager, owner) */}
               {order.status === "in_production" && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder="Menit aktual (opsional)"
-                    value={actualMinutes}
-                    onChange={(e) => setActualMinutes(e.target.value)}
-                    className="w-44 rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
-                  />
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+                  <div className="flex flex-col">
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Menit aktual (opsional)"
+                      value={actualMinutes}
+                      onChange={(e) => setActualMinutes(e.target.value)}
+                      title="Waktu riil memasak di dapur (menit). Digunakan sistem untuk kalibrasi HPP tenaga kerja."
+                      className="w-44 rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900 placeholder:text-stone-400"
+                    />
+                    <span className="mt-0.5 text-[10px] text-stone-500">
+                      ⏱ Waktu riil masak (evaluasi resep)
+                    </span>
+                  </div>
                   <button
                     type="button"
                     disabled={submittingTransition}

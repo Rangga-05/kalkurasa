@@ -192,6 +192,7 @@ export default function BahanPage() {
         buy_price: buyPrice,
         stock,
         min_stock: minStock,
+        rounding: roundingRule,
         rounding_rule: roundingRule,
         is_active: isActive,
       });
@@ -205,6 +206,7 @@ export default function BahanPage() {
           buy_unit_size: buyUnitSize,
           buy_price: buyPrice,
           min_stock: minStock,
+          rounding: roundingRule,
           rounding_rule: roundingRule,
           is_active: isActive,
         },
@@ -234,6 +236,7 @@ export default function BahanPage() {
 
     adjustMutation.mutate({
       ingredient_id: adjustTarget.id,
+      delta: String(delta),
       qty: String(delta),
       reason: adjustReason.trim(),
     });

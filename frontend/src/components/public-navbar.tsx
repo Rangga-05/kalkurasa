@@ -15,7 +15,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { getErrorMessage, getMe, logout } from "@/lib/api";
-import { getDashboardPathForRole } from "@/lib/format";
+import { getDashboardPathForRole, ROLE_LABELS } from "@/lib/format";
 import { useToast } from "@/components/providers";
 import { cn } from "@/lib/utils";
 
@@ -107,6 +107,20 @@ export function PublicNavbar() {
 
           {user?.role === "customer" ? (
             <>
+              <div className="hidden items-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50/80 px-2.5 py-1 text-xs text-stone-800 sm:flex">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-700 text-[11px] font-bold text-white shadow-2xs">
+                  {user.name ? user.name.charAt(0).toUpperCase() : "P"}
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="max-w-[130px] truncate font-semibold leading-tight text-stone-900">
+                    {user.name}
+                  </span>
+                  <span className="text-[10px] text-amber-800 leading-none">
+                    Pelanggan
+                  </span>
+                </div>
+              </div>
+
               <Link
                 href="/pesanan-saya"
                 className={cn(
@@ -132,6 +146,20 @@ export function PublicNavbar() {
             </>
           ) : user ? (
             <>
+              <div className="hidden items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs text-stone-800 sm:flex">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-stone-700 text-[11px] font-bold text-white shadow-2xs">
+                  {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="max-w-[130px] truncate font-semibold leading-tight text-stone-900">
+                    {user.name}
+                  </span>
+                  <span className="text-[10px] text-stone-500 leading-none">
+                    {ROLE_LABELS[user.role]}
+                  </span>
+                </div>
+              </div>
+
               <Link
                 href={getDashboardPathForRole(user.role)}
                 className="ml-0.5 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 transition-colors hover:bg-amber-100 sm:ml-1 sm:px-3 sm:text-sm"

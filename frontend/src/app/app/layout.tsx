@@ -193,8 +193,8 @@ export default function InternalAppLayout({
   return (
     <div className="flex flex-1 bg-stone-100/70 print:bg-white print:block">
       {/* Sidebar Desktop */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-stone-200 bg-white lg:flex print:hidden">
-        <div className="flex items-center justify-between border-b border-stone-200 px-5 py-4">
+      <aside className="sticky top-0 hidden h-screen max-h-screen w-64 shrink-0 flex-col border-r border-stone-200 bg-white lg:flex print:hidden">
+        <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-5 py-4">
           <Link
             href={user ? getDashboardPathForRole(user.role) : "/app"}
             className="flex items-center gap-2.5 text-stone-900"
@@ -248,7 +248,7 @@ export default function InternalAppLayout({
           )}
         </nav>
 
-        <div className="border-t border-stone-200 p-4 space-y-3">
+        <div className="shrink-0 border-t border-stone-200 bg-white p-4 space-y-3">
           {user ? (
             <div className="rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200/80">
               <p className="truncate text-sm font-semibold text-stone-900">

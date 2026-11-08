@@ -32,12 +32,15 @@ type Product struct {
 }
 
 type productRequest struct {
-	Name          string           `json:"name"`
-	Category      string           `json:"category"`
-	Price         *decimal.Decimal `json:"price"`
-	PackagingCost *decimal.Decimal `json:"packaging_cost"`
-	OverheadCost  *decimal.Decimal `json:"overhead_cost"`
-	IsActive      *bool            `json:"is_active"`
+	Name            string           `json:"name"`
+	Category        string           `json:"category"`
+	Price           *decimal.Decimal `json:"price"`
+	PackagingCost   *decimal.Decimal `json:"packaging_cost"`
+	OverheadCost    *decimal.Decimal `json:"overhead_cost"`
+	OverheadPerUnit *decimal.Decimal `json:"overhead_per_unit"`
+	WastePct        *decimal.Decimal `json:"waste_pct"`
+	LeadTimeDays    *int             `json:"lead_time_days"`
+	IsActive        *bool            `json:"is_active"`
 }
 
 func validateProductRequest(req productRequest) (Product, *httpx.Validation) {
@@ -49,7 +52,11 @@ func validateProductRequest(req productRequest) (Product, *httpx.Validation) {
 	}
 	price := v.Dec("Harga jual", req.Price, httpx.MoneyOpts(false, false))
 	packaging := v.Dec("Biaya kemasan", req.PackagingCost, httpx.MoneyOpts(false, true))
-	overhead := v.Dec("Biaya overhead", req.OverheadCost, httpx.MoneyOpts(false, true))
+	overheadReq := req.OverheadCost
+	if overheadReq == nil && req.OverheadPerUnit != nil {
+		overheadReq = req.OverheadPerUnit
+	}
+	overhead := v.Dec("Biaya overhead", overheadReq, httpx.MoneyOpts(false, true))
 	active := true
 	if req.IsActive != nil {
 		active = *req.IsActive

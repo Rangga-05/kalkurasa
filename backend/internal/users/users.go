@@ -23,6 +23,8 @@ type createUserRequest struct {
 	Name     string `json:"name"`
 	Role     string `json:"role"`
 	Password string `json:"password"`
+	Contact  string `json:"contact"`
+	Phone    string `json:"phone"`
 	IsActive *bool  `json:"is_active"`
 }
 
@@ -31,6 +33,8 @@ type updateUserRequest struct {
 	Name     string `json:"name"`
 	Role     string `json:"role"`
 	Password string `json:"password"`
+	Contact  string `json:"contact"`
+	Phone    string `json:"phone"`
 	IsActive *bool  `json:"is_active"`
 }
 

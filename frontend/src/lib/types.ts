@@ -502,7 +502,8 @@ export interface CreateIngredientRequest {
   buy_price: DecimalValue;
   stock?: DecimalValue;
   min_stock?: DecimalValue;
-  rounding_rule: RoundingRule;
+  rounding?: RoundingRule;
+  rounding_rule?: RoundingRule;
   is_active?: boolean;
 }
 
@@ -513,6 +514,7 @@ export interface UpdateIngredientRequest {
   buy_unit_size?: DecimalValue;
   buy_price?: DecimalValue;
   min_stock?: DecimalValue;
+  rounding?: RoundingRule;
   rounding_rule?: RoundingRule;
   is_active?: boolean;
 }
@@ -565,28 +567,40 @@ export interface ShoppingListResult {
 export interface RecordPurchaseRequest {
   ingredient_id: string;
   qty_buy_units: DecimalValue;
-  total_cost: DecimalValue;
+  unit_price?: DecimalValue;
+  total_cost?: DecimalValue;
   purchased_at?: string; // YYYY-MM-DD
   supplier?: string;
+  note?: string;
 }
 
 export interface PurchaseResult {
-  purchase_id: string;
+  id?: string;
+  purchase_id?: string;
   ingredient_id: string;
   ingredient_name: string;
+  use_unit?: string;
+  buy_unit?: string;
+  buy_unit_size?: DecimalValue;
   qty_buy_units: DecimalValue;
-  added_use_units: DecimalValue;
-  new_stock: DecimalValue;
-  total_cost: DecimalValue;
-  new_buy_price: DecimalValue;
-  purchased_at: string;
+  delta_use_units?: DecimalValue;
+  added_use_units?: DecimalValue;
+  stock_before?: DecimalValue;
+  stock_after?: DecimalValue;
+  new_stock?: DecimalValue;
+  unit_price?: DecimalValue;
+  total_cost?: DecimalValue;
+  new_buy_price?: DecimalValue;
+  purchased_at?: string;
   supplier?: string;
-  cash_entry_id: string;
+  cash_entry_id?: string;
 }
 
 export interface StockAdjustRequest {
   ingredient_id: string;
-  qty: DecimalValue; // perubahan (+/-) dalam use_unit
+  qty?: DecimalValue; // perubahan (+/-) dalam use_unit
+  delta?: DecimalValue;
+  new_stock?: DecimalValue;
   reason: string;
 }
 
@@ -595,12 +609,12 @@ export interface StockAdjustResult {
   ingredient_id: string;
   ingredient_name: string;
   use_unit: string;
-  qty_change: DecimalValue;
+  delta?: DecimalValue;
+  qty_change?: DecimalValue;
   previous_stock: DecimalValue;
   new_stock: DecimalValue;
-  min_stock: DecimalValue;
-  below_min_stock: boolean;
-  reason: string;
+  below_min_stock?: boolean;
+  reason?: string;
 }
 
 export interface CashProjectionDayDTO {
@@ -662,6 +676,7 @@ export interface CreateProductRequest {
   category?: string;
   price: DecimalValue;
   packaging_cost?: DecimalValue;
+  overhead_cost?: DecimalValue;
   overhead_per_unit?: DecimalValue;
   waste_pct?: DecimalValue;
   lead_time_days?: number;
@@ -673,6 +688,7 @@ export interface UpdateProductRequest {
   category?: string;
   price?: DecimalValue;
   packaging_cost?: DecimalValue;
+  overhead_cost?: DecimalValue;
   overhead_per_unit?: DecimalValue;
   waste_pct?: DecimalValue;
   lead_time_days?: number;
@@ -689,7 +705,11 @@ export interface RecipeItem {
 
 export interface UpsertProductRecipesRequest {
   replace_all: boolean;
-  items: {
+  items?: {
+    ingredient_id: string;
+    qty_per_unit: DecimalValue;
+  }[];
+  recipes?: {
     ingredient_id: string;
     qty_per_unit: DecimalValue;
   }[];
@@ -701,14 +721,21 @@ export interface ProductLoad {
   resource_code?: string;
   resource_name?: string;
   resource_unit?: string;
+  load?: DecimalValue;
   load_per_unit: DecimalValue;
 }
 
 export interface UpsertProductLoadsRequest {
   replace_all: boolean;
-  loads: {
+  loads?: {
     resource_id: string;
-    load_per_unit: DecimalValue;
+    load?: DecimalValue;
+    load_per_unit?: DecimalValue;
+  }[];
+  items?: {
+    resource_id: string;
+    load?: DecimalValue;
+    load_per_unit?: DecimalValue;
   }[];
 }
 
