@@ -41,6 +41,7 @@ type SettingsParams struct {
 	LaborRatePerMin       decimal.Decimal
 	WastePct              decimal.Decimal
 	ShoppingBufferPct     decimal.Decimal
+	TaxPct                decimal.Decimal
 	DPDeadlineHours       int
 	BigOrderTotal         decimal.Decimal
 	BigOrderUnits         int
@@ -65,6 +66,7 @@ func DefaultSettingsParams() SettingsParams {
 		LaborRatePerMin:       decimal.NewFromInt(400),
 		WastePct:              decimal.RequireFromString("0.05"),
 		ShoppingBufferPct:     decimal.RequireFromString("0.10"),
+		TaxPct:                decimal.Zero,
 		DPDeadlineHours:       24,
 		BigOrderTotal:         decimal.NewFromInt(2_000_000),
 		BigOrderUnits:         50,
@@ -136,6 +138,8 @@ func LoadSettingsParams(ctx context.Context, q db.DBTX) (SettingsParams, error) 
 			p.EvalParams.ShoppingLeadDays = parseInt(raw, p.EvalParams.ShoppingLeadDays)
 		case "max_active_unpaid_orders":
 			p.MaxActiveUnpaidOrders = parseInt(raw, p.MaxActiveUnpaidOrders)
+		case "tax_pct":
+			p.TaxPct = parseDec(raw, p.TaxPct)
 		}
 	}
 	return p, rows.Err()
@@ -698,6 +702,9 @@ type OrderDetail struct {
 	EventDate            string            `json:"event_date"`
 	ProductionDate       string            `json:"production_date"`
 	Status               string            `json:"status"`
+	Subtotal             *decimal.Decimal  `json:"subtotal,omitempty"`
+	TaxPct               *decimal.Decimal  `json:"tax_pct,omitempty"`
+	TaxAmount            *decimal.Decimal  `json:"tax_amount,omitempty"`
 	Total                decimal.Decimal   `json:"total"`
 	TotalUnits           int               `json:"total_units"`
 	IsBigOrder           bool              `json:"is_big_order"`
@@ -959,12 +966,21 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		}
 		evalDTO := ToEvaluationDTO(evalRes)
 
+		// Hitung subtotal dan PPN (tax_pct)
+		subtotal := evalRes.Total.Round(4)
+		taxPct := params.TaxPct
+		taxAmount := decimal.Zero
+		if taxPct.GreaterThan(decimal.Zero) {
+			taxAmount = subtotal.Mul(taxPct).Round(0)
+		}
+		finalTotal := subtotal.Add(taxAmount)
+
 		// Bagian 8.1 butir 5: Tentukan status awal
 		allGatesPassed := evalRes.Recommendation == engine.RecAccept
-		underBigOrder := evalRes.Total.LessThan(params.BigOrderTotal) && totalUnits < params.BigOrderUnits
+		underBigOrder := finalTotal.LessThan(params.BigOrderTotal) && totalUnits < params.BigOrderUnits
 
 		status := StatusPendingDecision
-		dpRequired := evalRes.DPCharged.Round(4)
+		dpRequired := engine.DPCharged(params.EvalParams.DPPct, finalTotal, evalRes.MinDP).Round(4)
 		var dpDeadline *time.Time
 		if allGatesPassed && underBigOrder {
 			status = StatusAccepted
@@ -985,6 +1001,10 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		snapshotPayload := map[string]any{
 			"evaluated_at": time.Now().UTC().Format(time.RFC3339),
 			"today":        engine.DateKey(today),
+			"subtotal":     subtotal,
+			"tax_pct":      taxPct,
+			"tax_amount":   taxAmount,
+			"total":        finalTotal,
 			"evaluation":   evalDTO,
 			"params": map[string]any{
 				"capacity_limit":    params.EvalParams.CapacityLimit,
@@ -993,6 +1013,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 				"fixed_cost_daily":  params.EvalParams.FixedCostDaily,
 				"opening_cash":      params.EvalParams.OpeningCash,
 				"dp_pct":            params.EvalParams.DPPct,
+				"tax_pct":           params.TaxPct,
 				"lead_time_days":    params.EvalParams.LeadTimeDays,
 				"big_order_total":   params.BigOrderTotal,
 				"big_order_units":   params.BigOrderUnits,
@@ -1064,7 +1085,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 		`,
 			code, req.Source, customerIDPtr, req.CustomerName, req.CustomerContact, req.DeliveryType,
 			addrPtr, notesPtr, eventDateKey, prodDateKey, status,
-			evalRes.Total.Round(4), dpRequired, dpDeadline,
+			finalTotal.Round(4), dpRequired, dpDeadline,
 			evalRes.Recommendation, evalRes.Reason, counterJSON, string(snapBytes), createdBy,
 		).Scan(&orderID, &createdAt, &updatedAt)
 		if err != nil {
@@ -1105,7 +1126,7 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			"source":         req.Source,
 			"status":         status,
 			"recommendation": evalRes.Recommendation,
-			"total":          evalRes.Total.Round(2),
+			"total":          finalTotal.Round(2),
 			"dp_required":    dpRequired,
 		}
 		if req.CustomerID != "" {
@@ -1128,7 +1149,10 @@ func CreateOrder(ctx context.Context, conn db.Conn, req CreateOrderInput) (*Orde
 			EventDate:            eventDateKey,
 			ProductionDate:       prodDateKey,
 			Status:               status,
-			Total:                evalRes.Total.Round(2),
+			Subtotal:             &subtotal,
+			TaxPct:               &taxPct,
+			TaxAmount:            &taxAmount,
+			Total:                finalTotal.Round(2),
 			TotalUnits:           totalUnits,
 			IsBigOrder:           !underBigOrder,
 			CanDecide:            true,

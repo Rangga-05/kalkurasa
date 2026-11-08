@@ -116,6 +116,7 @@ func NewWithConn(cfg *config.Config, pool *pgxpool.Pool, dbConn db.Conn, store a
 		v1.POST("/auth/logout", authHandler.Logout)
 
 		// Public order & catalog endpoints (Tahap 3A, 3B & 4A+)
+		v1.GET("/public/config", ordersHandler.PublicConfig)
 		v1.GET("/public/products", ordersHandler.PublicProducts)
 		v1.POST("/public/availability", ordersHandler.PublicAvailability)
 		v1.POST("/public/orders", guard.Authenticate(), customerOnly, ordersHandler.CreatePublicOrder)

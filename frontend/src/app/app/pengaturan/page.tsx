@@ -183,6 +183,21 @@ const SETTING_GROUPS: {
       },
     ],
   },
+  {
+    title: "Pajak & Ketentuan Transaksi",
+    description:
+      "Tarif Pajak Pertambahan Nilai (PPN) yang dikenakan pada kalkulasi pesanan pelanggan.",
+    fields: [
+      {
+        key: "tax_pct",
+        label: "Tarif PPN (Rasio Desimal)",
+        helper: "Contoh: 0.11 untuk PPN 11%, atau 0.00 jika katering non-PKP / bebas pajak",
+        step: "0.01",
+        min: "0",
+        max: "1",
+      },
+    ],
+  },
 ];
 
 export default function PengaturanPage() {

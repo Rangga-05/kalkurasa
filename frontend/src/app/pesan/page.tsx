@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import {
   getPublicProducts,
+  getPublicConfig,
   checkPublicAvailability,
   createPublicOrder,
   getMe,
@@ -169,6 +170,12 @@ function OrderFormContent() {
   const productsQuery = useQuery({
     queryKey: ["public-products"],
     queryFn: ({ signal }) => getPublicProducts(signal),
+  });
+
+  const publicConfigQuery = useQuery({
+    queryKey: ["public-config"],
+    queryFn: ({ signal }) => getPublicConfig(signal),
+    staleTime: 60_000,
   });
 
   const meQuery = useQuery({
@@ -323,7 +330,11 @@ function OrderFormContent() {
     return map;
   }, [productsQuery.data]);
 
-  const estimatedTotal = useMemo(() => {
+  const taxRate = useMemo(() => {
+    return toNumber(publicConfigQuery.data?.tax_pct ?? 0);
+  }, [publicConfigQuery.data]);
+
+  const estimatedSubtotal = useMemo(() => {
     let sum = 0;
     for (const it of watchedItems ?? []) {
       const prod = productMap.get(it?.product_id ?? "");
@@ -334,6 +345,15 @@ function OrderFormContent() {
     }
     return sum;
   }, [watchedItems, productMap]);
+
+  const estimatedTax = useMemo(() => {
+    if (taxRate <= 0) return 0;
+    return Math.round(estimatedSubtotal * taxRate);
+  }, [estimatedSubtotal, taxRate]);
+
+  const estimatedTotal = useMemo(() => {
+    return estimatedSubtotal + estimatedTax;
+  }, [estimatedSubtotal, estimatedTax]);
 
   const totalUnits = useMemo(() => {
     let count = 0;
@@ -1246,6 +1266,22 @@ function OrderFormContent() {
                     : "Belum dipilih"}
                 </span>
               </div>
+              {taxRate > 0 ? (
+                <>
+                  <div className="flex justify-between text-stone-600">
+                    <span>Subtotal Produk</span>
+                    <span className="font-semibold text-stone-900">
+                      {formatRupiah(estimatedSubtotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-stone-600">
+                    <span>PPN ({Math.round(taxRate * 100)}%)</span>
+                    <span className="font-semibold text-stone-900">
+                      {formatRupiah(estimatedTax)}
+                    </span>
+                  </div>
+                </>
+              ) : null}
               <div className="border-t border-stone-200 pt-2.5 flex items-baseline justify-between">
                 <span className="font-semibold text-stone-800">
                   Estimasi Total Harga

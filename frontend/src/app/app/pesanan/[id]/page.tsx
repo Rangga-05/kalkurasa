@@ -727,6 +727,33 @@ export default function OrderDetailPage({
             </table>
           </div>
 
+          {!isStaff && (
+            <div className="mt-3 flex flex-col items-end gap-1 text-xs text-stone-600">
+              {order.tax_amount && toNumber(order.tax_amount) > 0 ? (
+                <>
+                  <div className="flex gap-4">
+                    <span>Subtotal Produk:</span>
+                    <span className="font-semibold text-stone-900">
+                      {formatRupiah(order.subtotal ?? 0)}
+                    </span>
+                  </div>
+                  <div className="flex gap-4">
+                    <span>
+                      PPN ({Math.round(toNumber(order.tax_pct ?? 0) * 100)}%):
+                    </span>
+                    <span className="font-semibold text-stone-900">
+                      {formatRupiah(order.tax_amount)}
+                    </span>
+                  </div>
+                </>
+              ) : null}
+              <div className="flex gap-4 border-t border-stone-200 pt-1 text-sm font-bold text-stone-900">
+                <span>Total Tagihan:</span>
+                <span>{formatRupiah(order.total)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Evaluasi 4 Gerbang & Dampak (Hanya untuk Non-Staff) */}
           {!isStaff && order.evaluation && (
             <div className="mt-6 space-y-4 border-t border-stone-100 pt-5">

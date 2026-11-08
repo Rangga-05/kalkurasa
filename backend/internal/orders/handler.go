@@ -66,6 +66,35 @@ func (h *Handler) PublicProducts(c *gin.Context) {
 	httpx.OK(c, items)
 }
 
+// PublicConfigResponse memuat konfigurasi publik yang aman untuk formulir pemesanan.
+type PublicConfigResponse struct {
+	TaxPct        decimal.Decimal `json:"tax_pct"`
+	LeadTimeDays  int             `json:"lead_time_days"`
+	DPPct         decimal.Decimal `json:"dp_pct"`
+	BigOrderTotal decimal.Decimal `json:"big_order_total"`
+	BigOrderUnits int             `json:"big_order_units"`
+}
+
+// PublicConfig menangani GET /api/v1/public/config.
+func (h *Handler) PublicConfig(c *gin.Context) {
+	if h.DB == nil {
+		httpx.DBUnavailable(c)
+		return
+	}
+	params, err := LoadSettingsParams(c.Request.Context(), h.DB)
+	if err != nil {
+		httpx.HandleError(c, err)
+		return
+	}
+	httpx.OK(c, PublicConfigResponse{
+		TaxPct:        params.TaxPct,
+		LeadTimeDays:  params.EvalParams.LeadTimeDays,
+		DPPct:         params.EvalParams.DPPct,
+		BigOrderTotal: params.BigOrderTotal,
+		BigOrderUnits: params.BigOrderUnits,
+	})
+}
+
 type availabilityItemReq struct {
 	ProductID string `json:"product_id"`
 	Qty       *int   `json:"qty"`
@@ -389,6 +418,9 @@ type PublicTrackResponse struct {
 	EventDate    string            `json:"event_date"`
 	Status       string            `json:"status"`
 	Items        []PublicOrderItem `json:"items"`
+	Subtotal     *decimal.Decimal  `json:"subtotal,omitempty"`
+	TaxPct       *decimal.Decimal  `json:"tax_pct,omitempty"`
+	TaxAmount    *decimal.Decimal  `json:"tax_amount,omitempty"`
 	Total        decimal.Decimal   `json:"total"`
 	DPRequired   decimal.Decimal   `json:"dp_required"`
 	DPDeadline   *time.Time        `json:"dp_deadline"`
@@ -487,6 +519,24 @@ func (h *Handler) TrackPublicOrder(c *gin.Context) {
 		return
 	}
 	out.Items = items
+
+	// Hitung rincian subtotal & PPN dari items dan selisih total
+	if len(items) > 0 {
+		var calcSub decimal.Decimal
+		for _, it := range items {
+			calcSub = calcSub.Add(it.Subtotal)
+		}
+		calcSub = calcSub.Round(2)
+		out.Subtotal = &calcSub
+		diff := out.Total.Sub(calcSub).Round(2)
+		if diff.GreaterThan(decimal.Zero) {
+			out.TaxAmount = &diff
+			if calcSub.GreaterThan(decimal.Zero) {
+				pct := diff.Div(calcSub).Round(4)
+				out.TaxPct = &pct
+			}
+		}
+	}
 
 	httpx.OK(c, out)
 }

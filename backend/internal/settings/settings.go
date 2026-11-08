@@ -53,6 +53,7 @@ func defaultSettings() map[string]any {
 		"big_order_units":       50,
 		"shopping_lead_days":       2,
 		"max_active_unpaid_orders": 2,
+		"tax_pct":                  0.0,
 		"demo_today":               nil,
 	}
 }
@@ -239,7 +240,7 @@ func validateSettingEntry(v *httpx.Validation, key string, raw json.RawMessage) 
 		return parseDec(decimal.Zero, one, true, 4)
 	case "margin_min":
 		return parseDec(decimal.Zero, decimal.RequireFromString("0.95"), false, 4)
-	case "waste_pct", "shopping_buffer_pct", "dp_pct":
+	case "waste_pct", "shopping_buffer_pct", "dp_pct", "tax_pct":
 		return parseDec(decimal.Zero, one, false, 4)
 	case "labor_rate_per_minute", "cash_buffer", "fixed_cost_daily", "opening_cash":
 		return parseDec(decimal.Zero, maxMoney, false, 4)

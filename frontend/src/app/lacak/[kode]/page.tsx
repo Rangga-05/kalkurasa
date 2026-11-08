@@ -414,6 +414,24 @@ export default function TrackOrderDetailPage({
                   </div>
 
                   <div className="space-y-2 rounded-xl bg-stone-50 p-4 text-sm ring-1 ring-stone-200/80">
+                    {order.tax_amount && toNumber(order.tax_amount) > 0 ? (
+                      <>
+                        <div className="flex justify-between text-stone-600">
+                          <span>Subtotal Produk</span>
+                          <span className="font-semibold text-stone-900">
+                            {formatRupiah(order.subtotal ?? 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-stone-600">
+                          <span>
+                            PPN ({Math.round(toNumber(order.tax_pct ?? 0) * 100)}%)
+                          </span>
+                          <span className="font-semibold text-stone-900">
+                            {formatRupiah(order.tax_amount)}
+                          </span>
+                        </div>
+                      </>
+                    ) : null}
                     <div className="flex justify-between text-stone-600">
                       <span>Total Nilai Pesanan</span>
                       <span className="font-semibold text-stone-900">

@@ -1828,13 +1828,22 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 
 	// Muat evaluasi dari snapshot + order_evaluations (hanya untuk non-staff)
 	var evalDTO EvaluationDTO
+	var subtotalPtr *decimal.Decimal
+	var taxPctPtr *decimal.Decimal
+	var taxAmountPtr *decimal.Decimal
 	if actorRole != auth.RoleStaff {
 		if len(snapshotBytes) > 0 && string(snapshotBytes) != "null" {
 			var snap struct {
-				Evaluation EvaluationDTO `json:"evaluation"`
+				Evaluation EvaluationDTO    `json:"evaluation"`
+				Subtotal   *decimal.Decimal `json:"subtotal"`
+				TaxPct     *decimal.Decimal `json:"tax_pct"`
+				TaxAmount  *decimal.Decimal `json:"tax_amount"`
 			}
 			if err := json.Unmarshal(snapshotBytes, &snap); err == nil {
 				evalDTO = snap.Evaluation
+				subtotalPtr = snap.Subtotal
+				taxPctPtr = snap.TaxPct
+				taxAmountPtr = snap.TaxAmount
 			}
 		}
 		if evalDTO.Recommendation == "" {
@@ -1990,6 +1999,20 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	isBig := total.GreaterThanOrEqual(params.BigOrderTotal) || totalUnits >= params.BigOrderUnits
 	canDecide := actorRole == auth.RoleOwner || (actorRole == auth.RoleManager && !isBig)
 
+	if subtotalPtr == nil && len(items) > 0 {
+		var calcSub decimal.Decimal
+		for _, it := range items {
+			calcSub = calcSub.Add(it.Subtotal)
+		}
+		subtotalPtr = &calcSub
+		if taxAmountPtr == nil {
+			diff := total.Sub(calcSub)
+			if diff.GreaterThan(decimal.Zero) {
+				taxAmountPtr = &diff
+			}
+		}
+	}
+
 	detail := &OrderDetail{
 		ID:                   id,
 		Code:                 code,
@@ -2003,6 +2026,9 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		EventDate:            engine.DateKey(eventDate),
 		ProductionDate:       engine.DateKey(prodDate),
 		Status:               status,
+		Subtotal:             subtotalPtr,
+		TaxPct:               taxPctPtr,
+		TaxAmount:            taxAmountPtr,
 		Total:                total.Round(2),
 		TotalUnits:           totalUnits,
 		IsBigOrder:           isBig,
@@ -2026,6 +2052,9 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	}
 
 	if actorRole == auth.RoleStaff {
+		detail.Subtotal = nil
+		detail.TaxPct = nil
+		detail.TaxAmount = nil
 		detail.Total = decimal.Zero
 		detail.DPRequired = decimal.Zero
 		detail.Paid = decimal.Zero

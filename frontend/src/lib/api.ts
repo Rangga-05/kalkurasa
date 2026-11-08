@@ -36,6 +36,7 @@ import type {
   ProductLoad,
   PublicOrderSummary,
   PublicProduct,
+  PublicConfig,
   PublicTrackResponse,
   PurchaseResult,
   RecipeItem,
@@ -227,6 +228,19 @@ async function requestListJson<T>(
 // ============================================================================
 // Endpoint Publik (Bagian 9 Brief)
 // ============================================================================
+
+/**
+ * GET /api/v1/public/config
+ * Mengambil parameter publik aman (seperti tarif PPN dinamis).
+ */
+export async function getPublicConfig(
+  signal?: AbortSignal
+): Promise<PublicConfig> {
+  return requestJson<PublicConfig>("/public/config", {
+    method: "GET",
+    signal,
+  });
+}
 
 /**
  * GET /api/v1/public/products

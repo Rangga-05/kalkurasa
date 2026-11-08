@@ -168,6 +168,9 @@ export interface PublicTrackResponse {
   event_date: string; // YYYY-MM-DD
   status: OrderStatus;
   items: PublicOrderItem[];
+  subtotal?: DecimalValue;
+  tax_pct?: DecimalValue;
+  tax_amount?: DecimalValue;
   total: DecimalValue;
   dp_required: DecimalValue;
   dp_deadline: string | null;
@@ -175,6 +178,10 @@ export interface PublicTrackResponse {
   counter_offer: CounterOfferDTO | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PublicConfig {
+  tax_pct: DecimalValue;
 }
 
 export interface CounterResponseRequest {
@@ -284,6 +291,9 @@ export interface OrderDetail {
   event_date: string; // YYYY-MM-DD
   production_date: string; // YYYY-MM-DD
   status: OrderStatus;
+  subtotal?: DecimalValue;
+  tax_pct?: DecimalValue;
+  tax_amount?: DecimalValue;
   total?: DecimalValue;
   total_units: number;
   is_big_order?: boolean;
