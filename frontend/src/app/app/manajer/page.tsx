@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
@@ -28,7 +29,7 @@ import {
   formatRupiah,
   toNumber,
 } from "@/lib/format";
-import type { ManagerDashboardResult, OrderDetail } from "@/lib/types";
+import type { OrderDetail } from "@/lib/types";
 import { CapacityCalendar } from "@/components/internal/capacity-calendar";
 import { DecisionCard } from "@/components/internal/decision-card";
 import { OrderStatusBadge } from "@/components/internal/order-timeline";
@@ -48,30 +49,26 @@ import {
 
 export default function ManagerDashboardPage() {
   const toast = useToast();
-  const [data, setData] = useState<ManagerDashboardResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const res = await getManagerDashboard();
-      setData(res);
-      setSelectedDate((prev) => prev ?? res.today);
-    } catch (err) {
-      setErrorMsg(
-        getErrorMessage(err, "Gagal memuat data Dashboard Manajer Operasional.")
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const dashboardQuery = useQuery({
+    queryKey: ["manager-dashboard"],
+    queryFn: getManagerDashboard,
+  });
 
-  useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
+  const data = dashboardQuery.data ?? null;
+  const loading = dashboardQuery.isLoading;
+  const errorMsg = dashboardQuery.error
+    ? getErrorMessage(
+        dashboardQuery.error,
+        "Gagal memuat data Dashboard Manajer Operasional."
+      )
+    : null;
+
+  const loadDashboard = useCallback(async () => {
+    await dashboardQuery.refetch();
+  }, [dashboardQuery]);
 
   function handleDecided(
     updated: OrderDetail,
@@ -86,7 +83,9 @@ export default function ManagerDashboardPage() {
       "Keputusan Tersimpan",
       `Pesanan #${updated.code} berhasil ${labelMap[action]}.`
     );
-    void loadDashboard();
+    void queryClient.invalidateQueries({ queryKey: ["manager-dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["orders"] });
+    void dashboardQuery.refetch();
   }
 
   if (loading && !data) {

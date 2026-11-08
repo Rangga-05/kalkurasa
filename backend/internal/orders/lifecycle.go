@@ -1674,9 +1674,19 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
 		return nil, err
 	}
+	params, err := LoadSettingsParams(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
 
+	// 1. Muat seluruh pesanan dalam 1 query batch
 	rows, err := conn.Query(ctx, `
-		SELECT id::text
+		SELECT id::text, code, source, customer_id::text, customer_name, customer_contact, delivery_type,
+		       address, notes, event_date, production_date,
+		       status, total, dp_required, dp_deadline, paid,
+		       recommendation, recommendation_reason, counter_offer,
+		       decided_by::text, decided_at, override_reason, snapshot,
+		       created_at, updated_at
 		FROM orders
 		ORDER BY created_at DESC, id DESC
 	`)
@@ -1685,25 +1695,339 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 	}
 	defer rows.Close()
 
-	var ids []string
+	type rawOrderRow struct {
+		id, code, source, custName, custContact, deliveryType string
+		custIDPtr, addrPtr, notesPtr, recPtr, recReasonPtr    *string
+		decidedByPtr, overrideReasonPtr                       *string
+		eventDate, prodDate                                   time.Time
+		decidedAt                                             *time.Time
+		status                                                string
+		total, dpRequired, paid                               decimal.Decimal
+		dpDeadline                                            *time.Time
+		counterBytes, snapshotBytes                           []byte
+		createdAt, updatedAt                                  time.Time
+	}
+
+	var rawOrders []rawOrderRow
+	var orderIDs []string
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var r rawOrderRow
+		if err := rows.Scan(
+			&r.id, &r.code, &r.source, &r.custIDPtr, &r.custName, &r.custContact, &r.deliveryType,
+			&r.addrPtr, &r.notesPtr, &r.eventDate, &r.prodDate,
+			&r.status, &r.total, &r.dpRequired, &r.dpDeadline, &r.paid,
+			&r.recPtr, &r.recReasonPtr, &r.counterBytes,
+			&r.decidedByPtr, &r.decidedAt, &r.overrideReasonPtr, &r.snapshotBytes,
+			&r.createdAt, &r.updatedAt,
+		); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		rawOrders = append(rawOrders, r)
+		orderIDs = append(orderIDs, r.id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	rows.Close()
 
-	out := make([]OrderDetail, 0, len(ids))
-	for _, id := range ids {
-		d, err := loadOrderDetailTx(ctx, conn, id, filter.ActorRole)
+	if len(rawOrders) == 0 {
+		return []OrderDetail{}, nil
+	}
+
+	// 2. Batch load order items
+	itemsByOrderID := make(map[string][]OrderItemDetail, len(rawOrders))
+	totalUnitsByOrderID := make(map[string]int, len(rawOrders))
+	itemRows, err := conn.Query(ctx, `
+		SELECT oi.order_id::text, oi.id::text, oi.product_id::text, p.name, oi.qty, oi.unit_price, oi.unit_cost
+		FROM order_items oi
+		JOIN products p ON p.id = oi.product_id
+		WHERE oi.order_id = ANY($1::uuid[])
+		ORDER BY oi.id ASC
+	`, orderIDs)
+	if err != nil {
+		return nil, err
+	}
+	for itemRows.Next() {
+		var ordID string
+		var it OrderItemDetail
+		if err := itemRows.Scan(&ordID, &it.ID, &it.ProductID, &it.ProductName, &it.Qty, &it.UnitPrice, &it.UnitCost); err != nil {
+			itemRows.Close()
+			return nil, err
+		}
+		totalUnitsByOrderID[ordID] += it.Qty
+		if filter.ActorRole == auth.RoleStaff {
+			it.UnitPrice = decimal.Zero
+			it.UnitCost = decimal.Zero
+			it.Subtotal = decimal.Zero
+		} else {
+			it.UnitPrice = it.UnitPrice.Round(2)
+			it.UnitCost = it.UnitCost.Round(2)
+			it.Subtotal = it.UnitPrice.Mul(decimal.NewFromInt(int64(it.Qty))).Round(2)
+		}
+		itemsByOrderID[ordID] = append(itemsByOrderID[ordID], it)
+	}
+	if err := itemRows.Err(); err != nil {
+		itemRows.Close()
+		return nil, err
+	}
+	itemRows.Close()
+
+	// 3. Batch load evaluations (jika non-staff)
+	gatesByOrderID := make(map[string][]GateDTO, len(rawOrders))
+	if filter.ActorRole != auth.RoleStaff {
+		evRows, err := conn.Query(ctx, `
+			SELECT order_id::text, gate, value, threshold, passed
+			FROM order_evaluations
+			WHERE order_id = ANY($1::uuid[])
+			ORDER BY gate ASC
+		`, orderIDs)
 		if err != nil {
 			return nil, err
 		}
+		for evRows.Next() {
+			var ordID string
+			var g GateDTO
+			if err := evRows.Scan(&ordID, &g.Gate, &g.Value, &g.Threshold, &g.Passed); err != nil {
+				evRows.Close()
+				return nil, err
+			}
+			g.Value = g.Value.Round(4)
+			g.Threshold = g.Threshold.Round(4)
+			gatesByOrderID[ordID] = append(gatesByOrderID[ordID], g)
+		}
+		if err := evRows.Err(); err != nil {
+			evRows.Close()
+			return nil, err
+		}
+		evRows.Close()
+	}
+
+	// 4. Batch load payments (jika non-staff)
+	paymentsByOrderID := make(map[string][]PaymentItem, len(rawOrders))
+	if filter.ActorRole != auth.RoleStaff {
+		payRows, err := conn.Query(ctx, `
+			SELECT order_id::text, id::text, amount, method, paid_at, COALESCE(note, ''), recorded_by::text
+			FROM payments
+			WHERE order_id = ANY($1::uuid[])
+			ORDER BY paid_at ASC, id ASC
+		`, orderIDs)
+		if err != nil {
+			return nil, err
+		}
+		for payRows.Next() {
+			var ordID string
+			var pm PaymentItem
+			if err := payRows.Scan(&ordID, &pm.ID, &pm.Amount, &pm.Method, &pm.PaidAt, &pm.Note, &pm.RecordedBy); err != nil {
+				payRows.Close()
+				return nil, err
+			}
+			pm.OrderID = ordID
+			pm.Amount = pm.Amount.Round(2)
+			paymentsByOrderID[ordID] = append(paymentsByOrderID[ordID], pm)
+		}
+		if err := payRows.Err(); err != nil {
+			payRows.Close()
+			return nil, err
+		}
+		payRows.Close()
+	}
+
+	// 5. Batch load tasks
+	tasksByOrderID := make(map[string][]TaskItem, len(rawOrders))
+	taskRows, err := conn.Query(ctx, `
+		SELECT order_id::text, id::text, type, title, due_date, assignee_id::text, status, actual_minutes, created_at
+		FROM tasks
+		WHERE order_id = ANY($1::uuid[])
+		ORDER BY due_date ASC, created_at ASC, id ASC
+	`, orderIDs)
+	if err != nil {
+		return nil, err
+	}
+	for taskRows.Next() {
+		var ordID string
+		var tk TaskItem
+		var dueTime time.Time
+		if err := taskRows.Scan(&ordID, &tk.ID, &tk.Type, &tk.Title, &dueTime, &tk.AssigneeID, &tk.Status, &tk.ActualMinutes, &tk.CreatedAt); err != nil {
+			taskRows.Close()
+			return nil, err
+		}
+		tk.OrderID = ordID
+		tk.DueDate = engine.DateKey(dueTime)
+		tasksByOrderID[ordID] = append(tasksByOrderID[ordID], tk)
+	}
+	if err := taskRows.Err(); err != nil {
+		taskRows.Close()
+		return nil, err
+	}
+	taskRows.Close()
+
+	// 6. Assemble OrderDetails & Filter
+	out := make([]OrderDetail, 0, len(rawOrders))
+	for _, r := range rawOrders {
+		items := itemsByOrderID[r.id]
+		if items == nil {
+			items = []OrderItemDetail{}
+		}
+		totalUnits := totalUnitsByOrderID[r.id]
+
+		var addrStr, notesStr, recStr, recReasonStr, overrideReasonStr string
+		if r.addrPtr != nil {
+			addrStr = *r.addrPtr
+		}
+		if r.notesPtr != nil {
+			notesStr = *r.notesPtr
+		}
+		if r.recPtr != nil {
+			recStr = *r.recPtr
+		}
+		if r.recReasonPtr != nil {
+			recReasonStr = *r.recReasonPtr
+		}
+		if r.overrideReasonPtr != nil {
+			overrideReasonStr = *r.overrideReasonPtr
+		}
+
+		var co *CounterOfferDTO
+		if filter.ActorRole != auth.RoleStaff && len(r.counterBytes) > 0 && string(r.counterBytes) != "null" {
+			var parsed CounterOfferDTO
+			if err := json.Unmarshal(r.counterBytes, &parsed); err == nil && parsed.Date != "" {
+				co = &parsed
+			}
+		}
+
+		var evalDTO EvaluationDTO
+		var subtotalPtr *decimal.Decimal
+		var taxPctPtr *decimal.Decimal
+		var taxAmountPtr *decimal.Decimal
+		var platformFeePtr *decimal.Decimal
+
+		if filter.ActorRole != auth.RoleStaff {
+			if len(r.snapshotBytes) > 0 && string(r.snapshotBytes) != "null" {
+				var snap struct {
+					Evaluation  EvaluationDTO    `json:"evaluation"`
+					Subtotal    *decimal.Decimal `json:"subtotal"`
+					TaxPct      *decimal.Decimal `json:"tax_pct"`
+					TaxAmount   *decimal.Decimal `json:"tax_amount"`
+					PlatformFee *decimal.Decimal `json:"platform_fee"`
+				}
+				if err := json.Unmarshal(r.snapshotBytes, &snap); err == nil {
+					evalDTO = snap.Evaluation
+					subtotalPtr = snap.Subtotal
+					taxPctPtr = snap.TaxPct
+					taxAmountPtr = snap.TaxAmount
+					platformFeePtr = snap.PlatformFee
+				}
+			}
+			if evalDTO.Recommendation == "" {
+				evalDTO.Recommendation = recStr
+			}
+			if evalDTO.Reason == "" {
+				evalDTO.Reason = recReasonStr
+			}
+			if co != nil && evalDTO.CounterOffer == nil {
+				evalDTO.CounterOffer = co
+			}
+			gates := gatesByOrderID[r.id]
+			if len(gates) > 0 {
+				evalDTO.Gates = gates
+			}
+		}
+
+		payments := paymentsByOrderID[r.id]
+		if payments == nil {
+			payments = []PaymentItem{}
+		}
+
+		tasks := tasksByOrderID[r.id]
+		if tasks == nil {
+			tasks = []TaskItem{}
+		} else {
+			for i := range tasks {
+				tasks[i].OrderCode = r.code
+				tasks[i].CustomerName = r.custName
+				tasks[i].CustomerContact = r.custContact
+				tasks[i].DeliveryType = r.deliveryType
+				tasks[i].Address = addrStr
+				tasks[i].Notes = notesStr
+				tasks[i].EventDate = engine.DateKey(r.eventDate)
+				tasks[i].ProductionDate = engine.DateKey(r.prodDate)
+				tasks[i].OrderStatus = r.status
+			}
+		}
+
+		isBig := r.total.GreaterThanOrEqual(params.BigOrderTotal) || totalUnits >= params.BigOrderUnits
+		canDecide := filter.ActorRole == auth.RoleOwner || (filter.ActorRole == auth.RoleManager && !isBig)
+
+		if subtotalPtr == nil && len(items) > 0 {
+			var calcSub decimal.Decimal
+			for _, it := range items {
+				calcSub = calcSub.Add(it.Subtotal)
+			}
+			subtotalPtr = &calcSub
+			if taxAmountPtr == nil {
+				diff := r.total.Sub(calcSub)
+				if diff.GreaterThan(decimal.Zero) {
+					taxAmountPtr = &diff
+				}
+			}
+		}
+
+		d := OrderDetail{
+			ID:                   r.id,
+			Code:                 r.code,
+			Source:               r.source,
+			CustomerID:           r.custIDPtr,
+			CustomerName:         r.custName,
+			CustomerContact:      r.custContact,
+			DeliveryType:         r.deliveryType,
+			Address:              addrStr,
+			Notes:                notesStr,
+			EventDate:            engine.DateKey(r.eventDate),
+			ProductionDate:       engine.DateKey(r.prodDate),
+			Status:               r.status,
+			Subtotal:             subtotalPtr,
+			TaxPct:               taxPctPtr,
+			TaxAmount:            taxAmountPtr,
+			PlatformFee:          platformFeePtr,
+			Total:                r.total.Round(2),
+			TotalUnits:           totalUnits,
+			IsBigOrder:           isBig,
+			CanDecide:            canDecide,
+			DPRequired:           r.dpRequired.Round(2),
+			DPDeadline:           r.dpDeadline,
+			Paid:                 r.paid.Round(2),
+			Recommendation:       recStr,
+			RecommendationReason: recReasonStr,
+			CounterOffer:         co,
+			DecidedBy:            r.decidedByPtr,
+			DecidedAt:            r.decidedAt,
+			OverrideReason:       overrideReasonStr,
+			Evaluation:           evalDTO,
+			Items:                items,
+			Payments:             payments,
+			Tasks:                tasks,
+			Audits:               []OrderAuditItem{},
+			CreatedAt:            r.createdAt,
+			UpdatedAt:            r.updatedAt,
+		}
+
+		if filter.ActorRole == auth.RoleStaff {
+			d.Subtotal = nil
+			d.TaxPct = nil
+			d.TaxAmount = nil
+			d.PlatformFee = nil
+			d.Total = decimal.Zero
+			d.DPRequired = decimal.Zero
+			d.Paid = decimal.Zero
+			d.Recommendation = ""
+			d.RecommendationReason = ""
+			d.CounterOffer = nil
+			d.Evaluation = EvaluationDTO{}
+			d.Payments = nil
+			d.staffRedacted = true
+		}
+
+		// Filters
 		if filter.Status != "" && d.Status != filter.Status {
 			continue
 		}
@@ -1739,8 +2063,10 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 				continue
 			}
 		}
-		out = append(out, *d)
+
+		out = append(out, d)
 	}
+
 	return out, nil
 }
 
@@ -1749,7 +2075,6 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 	if err != nil {
 		return nil, err
 	}
-
 	var (
 		id, code, source, custName, custContact, deliveryType          string
 		custIDPtr, addrPtr, notesPtr, recPtr, recReasonPtr             *string

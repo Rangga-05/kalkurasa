@@ -450,25 +450,46 @@ export default function OrderDetailPage({
               {/* confirmed -> in_production (manager, owner) */}
               {order.status === "confirmed" && canManage && (
                 <div className="flex flex-wrap items-center gap-2.5">
-                  {order.tasks?.some((t) => t.type === "shop" && t.status !== "done") && (
-                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-100/80 px-3 py-1.5 text-xs font-medium text-amber-900">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-                      Tugas Belanja belum selesai. Pastikan bahan sudah tersedia di dapur.
-                    </span>
+                  {order.tasks?.some((t) => t.type === "shop" && t.status !== "done") ? (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-100/90 px-3 py-1.5 text-xs font-semibold text-amber-950">
+                        <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+                        Bahan baku belum selesai dibelanjakan (Tugas Belanja aktif). Pastikan stok bahan sudah ada sebelum mulai memasak.
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href="/app/belanja"
+                          className="inline-flex items-center gap-1 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-50"
+                        >
+                          Buka Belanja Bahan &rarr;
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={submittingTransition}
+                          onClick={() => handleTransition("in_production")}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-stone-300 bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer"
+                          title="Gunakan bahan yang sudah tersedia di dapur"
+                        >
+                          <Play className="h-3 w-3" />
+                          Mulai Produksi (Gunakan Stok Dapur)
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={submittingTransition}
+                      onClick={() => handleTransition("in_production")}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+                    >
+                      {submittingTransition ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Play className="h-3.5 w-3.5" />
+                      )}
+                      Mulai Produksi (In Production)
+                    </button>
                   )}
-                  <button
-                    type="button"
-                    disabled={submittingTransition}
-                    onClick={() => handleTransition("in_production")}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {submittingTransition ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Play className="h-3.5 w-3.5" />
-                    )}
-                    Mulai Produksi (In Production)
-                  </button>
                 </div>
               )}
 

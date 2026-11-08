@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Calendar,
@@ -34,7 +35,6 @@ import {
 } from "@/lib/format";
 import {
   DeliveryType,
-  OrderDetail,
   PublicProduct,
 } from "@/lib/types";
 import { exportOrdersToCSV } from "@/lib/export-csv";
@@ -68,16 +68,32 @@ export default function OrdersListPage() {
   const router = useRouter();
   const toast = useToast();
   const { user } = useInternalSession();
+  const queryClient = useQueryClient();
   const isStaff = user?.role === "staff";
   const canCreateManual = user?.role === "owner" || user?.role === "manager";
-
-  const [orders, setOrders] = useState<OrderDetail[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const ordersQuery = useQuery({
+    queryKey: ["orders", statusFilter, dateFilter],
+    queryFn: () =>
+      getOrders({
+        status: statusFilter || undefined,
+        date: dateFilter || undefined,
+      }),
+  });
+
+  const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data]);
+  const loading = ordersQuery.isLoading;
+  const errorMsg = ordersQuery.error
+    ? getErrorMessage(ordersQuery.error, "Gagal memuat daftar pesanan.")
+    : null;
+
+  const loadOrders = useCallback(async () => {
+    await ordersQuery.refetch();
+  }, [ordersQuery]);
 
   const filteredOrders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase().replace(/^#/, "");
@@ -116,22 +132,6 @@ export default function OrdersListPage() {
   const [submittingManual, setSubmittingManual] = useState(false);
   const [manualError, setManualError] = useState<string | null>(null);
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const data = await getOrders({
-        status: statusFilter || undefined,
-        date: dateFilter || undefined,
-      });
-      setOrders(data);
-    } catch (err) {
-      setErrorMsg(getErrorMessage(err, "Gagal memuat daftar pesanan."));
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter, dateFilter]);
-
   const handleExportCSV = () => {
     const listToExport = filteredOrders.length > 0 ? filteredOrders : orders;
     if (listToExport.length === 0) {
@@ -147,9 +147,6 @@ export default function OrdersListPage() {
     }
   };
 
-  useEffect(() => {
-    void loadOrders();
-  }, [loadOrders]);
 
   async function openManualOrderModal() {
     setManualError(null);
@@ -213,6 +210,9 @@ export default function OrdersListPage() {
         })),
       });
       setShowManualModal(false);
+      void queryClient.invalidateQueries({ queryKey: ["orders"] });
+      void queryClient.invalidateQueries({ queryKey: ["owner-dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["manager-dashboard"] });
       router.push(`/app/pesanan/${created.id}`);
     } catch (err) {
       setManualError(getErrorMessage(err, "Gagal membuat pesanan manual."));

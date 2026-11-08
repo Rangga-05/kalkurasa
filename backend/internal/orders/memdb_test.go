@@ -1395,6 +1395,25 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		}
 		return &memRows{rows: rows}, nil
 
+
+	case strings.Contains(q, "from order_items oi join products p") && strings.Contains(q, "where oi.order_id = any"):
+		idsMap := make(map[string]bool)
+		if len(args) > 0 {
+			if idList, ok := args[0].([]string); ok {
+				for _, id := range idList {
+					idsMap[id] = true
+				}
+			}
+		}
+		var rows [][]any
+		for _, it := range tx.db.orderItems {
+			if len(idsMap) == 0 || idsMap[it.OrderID] {
+				p := tx.db.products[it.ProductID]
+				rows = append(rows, []any{it.OrderID, it.ID, it.ProductID, p.Name, it.Qty, it.UnitPrice, it.UnitCost})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
 	case strings.Contains(q, "from order_items oi join products p"):
 		oid := fmt.Sprint(args[0])
 		var rows [][]any
@@ -1559,6 +1578,76 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		var rows [][]any
 		for i := len(tx.db.orders) - 1; i >= 0; i-- {
 			rows = append(rows, []any{tx.db.orders[i].ID})
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from orders") && strings.Contains(q, "order by created_at desc, id desc"):
+		var rows [][]any
+		for i := len(tx.db.orders) - 1; i >= 0; i-- {
+			o := tx.db.orders[i]
+			rows = append(rows, []any{
+				o.ID, o.Code, o.Source, strPtrOrNil(o.CustomerID), o.CustomerName, o.CustomerContact, o.DeliveryType,
+				strPtrOrNil(o.Address), strPtrOrNil(o.Notes), o.EventDate, o.ProductionDate,
+				o.Status, o.Total, o.DPRequired, o.DPDeadline, o.Paid,
+				strPtrOrNil(o.Recommendation), strPtrOrNil(o.RecommendationReason), o.CounterOfferJSON,
+				strPtrOrNil(o.DecidedBy), o.DecidedAt, strPtrOrNil(o.OverrideReason), o.SnapshotJSON,
+				o.CreatedAt, o.UpdatedAt,
+			})
+		}
+		return &memRows{rows: rows}, nil
+
+
+	case strings.Contains(q, "from order_evaluations") && strings.Contains(q, "where order_id = any"):
+		idsMap := make(map[string]bool)
+		if len(args) > 0 {
+			if idList, ok := args[0].([]string); ok {
+				for _, id := range idList {
+					idsMap[id] = true
+				}
+			}
+		}
+		var rows [][]any
+		for _, ev := range tx.db.evaluations {
+			if len(idsMap) == 0 || idsMap[ev.OrderID] {
+				rows = append(rows, []any{ev.OrderID, ev.Gate, ev.Value, ev.Threshold, ev.Passed})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from payments") && strings.Contains(q, "where order_id = any"):
+		idsMap := make(map[string]bool)
+		if len(args) > 0 {
+			if idList, ok := args[0].([]string); ok {
+				for _, id := range idList {
+					idsMap[id] = true
+				}
+			}
+		}
+		var rows [][]any
+		for _, pm := range tx.db.payments {
+			if len(idsMap) == 0 || idsMap[pm.OrderID] {
+				recBy := strPtrOrNil(pm.RecordedBy)
+				rows = append(rows, []any{pm.OrderID, pm.ID, pm.Amount, pm.Method, pm.PaidAt, pm.Note, recBy})
+			}
+		}
+		return &memRows{rows: rows}, nil
+
+	case strings.Contains(q, "from tasks") && strings.Contains(q, "where order_id = any"):
+		idsMap := make(map[string]bool)
+		if len(args) > 0 {
+			if idList, ok := args[0].([]string); ok {
+				for _, id := range idList {
+					idsMap[id] = true
+				}
+			}
+		}
+		var rows [][]any
+		for _, tk := range tx.db.tasks {
+			if len(idsMap) == 0 || idsMap[tk.OrderID] {
+				dueTime, _ := time.Parse("2006-01-02", tk.DueDate[:10])
+				assigneePtr := strPtrOrNil(tk.AssigneeID)
+				rows = append(rows, []any{tk.OrderID, tk.ID, tk.Type, tk.Title, dueTime, assigneePtr, tk.Status, tk.ActualMinutes, tk.CreatedAt})
+			}
 		}
 		return &memRows{rows: rows}, nil
 

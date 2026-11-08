@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { SimulationBanner } from "@/components/simulation-banner";
 
 export const metadata: Metadata = {
   title: "Kalkurasa — Kalkulasi + Rasa",
@@ -18,7 +17,6 @@ export default function RootLayout({
     <html lang="id">
       <body className="flex min-h-screen flex-col overflow-x-hidden bg-stone-50 text-stone-900 antialiased">
         <Providers>
-          <SimulationBanner />
           <div className="flex flex-1 flex-col">{children}</div>
         </Providers>
       </body>
