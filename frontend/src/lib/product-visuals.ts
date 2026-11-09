@@ -5,6 +5,7 @@ export interface ProductVisualMeta {
   tagline: string;
   story: string;
   recipeHighlights: string[];
+  heatStationLabel: string;
   ovenHoursPerUnit: number;
   laborMinsPerUnit: number;
   accentColor: string;
@@ -31,6 +32,7 @@ const VISUAL_MAP: Record<string, ProductVisualMeta> = {
       "Ayam bakar ungkep 9 rempah & sambal terasi tomat segar",
       "Telur balado utuh, tempe orek manis, dan alas daun pisang",
     ],
+    heatStationLabel: "Masak",
     ovenHoursPerUnit: 0.14,
     laborMinsPerUnit: 12,
     accentColor: "#C2410C",
@@ -54,6 +56,7 @@ const VISUAL_MAP: Record<string, ProductVisualMeta> = {
       "Risoles ragout ayam kampung creamy berbalut tepung roti emas",
       "Bolu chiffon pandan suji lembut & cheese roll puff pastry",
     ],
+    heatStationLabel: "Masak",
     ovenHoursPerUnit: 0.12,
     laborMinsPerUnit: 10,
     accentColor: "#15803D",
@@ -77,6 +80,7 @@ const VISUAL_MAP: Record<string, ProductVisualMeta> = {
       "Tiga lapis sponge cake lembut dengan buttercream ringan",
       "Topping buah beri segar, serutan cokelat, & papan ucapan",
     ],
+    heatStationLabel: "Oven",
     ovenHoursPerUnit: 0.85,
     laborMinsPerUnit: 45,
     accentColor: "#BE123C",
@@ -100,6 +104,7 @@ const VISUAL_MAP: Record<string, ProductVisualMeta> = {
       "3 varian rasa dalam 1 kotak (Vanilla Berry, Choco Fudge, Caramel)",
       "Kemasan kotak jendela bersekat aman untuk perjalanan kurir",
     ],
+    heatStationLabel: "Oven",
     ovenHoursPerUnit: 0.35,
     laborMinsPerUnit: 25,
     accentColor: "#B45309",
@@ -123,6 +128,7 @@ const VISUAL_MAP: Record<string, ProductVisualMeta> = {
       "Kulit nastar mentega lembut berpoles ganda kuning telur omega",
       "Stoples kedap udara menjaga kerenyahan hingga 30 hari",
     ],
+    heatStationLabel: "Oven",
     ovenHoursPerUnit: 0.65,
     laborMinsPerUnit: 35,
     accentColor: "#854D0E",
@@ -146,6 +152,7 @@ const VISUAL_MAP: Record<string, ProductVisualMeta> = {
       "Tekstur fudgy padat dengan lelehan cokelat hitam pekat",
       "Taburan kacang almond panggang & sejumput sea salt",
     ],
+    heatStationLabel: "Oven",
     ovenHoursPerUnit: 0.45,
     laborMinsPerUnit: 20,
     accentColor: "#6B21A8",

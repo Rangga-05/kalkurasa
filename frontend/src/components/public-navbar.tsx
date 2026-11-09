@@ -20,6 +20,7 @@ import {
 import { getMe, logout } from "@/lib/api";
 import { ROLE_LABELS } from "@/lib/format";
 import { useToast } from "@/components/providers";
+import { KalkurasaLogoIcon } from "@/components/kalkurasa-logo";
 
 export function PublicNavbar() {
   const pathname = usePathname();
@@ -73,58 +74,23 @@ export function PublicNavbar() {
 
   return (
     <header className="sticky top-0 z-40 w-full">
-      {/* Top Slight-Twist Contrast Ribbon (Zero Overflow) */}
-      <div className="border-b-2 border-[#12100E] bg-[#12100E] px-3 py-1.5 text-[#FAF5EE]">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 text-[11px] font-bold tracking-wider uppercase">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="shrink-0 rounded-full bg-[#D9F99D] px-2 py-0.5 text-[10px] font-extrabold text-[#12100E]">
-              FRESH H-2
-            </span>
-            <span className="truncate text-[#FAF5EE]/90">
-              Kapasitas Oven ≤ 90% · Margin Sehat ≥ 20% · Bahan Segar Pagi Hari
-            </span>
-          </div>
-          <div className="hidden shrink-0 items-center gap-3 md:flex">
-            <Link
-              href="/#simulasi-gerbang"
-              className="text-[#FDE047] transition-colors hover:text-[#D9F99D]"
-            >
-              4-Gate Mixer →
-            </Link>
-            <span className="text-[#FAF5EE]/30">|</span>
-            <Link
-              href="/lacak"
-              className="font-mono-num text-[#D9F99D] transition-colors hover:underline"
-            >
-              Lacak KLK ↗
-            </Link>
-          </div>
-        </div>
-      </div>
-
       {/* Floating Capsule Navbar (Slight Twist Aesthetic, Overflow-Safe) */}
-      <div className="mx-auto max-w-7xl px-3 pt-2.5 pb-2 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-3 pt-3 pb-2 sm:px-6 lg:px-8">
         <div className="flex min-h-14 w-full items-center justify-between gap-2 rounded-full border-2 border-[#12100E] bg-[#FFFDF9] px-3 py-1.5 shadow-[4px_4px_0px_#12100E] sm:px-4">
           {/* Brand Identity */}
           <Link
             href="/"
-            className="group flex shrink-0 items-center gap-2 rounded-full pr-1 focus-visible:outline-2 focus-visible:outline-[#C2410C]"
+            className="group flex shrink-0 items-center gap-2.5 rounded-full pr-1 focus-visible:outline-2 focus-visible:outline-[#C2410C]"
           >
-            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[#12100E] bg-[#FFEDD5] shadow-[2px_2px_0px_#12100E] transition-transform duration-200 group-hover:-rotate-6">
-              <img
-                src="/assets/illustrations/logo-mark.svg"
-                alt="Logo Kalkurasa"
-                width={36}
-                height={36}
-                className="h-full w-full object-cover"
-              />
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center transition-transform duration-200 group-hover:-rotate-6">
+              <KalkurasaLogoIcon className="h-10 w-10" />
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col leading-none">
               <span className="font-display text-base font-extrabold tracking-tight text-[#12100E] uppercase sm:text-lg">
-                Kalkurasa
+                Kalku<span className="text-[#EA580C]">rasa</span>
               </span>
-              <span className="hidden text-[10px] font-bold text-[#5C5046] xl:block">
-                Craft Kitchen &amp; Pre-Order
+              <span className="mt-0.5 hidden text-[10px] font-bold text-[#5C5046] xl:block">
+                Little Chef · Kitchen Engine
               </span>
             </div>
           </Link>

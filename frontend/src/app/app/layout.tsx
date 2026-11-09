@@ -30,6 +30,7 @@ import {
 } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 import { useToast } from "@/components/providers";
+import { KalkurasaLogoIcon } from "@/components/kalkurasa-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -209,19 +210,15 @@ export default function InternalAppLayout({
             href={user ? getDashboardPathForRole(user.role) : "/app"}
             className="flex min-w-0 items-center gap-3 text-[#12100E]"
           >
-            <img
-              src="/assets/illustrations/logo-mark.svg"
-              alt="Logo Kalkurasa"
-              width={36}
-              height={36}
-              className="h-9 w-9 shrink-0 rounded-full border-2 border-[#12100E] bg-[#FFEDD5] shadow-[2px_2px_0px_#12100E]"
-            />
+            <div className="h-10 w-10 shrink-0">
+              <KalkurasaLogoIcon className="h-10 w-10" />
+            </div>
             <div className="min-w-0">
               <span className="font-display block truncate text-base font-extrabold tracking-tight uppercase">
-                Kalkurasa
+                Kalku<span className="text-[#EA580C]">rasa</span>
               </span>
               <span className="block truncate text-[11px] font-bold text-[#5C5046]">
-                Kendali Operasional Dapur
+                Little Chef · Kendali Dapur
               </span>
             </div>
           </Link>

@@ -870,7 +870,8 @@ function OrderFormContent() {
                               {prodInfo.name}
                             </p>
                             <p className="font-mono-num text-xs font-bold text-[#3D352E]">
-                              🔥 Oven {prodVisual.ovenHoursPerUnit}j/unit · ⏱️ Tim{" "}
+                              🔥 Jam {prodVisual.heatStationLabel}{" "}
+                              {prodVisual.ovenHoursPerUnit}j/unit · ⏱️ Tim{" "}
                               {prodVisual.laborMinsPerUnit}m/unit
                             </p>
                           </div>

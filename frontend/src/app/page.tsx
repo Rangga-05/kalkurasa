@@ -27,6 +27,7 @@ import {
   SIGNATURE_SHOWCASE_ITEMS,
 } from "@/lib/product-visuals";
 import { PublicNavbar } from "@/components/public-navbar";
+import { KalkurasaLogoIcon } from "@/components/kalkurasa-logo";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
@@ -59,7 +60,7 @@ const SCENARIOS: SimulationScenario[] = [
     id: "s1",
     code: "SKENARIO S1",
     label: "Dapur Penuh · G1 > 90%",
-    shortDesc: "110 Box saat jadwal oven sudah terisi 65%",
+    shortDesc: "110 Box saat jadwal masak dapur sudah terisi 65%",
     qty: 110,
     unitPrice: 32000,
     existingLoadPct: 65,
@@ -429,7 +430,8 @@ export default function KatalogHomePage() {
                 {/* Top-Right Kitchen Capacity Pill */}
                 <div className="twist-sticker absolute -top-3 -right-2 z-20 rotate-2 rounded-full bg-[#12100E] px-3.5 py-1.5 text-[#D9F99D] sm:-right-3">
                   <p className="font-mono-num text-xs font-extrabold">
-                    🔥 {activeShowcase.meta.ovenHoursPerUnit}j Oven · ⏱️{" "}
+                    🔥 {activeShowcase.meta.ovenHoursPerUnit}j{" "}
+                    {activeShowcase.meta.heatStationLabel} · ⏱️{" "}
                     {activeShowcase.meta.laborMinsPerUnit}m Tim
                   </p>
                 </div>
@@ -713,7 +715,8 @@ export default function KatalogHomePage() {
                           {/* Kitchen Load Telemetry Pills */}
                           <div className="mt-4 flex flex-wrap items-center gap-2">
                             <span className="font-mono-num rounded-full border border-[#12100E] bg-[#FFFDF9] px-3 py-1 text-xs font-extrabold text-[#12100E]">
-                              🔥 Oven {visual.ovenHoursPerUnit} jam/unit
+                              🔥 Jam {visual.heatStationLabel}{" "}
+                              {visual.ovenHoursPerUnit} jam/unit
                             </span>
                             <span className="font-mono-num rounded-full border border-[#12100E] bg-[#FFFDF9] px-3 py-1 text-xs font-extrabold text-[#12100E]">
                               ⏱️ Tim {visual.laborMinsPerUnit} mnt/unit
@@ -941,7 +944,7 @@ export default function KatalogHomePage() {
                       htmlFor="sim-load"
                       className="text-xs font-extrabold tracking-wider uppercase"
                     >
-                      3. Beban Oven Hari Itu
+                      3. Beban Masak Dapur Hari Itu
                     </label>
                     <span className="font-mono-num rounded-full border-2 border-[#12100E] bg-[#ECFCCB] px-3 py-0.5 text-sm font-extrabold">
                       {simExistingLoad}% Terpakai
@@ -1209,7 +1212,7 @@ export default function KatalogHomePage() {
                 </h3>
                 <p className="mt-1.5 text-sm font-semibold text-[#3D352E]">
                   Setiap porsi nasi pandan, ayam bakar bumbu rempah, dan risoles
-                  ragout disiapkan sesuai kuota jam oven hari tersebut.
+                  ragout disiapkan sesuai kuota jam masak dapur hari tersebut.
                 </p>
               </div>
             </div>
@@ -1258,22 +1261,118 @@ export default function KatalogHomePage() {
                 </div>
               </div>
 
-              {/* 4-Gate Architecture Diagram Card */}
-              <div className="overflow-hidden rounded-[2rem] border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[6px_6px_0px_#12100E]">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="font-mono-num text-xs font-extrabold tracking-wider uppercase">
-                    Alur Mesin Keputusan 4-Gerbang Kalkurasa
+              {/* 4-Gate Architecture Interactive Board (Slight Twist Style) */}
+              <div className="overflow-hidden rounded-[2rem] border-2 border-[#12100E] bg-[#FFFDF9] p-5 shadow-[6px_6px_0px_#12100E]">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-[#12100E]/15 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#12100E] bg-[#D9F99D] text-xs font-extrabold">
+                      4G
+                    </span>
+                    <div>
+                      <h3 className="font-display text-base font-extrabold tracking-tight uppercase sm:text-lg">
+                        Alur Mesin Keputusan 4-Gerbang Kalkurasa
+                      </h3>
+                      <p className="text-[11px] font-bold text-[#5C5046]">
+                        Setiap pesanan masuk diuji otomatis melalui 4 filter sebelum dikunci ke jadwal dapur
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-mono-num rounded-full border-2 border-[#12100E] bg-[#12100E] px-3 py-1 text-[10px] font-extrabold tracking-wider text-[#D9F99D] uppercase">
+                    Real-Time Engine
                   </span>
-                  <ShieldCheck className="h-4 w-4 text-[#15803D]" />
                 </div>
-                <img
-                  src="/assets/illustrations/kitchen-engine-diagram.svg"
-                  alt="Diagram Arsitektur Mesin Keputusan 4-Gerbang Kalkurasa"
-                  width={960}
-                  height={420}
-                  loading="lazy"
-                  className="h-auto w-full rounded-xl border border-[#12100E]/20"
-                />
+
+                {/* 4-Gate Visual Pipeline Grid */}
+                <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    {
+                      gate: "G1",
+                      title: "Kapasitas Dapur",
+                      rule: "Beban ≤ 90%",
+                      desc: "Cek jam masak, oven, & kru harian",
+                      bg: "#FFEDD5",
+                      badgeBg: "#EA580C",
+                      badgeText: "#FFFDF9",
+                    },
+                    {
+                      gate: "G2",
+                      title: "Margin Resep",
+                      rule: "Margin ≥ 20%",
+                      desc: "Cek HPP bahan, kemasan, & diskon",
+                      bg: "#FEF9C3",
+                      badgeBg: "#FDE047",
+                      badgeText: "#12100E",
+                    },
+                    {
+                      gate: "G3",
+                      title: "Arus Kas 14H",
+                      rule: "Kas ≥ Buffer",
+                      desc: "Pastikan belanja bahan tidak minus",
+                      bg: "#ECFCCB",
+                      badgeBg: "#D9F99D",
+                      badgeText: "#12100E",
+                    },
+                    {
+                      gate: "G4",
+                      title: "Stok & Supplier",
+                      rule: "H-2 Tersedia",
+                      desc: "Cek gudang & waktu kirim pemasok",
+                      bg: "#FFE4E6",
+                      badgeBg: "#FECDD3",
+                      badgeText: "#12100E",
+                    },
+                  ].map((item, idx) => (
+                    <div
+                      key={item.gate}
+                      style={{ backgroundColor: item.bg }}
+                      className="group relative flex flex-col justify-between rounded-2xl border-2 border-[#12100E] p-3 shadow-[3px_3px_0px_#12100E] transition-transform duration-150 hover:-translate-y-0.5"
+                    >
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span
+                          style={{
+                            backgroundColor: item.badgeBg,
+                            color: item.badgeText,
+                          }}
+                          className="font-mono-num rounded-lg border-2 border-[#12100E] px-2 py-0.5 text-xs font-extrabold"
+                        >
+                          {item.gate}
+                        </span>
+                        <span className="font-mono-num rounded-full border border-[#12100E]/40 bg-[#FFFDF9]/90 px-2 py-0.5 text-[10px] font-extrabold text-[#12100E]">
+                          {item.rule}
+                        </span>
+                      </div>
+                      <div className="mt-2.5">
+                        <p className="font-display text-sm font-extrabold text-[#12100E]">
+                          {idx + 1}. {item.title}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-snug font-semibold text-[#3D352E]">
+                          {item.desc}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Output Verdict Footer Strip */}
+                <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-[#12100E] bg-[#12100E] px-3.5 py-2.5 text-[#FFFDF9]">
+                  <span className="font-mono-num text-[11px] font-extrabold tracking-wider text-[#FDE047] uppercase">
+                    Hasil Rekomendasi Mesin →
+                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#12100E] bg-[#D9F99D] px-2.5 py-0.5 text-[11px] font-extrabold text-[#12100E]">
+                      <CheckCircle2 className="h-3 w-3 text-[#15803D]" />
+                      TERIMA (4 Lolos)
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#12100E] bg-[#FDE047] px-2.5 py-0.5 text-[11px] font-extrabold text-[#12100E]">
+                      <AlertTriangle className="h-3 w-3 text-[#B45309]" />
+                      NEGOSIASI (Jadwal/DP)
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[#12100E] bg-[#FECDD3] px-2.5 py-0.5 text-[11px] font-extrabold text-[#12100E]">
+                      <XCircle className="h-3 w-3 text-[#BE123C]" />
+                      TOLAK (Overload)
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1287,18 +1386,12 @@ export default function KatalogHomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col justify-between gap-8 border-b-2 border-[#FAF5EE]/15 pb-10 lg:flex-row lg:items-center">
             <div className="flex items-center gap-4">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-[#D9F99D] bg-[#FFEDD5] p-1">
-                <img
-                  src="/assets/illustrations/logo-mark.svg"
-                  alt="Logo Kalkurasa"
-                  width={56}
-                  height={56}
-                  className="h-full w-full object-contain"
-                />
+              <div className="h-14 w-14 shrink-0">
+                <KalkurasaLogoIcon className="h-14 w-14" />
               </div>
               <div>
                 <p className="font-display text-2xl font-extrabold tracking-tight text-[#FFFDF9] uppercase">
-                  Kalkurasa · Craft Kitchen & Pre-Order
+                  Kalku<span className="text-[#FB923C]">rasa</span> · Little Chef Kitchen
                 </p>
                 <p className="text-sm font-medium text-[#FAF5EE]/75">
                   Rasa Artisan dengan Kalkulasi Kapasitas Oven, Margin Resep, &

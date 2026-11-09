@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { register as registerApi, getErrorMessage } from "@/lib/api";
 import { PublicNavbar } from "@/components/public-navbar";
+import { KalkurasaLogoIcon } from "@/components/kalkurasa-logo";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,13 +119,9 @@ function RegisterFormContent() {
     <div className="mx-auto w-full max-w-lg space-y-5">
       <Card className="border-[var(--border-strong)] shadow-sm">
         <CardHeader className="space-y-2 border-b border-[var(--border-warm)] pb-5 text-center">
-          <img
-            src="/assets/illustrations/logo-mark.svg"
-            alt=""
-            width={48}
-            height={48}
-            className="mx-auto h-12 w-12 rounded-2xl shadow-xs"
-          />
+          <div className="mx-auto h-14 w-14">
+            <KalkurasaLogoIcon className="h-14 w-14" />
+          </div>
           <h1 className="font-display text-xl font-bold text-[var(--ink-primary)] sm:text-2xl">
             Daftar Akun Pelanggan Pre-Order
           </h1>

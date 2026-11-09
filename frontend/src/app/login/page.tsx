@@ -21,6 +21,7 @@ import { login, getErrorMessage } from "@/lib/api";
 import { resolvePostLoginRedirect, ROLE_LABELS } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 import { PublicNavbar } from "@/components/public-navbar";
+import { KalkurasaLogoIcon } from "@/components/kalkurasa-logo";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,13 +145,9 @@ function LoginFormContent() {
         <Card className="border-[var(--border-strong)] shadow-sm lg:col-span-5">
           <CardHeader className="space-y-2 border-b border-[var(--border-warm)] pb-5">
             <div className="flex items-center gap-3">
-              <img
-                src="/assets/illustrations/logo-mark.svg"
-                alt=""
-                width={44}
-                height={44}
-                className="h-11 w-11 rounded-xl shadow-xs"
-              />
+              <div className="h-12 w-12 shrink-0">
+                <KalkurasaLogoIcon className="h-12 w-12" />
+              </div>
               <div>
                 <h1 className="font-display text-xl font-bold text-[var(--ink-primary)] sm:text-2xl">
                   Masuk ke Kalkurasa
