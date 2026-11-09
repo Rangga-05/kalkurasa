@@ -135,6 +135,18 @@ function normalizeSignal(signal?: unknown): AbortSignal | undefined {
   return undefined;
 }
 
+function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  if (!err || typeof err !== "object") return false;
+  const name = (err as { name?: string }).name;
+  const msg = (err as { message?: string }).message || "";
+  return (
+    name === "AbortError" ||
+    msg.toLowerCase().includes("aborted") ||
+    msg.toLowerCase().includes("abort")
+  );
+}
+
 async function requestJson<T>(
   path: string,
   init: RequestInit = {}
@@ -156,7 +168,9 @@ async function requestJson<T>(
       credentials: "include",
     });
   } catch (err: unknown) {
-    console.error(`[API Network Error] ${path}:`, err);
+    if (isAbortError(err, safeSignal)) {
+      throw err;
+    }
     throw new ApiError(
       0,
       "network_error",
@@ -214,7 +228,9 @@ async function requestListJson<T>(
       credentials: "include",
     });
   } catch (err: unknown) {
-    console.error(`[API Network Error] ${path}:`, err);
+    if (isAbortError(err, safeSignal)) {
+      throw err;
+    }
     throw new ApiError(
       0,
       "network_error",
