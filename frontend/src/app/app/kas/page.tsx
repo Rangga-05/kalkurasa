@@ -313,7 +313,7 @@ export default function KasPage() {
           {/* Grafik Recharts & Rincian Harian (Khusus Owner) */}
           {isOwner && data.days ? (
             <>
-              <Card className="p-5 space-y-4">
+              <Card className="min-w-0 overflow-hidden p-3.5 space-y-4 sm:p-5">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-base font-bold text-stone-900">

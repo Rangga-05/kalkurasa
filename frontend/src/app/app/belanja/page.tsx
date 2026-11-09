@@ -210,71 +210,74 @@ export default function BelanjaPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => window.print()}
-              disabled={!data || items.length === 0}
-              className="gap-1.5 cursor-pointer shadow-2xs"
-            >
-              <Printer className="h-4 w-4 text-stone-600" />
-              Cetak Lembar Belanja
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleCopyWhatsApp()}
-              disabled={!data || items.length === 0}
-              className="gap-1.5 cursor-pointer shadow-2xs"
-              title="Salin daftar belanja dalam format pesan WhatsApp"
-            >
-              {copiedWa ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              ) : (
-                <Copy className="h-4 w-4 text-stone-600" />
-              )}
-              {copiedWa ? "Tersalin!" : "Salin ke WA"}
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleShareWhatsApp}
-              disabled={!data || items.length === 0}
-              className="gap-1.5 border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 cursor-pointer shadow-2xs font-semibold"
-              title="Buka WhatsApp untuk langsung mengirim daftar belanja ini"
-            >
-              <Share2 className="h-4 w-4 text-emerald-700" />
-              Kirim ke WhatsApp
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => shoppingQuery.refetch()}
-              disabled={shoppingQuery.isFetching}
-              className="gap-1.5"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${shoppingQuery.isFetching ? "animate-spin" : ""}`}
-              />
-              Segarkan
-            </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button
               type="button"
               size="sm"
               onClick={() => openPurchaseForItem()}
-              className="gap-1.5"
+              className="w-full gap-1.5 font-bold sm:w-auto"
             >
               <PackagePlus className="h-4 w-4" />
               Catat Pembelian Bahan
             </Button>
+
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleShareWhatsApp}
+                disabled={!data || items.length === 0}
+                className="gap-1.5 border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 cursor-pointer shadow-2xs font-semibold"
+                title="Buka WhatsApp untuk langsung mengirim daftar belanja ini"
+              >
+                <Share2 className="h-4 w-4 shrink-0 text-emerald-700" />
+                <span className="truncate">Kirim WA</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleCopyWhatsApp()}
+                disabled={!data || items.length === 0}
+                className="gap-1.5 cursor-pointer shadow-2xs"
+                title="Salin daftar belanja dalam format pesan WhatsApp"
+              >
+                {copiedWa ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                ) : (
+                  <Copy className="h-4 w-4 shrink-0 text-stone-600" />
+                )}
+                <span className="truncate">{copiedWa ? "Tersalin!" : "Salin WA"}</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => window.print()}
+                disabled={!data || items.length === 0}
+                className="gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <Printer className="h-4 w-4 shrink-0 text-stone-600" />
+                <span className="truncate">Cetak Lembar</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => shoppingQuery.refetch()}
+                disabled={shoppingQuery.isFetching}
+                className="gap-1.5"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 shrink-0 ${shoppingQuery.isFetching ? "animate-spin" : ""}`}
+                />
+                <span className="truncate">Segarkan</span>
+              </Button>
+            </div>
           </div>
         </div>
 

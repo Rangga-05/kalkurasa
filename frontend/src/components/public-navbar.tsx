@@ -224,15 +224,22 @@ export function PublicNavbar() {
         </div>
       </div>
 
-      {/* Mobile Navigation Drawer */}
+      {/* Mobile Navigation Overlay (Mengambang di Depan Konten Tanpa Mendorong Halaman) */}
       {mobileMenuOpen ? (
-        <div
-          id="public-mobile-drawer"
-          className="mx-3 mt-1 rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[6px_6px_0px_#12100E] lg:hidden"
-        >
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-[#12100E]/45 backdrop-blur-xs lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            id="public-mobile-drawer"
+            className="absolute top-full right-3 left-3 z-50 mt-1 rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[6px_6px_0px_#12100E] lg:hidden"
+          >
           <nav className="flex flex-col gap-2" aria-label="Navigasi Mobile">
             <Link
               href="/#panggung-rasa"
+              onClick={() => setMobileMenuOpen(false)}
               className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#FFEDD5] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
             >
               <span>01 · Panggung Rasa Interaktif</span>
@@ -240,6 +247,7 @@ export function PublicNavbar() {
             </Link>
             <Link
               href="/#katalog"
+              onClick={() => setMobileMenuOpen(false)}
               className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#ECFCCB] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
             >
               <span>02 · Katalog Menu &amp; Foto Asli</span>
@@ -247,6 +255,7 @@ export function PublicNavbar() {
             </Link>
             <Link
               href="/#dapur-kami"
+              onClick={() => setMobileMenuOpen(false)}
               className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#FEF9C3] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
             >
               <span>03 · Cerita Dapur Kalkurasa</span>
@@ -254,6 +263,7 @@ export function PublicNavbar() {
             </Link>
             <Link
               href="/lacak"
+              onClick={() => setMobileMenuOpen(false)}
               className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#FFE4E6] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
             >
               <span>04 · Lacak Tiket Pesanan</span>
@@ -263,6 +273,7 @@ export function PublicNavbar() {
             {user && user.role === "customer" ? (
               <Link
                 href="/pesanan-saya"
+                onClick={() => setMobileMenuOpen(false)}
                 className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#F7EFE2] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
               >
                 <span>Pesanan Saya</span>
@@ -273,6 +284,7 @@ export function PublicNavbar() {
             {isInternalUser && user ? (
               <Link
                 href="/app"
+                onClick={() => setMobileMenuOpen(false)}
                 className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#D9F99D] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
               >
                 <span>Portal Dapur ({ROLE_LABELS[user.role]})</span>
@@ -311,6 +323,7 @@ export function PublicNavbar() {
             </div>
           </nav>
         </div>
+        </>
       ) : null}
     </header>
   );

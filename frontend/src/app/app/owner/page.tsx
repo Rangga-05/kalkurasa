@@ -392,20 +392,20 @@ export default function OwnerDashboardPage() {
 
       {/* TAB 2: ARUS KAS 14 HARI & MARGIN REALISASI */}
       {activeTab === "cash_margin" && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 space-y-6">
+          <Card className="min-w-0 overflow-hidden">
+            <CardHeader className="flex flex-col items-start justify-between gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-[#C2410C]" />
-                  Proyeksi Arus Kas 14 Hari
+                  <Wallet className="h-4 w-4 shrink-0 text-[#C2410C]" />
+                  <span>Proyeksi Arus Kas 14 Hari</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   Saldo awal {formatRupiah(cash.opening_cash)} · Buffer minimum{" "}
                   {formatRupiah(cash.cash_buffer)}
                 </CardDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
                 <Badge variant={cash.passed ? "emerald" : "rose"}>
                   {cash.passed
                     ? "G3 Kas Aman"
@@ -420,7 +420,7 @@ export default function OwnerDashboardPage() {
                 </Link>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="min-w-0 space-y-4 px-3.5 sm:px-6">
               <CashProjectionChart
                 days={cash.days ?? []}
                 cashBuffer={cash.cash_buffer}

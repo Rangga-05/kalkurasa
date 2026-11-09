@@ -336,63 +336,125 @@ export default function InternalAppLayout({
           </div>
         </header>
 
-        {/* Drawer Navigasi Mobile */}
+        {/* Overlay Slide-Over Drawer Navigasi Mobile (Mengambang di Depan Layar) */}
         {mobileMenuOpen ? (
           <div
-            id="internal-mobile-drawer"
-            className="border-b border-[var(--border-warm)] bg-[var(--bg-surface)] px-4 py-4 shadow-xl lg:hidden print:hidden"
+            className="fixed inset-0 z-50 flex lg:hidden print:hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu navigasi internal"
           >
-            <nav aria-label="Menu internal mobile" className="space-y-1.5">
-              {filteredNav.map((item) => {
-                const Icon = item.icon;
-                const active =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    prefetch={true}
-                    className={cn(
-                      "flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold",
-                      active
-                        ? "bg-[#C2410C] text-white"
-                        : "text-[var(--ink-primary)] hover:bg-[var(--bg-subtle)]"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
+            {/* Backdrop Gelap Blur (Klik di luar untuk menutup) */}
+            <div
+              className="fixed inset-0 bg-[#12100E]/55 backdrop-blur-xs transition-opacity"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-hidden="true"
+            />
 
-            <div className="mt-4 flex flex-col gap-2.5 border-t border-[var(--border-warm)] pt-3.5">
-              {user ? (
-                <p className="text-xs text-[var(--ink-secondary)]">
-                  Masuk sebagai <strong>{user.name}</strong> ({user.email})
-                </p>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2.5">
-                <Link href="/">
-                  <Button variant="outline" size="sm" className="w-full gap-1.5">
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                    Katalog Publik
-                  </Button>
-                </Link>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={logoutMutation.isPending}
-                  onClick={() => logoutMutation.mutate()}
-                  className="w-full gap-1.5 border-rose-300 text-rose-700"
+            {/* Panel Drawer di Depan Sebelah Kiri */}
+            <aside
+              id="internal-mobile-drawer"
+              className="relative z-10 flex h-full w-72 max-w-[84vw] flex-col border-r-2 border-[#12100E] bg-[var(--bg-surface)] shadow-[8px_0px_0px_#12100E]"
+            >
+              {/* Header Drawer */}
+              <div className="flex shrink-0 items-center justify-between border-b-2 border-[#12100E] bg-[#F7EFE2] px-4 py-3.5">
+                <Link
+                  href={user ? getDashboardPathForRole(user.role) : "/app"}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex min-w-0 items-center gap-2.5 text-[#12100E]"
                 >
-                  <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                  Keluar
-                </Button>
+                  <div className="h-9 w-9 shrink-0">
+                    <KalkurasaLogoIcon className="h-9 w-9" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-display block truncate text-base font-extrabold tracking-tight uppercase">
+                      Kalku<span className="text-[#EA580C]">rasa</span>
+                    </span>
+                    <span className="block truncate text-[10px] font-bold text-[#5C5046]">
+                      Little Chef · Kendali Dapur
+                    </span>
+                  </div>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-label="Tutup menu navigasi"
+                  className="btn-tactile inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-[#12100E] bg-[#FFFDF9] text-[#12100E]"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
               </div>
-            </div>
+
+              {/* Daftar Menu Scrollable */}
+              <nav
+                aria-label="Menu internal mobile"
+                className="flex-1 space-y-1.5 overflow-y-auto px-3.5 py-4"
+              >
+                {filteredNav.map((item) => {
+                  const Icon = item.icon;
+                  const active =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      prefetch={true}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        "flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all",
+                        active
+                          ? "border-2 border-[#12100E] bg-[#C2410C] text-white shadow-[2px_2px_0px_#12100E]"
+                          : "text-[var(--ink-primary)] hover:bg-[var(--bg-subtle)]"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              {/* Footer Info Pengguna & Logout */}
+              <div className="shrink-0 space-y-3 border-t-2 border-[#12100E] bg-[#F7EFE2]/60 p-4">
+                {user ? (
+                  <div className="rounded-xl border border-[#12100E] bg-[#FFFDF9] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-extrabold text-[#12100E]">
+                        {user.name}
+                      </p>
+                      <Badge variant="default" className="text-[10px]">
+                        {ROLE_LABELS[user.role]}
+                      </Badge>
+                    </div>
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#5C5046]">
+                      {user.email}
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Link href="/" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs">
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <span>Katalog</span>
+                    </Button>
+                  </Link>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={logoutMutation.isPending}
+                    onClick={() => logoutMutation.mutate()}
+                    className="w-full gap-1.5 border-rose-300 text-xs text-rose-700"
+                  >
+                    <LogOut className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>Keluar</span>
+                  </Button>
+                </div>
+              </div>
+            </aside>
           </div>
         ) : null}
 
