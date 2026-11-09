@@ -70,6 +70,13 @@ export default function StaffDashboardPage() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
 
+  // Paginasi Jadwal Pengantaran & Peringatan Stok
+  const [deliveriesPage, setDeliveriesPage] = useState(1);
+  const DELIVERIES_PAGE_SIZE = 5;
+
+  const [lowStockPage, setLowStockPage] = useState(1);
+  const LOW_STOCK_PAGE_SIZE = 5;
+
   // State input actual_minutes per task ID
   const [minutesMap, setMinutesMap] = useState<Record<string, string>>({});
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
@@ -693,7 +700,7 @@ export default function StaffDashboardPage() {
       {/* ELEMEN 3 & 4: Jadwal Pengantaran Terurut & Peringatan Stok Menipis (Tanpa Harga) */}
       {dashboard ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          <Card className="lg:col-span-7">
+          <Card className="lg:col-span-7" id="jadwal-pengantaran-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Truck className="h-4 w-4 text-amber-700" />
@@ -704,63 +711,84 @@ export default function StaffDashboardPage() {
                 diambil pelanggan.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               {dashboard.deliveries.length === 0 ? (
                 <p className="py-6 text-center text-xs text-stone-500">
                   Tidak ada jadwal pengantaran aktif saat ini.
                 </p>
               ) : (
-                <div className="space-y-2.5">
-                  {dashboard.deliveries.map((deliv) => (
-                    <div
-                      key={`${deliv.order_id}-${deliv.task_id ?? "d"}`}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50/70 p-3 text-xs"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
+                <>
+                  <div className="space-y-2.5">
+                    {dashboard.deliveries
+                      .slice(
+                        (deliveriesPage - 1) * DELIVERIES_PAGE_SIZE,
+                        deliveriesPage * DELIVERIES_PAGE_SIZE
+                      )
+                      .map((deliv) => (
+                        <div
+                          key={`${deliv.order_id}-${deliv.task_id ?? "d"}`}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50/70 p-3 text-xs"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                href={`/app/pesanan/${deliv.order_id}`}
+                                className="font-mono text-sm font-bold text-amber-800 hover:underline"
+                              >
+                                #{deliv.order_code}
+                              </Link>
+                              <OrderStatusBadge status={deliv.order_status} />
+                              <Badge variant="slate">
+                                {deliv.delivery_type === "delivery"
+                                  ? "Diantar Kurir"
+                                  : "Ambil di Tempat"}
+                              </Badge>
+                            </div>
+                            <p className="font-semibold text-stone-800">
+                              {deliv.customer_name} ({deliv.customer_contact}) ·
+                              Acara: {formatDateShort(deliv.event_date)}
+                            </p>
+                            {deliv.address ? (
+                              <p className="text-stone-600">
+                                Alamat: {deliv.address}
+                              </p>
+                            ) : null}
+                            <p className="text-stone-600">
+                              Item:{" "}
+                              {deliv.items
+                                .map((it) => `${it.product_name} × ${it.qty}`)
+                                .join(", ")}
+                            </p>
+                          </div>
                           <Link
                             href={`/app/pesanan/${deliv.order_id}`}
-                            className="font-mono text-sm font-bold text-amber-800 hover:underline"
+                            className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 font-semibold text-stone-700 hover:bg-stone-50"
                           >
-                            #{deliv.order_code}
+                            Buka Pesanan
                           </Link>
-                          <OrderStatusBadge status={deliv.order_status} />
-                          <Badge variant="slate">
-                            {deliv.delivery_type === "delivery"
-                              ? "Diantar Kurir"
-                              : "Ambil di Tempat"}
-                          </Badge>
                         </div>
-                        <p className="font-semibold text-stone-800">
-                          {deliv.customer_name} ({deliv.customer_contact}) ·
-                          Acara: {formatDateShort(deliv.event_date)}
-                        </p>
-                        {deliv.address ? (
-                          <p className="text-stone-600">
-                            Alamat: {deliv.address}
-                          </p>
-                        ) : null}
-                        <p className="text-stone-600">
-                          Item:{" "}
-                          {deliv.items
-                            .map((it) => `${it.product_name} × ${it.qty}`)
-                            .join(", ")}
-                        </p>
-                      </div>
-                      <Link
-                        href={`/app/pesanan/${deliv.order_id}`}
-                        className="rounded-xl border border-stone-200 bg-white px-3 py-1.5 font-semibold text-stone-700 hover:bg-stone-50"
-                      >
-                        Buka Pesanan
-                      </Link>
-                    </div>
-                  ))}
-                </div>
+                      ))}
+                  </div>
+
+                  <Pagination
+                    currentPage={deliveriesPage}
+                    totalPages={
+                      Math.ceil(
+                        dashboard.deliveries.length / DELIVERIES_PAGE_SIZE
+                      ) || 1
+                    }
+                    totalItems={dashboard.deliveries.length}
+                    pageSize={DELIVERIES_PAGE_SIZE}
+                    onPageChange={setDeliveriesPage}
+                    itemName="jadwal pengantaran"
+                    scrollTargetId="jadwal-pengantaran-card"
+                  />
+                </>
               )}
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-5">
+          <Card className="lg:col-span-5" id="peringatan-stok-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Boxes className="h-4 w-4 text-amber-700" />
@@ -770,33 +798,54 @@ export default function StaffDashboardPage() {
                 Bahan baku gudang/dapur yang berada di bawah batas stok minimum.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               {dashboard.low_stock_alerts.length === 0 ? (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-center text-xs text-emerald-800">
                   Seluruh stok bahan baku mencukupi batas minimum.
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {dashboard.low_stock_alerts.map((item) => (
-                    <div
-                      key={item.ingredient_id}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2 text-xs"
-                    >
-                      <div>
-                        <p className="font-semibold text-stone-900">
-                          {item.ingredient_name}
-                        </p>
-                        <p className="text-[11px] text-stone-600">
-                          Stok: {formatNumber(item.stock)} {item.use_unit} (Min:{" "}
-                          {formatNumber(item.min_stock)} {item.use_unit})
-                        </p>
-                      </div>
-                      <Badge variant="rose">
-                        Kurang {formatNumber(item.deficit)} {item.use_unit}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-2">
+                    {dashboard.low_stock_alerts
+                      .slice(
+                        (lowStockPage - 1) * LOW_STOCK_PAGE_SIZE,
+                        lowStockPage * LOW_STOCK_PAGE_SIZE
+                      )
+                      .map((item) => (
+                        <div
+                          key={item.ingredient_id}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2 text-xs"
+                        >
+                          <div>
+                            <p className="font-semibold text-stone-900">
+                              {item.ingredient_name}
+                            </p>
+                            <p className="text-[11px] text-stone-600">
+                              Stok: {formatNumber(item.stock)} {item.use_unit} (Min:{" "}
+                              {formatNumber(item.min_stock)} {item.use_unit})
+                            </p>
+                          </div>
+                          <Badge variant="rose">
+                            Kurang {formatNumber(item.deficit)} {item.use_unit}
+                          </Badge>
+                        </div>
+                      ))}
+                  </div>
+
+                  <Pagination
+                    currentPage={lowStockPage}
+                    totalPages={
+                      Math.ceil(
+                        dashboard.low_stock_alerts.length / LOW_STOCK_PAGE_SIZE
+                      ) || 1
+                    }
+                    totalItems={dashboard.low_stock_alerts.length}
+                    pageSize={LOW_STOCK_PAGE_SIZE}
+                    onPageChange={setLowStockPage}
+                    itemName="bahan"
+                    scrollTargetId="peringatan-stok-card"
+                  />
+                </>
               )}
             </CardContent>
           </Card>
