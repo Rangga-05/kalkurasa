@@ -232,20 +232,20 @@ export default function ManagerDashboardPage() {
       <div
         role="tablist"
         aria-label="Fokus tampilan Dashboard Manajer"
-        className="flex flex-wrap items-center gap-2 rounded-3xl border-2 border-[#12100E] bg-[#F7EFE2] p-2 shadow-[4px_4px_0px_#12100E]"
+        className="grid grid-cols-1 gap-2 rounded-3xl border-2 border-[#12100E] bg-[#F7EFE2] p-2 shadow-[4px_4px_0px_#12100E] sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center"
       >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "schedule"}
           onClick={() => setActiveTab("schedule")}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
             activeTab === "schedule"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
-          <UtensilsCrossed className="h-3.5 w-3.5" />
+          <UtensilsCrossed className="h-3.5 w-3.5 shrink-0" />
           <span>1. Jadwal Produksi &amp; DP ({prodSchedule.length})</span>
         </button>
 
@@ -254,13 +254,13 @@ export default function ManagerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "decisions_stock"}
           onClick={() => setActiveTab("decisions_stock")}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
             activeTab === "decisions_stock"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
-          <Scale className="h-3.5 w-3.5" />
+          <Scale className="h-3.5 w-3.5 shrink-0" />
           <span>2. Keputusan ({queue.length}) &amp; Stok ({lowStocks.length})</span>
         </button>
 
@@ -269,13 +269,13 @@ export default function ManagerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "calendar"}
           onClick={() => setActiveTab("calendar")}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
             activeTab === "calendar"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
-          <CalendarRange className="h-3.5 w-3.5" />
+          <CalendarRange className="h-3.5 w-3.5 shrink-0" />
           <span>3. Kalender Kapasitas</span>
         </button>
 
@@ -284,13 +284,13 @@ export default function ManagerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "simulation"}
           onClick={() => setActiveTab("simulation")}
-          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
             activeTab === "simulation"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
+          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
           <span>4. Simulasi &amp; Kalibrasi</span>
         </button>
       </div>

@@ -325,8 +325,8 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSaveFee} className="flex shrink-0 items-center gap-2.5">
-            <div className="relative">
+          <form onSubmit={handleSaveFee} className="flex w-full shrink-0 items-center gap-2.5 sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-500">
                 Rp
               </span>
@@ -336,7 +336,7 @@ export default function AdminDashboardPage() {
                 step="100"
                 value={platformFee}
                 onChange={(e) => setPlatformFee(e.target.value)}
-                className="w-36 pl-9 text-sm font-bold text-stone-900"
+                className="w-full pl-9 text-sm font-bold text-stone-900 sm:w-36"
                 required
               />
             </div>
@@ -522,7 +522,7 @@ export default function AdminDashboardPage() {
             ).map((role) => (
               <div
                 key={role}
-                className="rounded-xl border border-stone-200 bg-stone-50/70 p-3"
+                className="rounded-xl border border-stone-200 bg-stone-50/70 p-3 last:col-span-2 sm:last:col-span-1"
               >
                 <p className="text-[11px] font-semibold text-stone-500">
                   {ROLE_LABELS[role]}

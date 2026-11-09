@@ -415,9 +415,9 @@ export default function PengaturanPage() {
             </Card>
           ))}
 
-          <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white p-4 shadow-xs">
+          <div className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2 text-xs text-stone-600">
-              <ShieldCheck className="h-4 w-4 text-emerald-700" />
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-700" />
               <span>
                 Setiap perubahan parameter dicatat otomatis di{" "}
                 <strong>audit_logs</strong>.
@@ -427,7 +427,7 @@ export default function PengaturanPage() {
             <Button
               type="submit"
               disabled={saveMutation.isPending}
-              className="gap-1.5"
+              className="w-full gap-1.5 sm:w-auto"
             >
               {saveMutation.isPending ? (
                 "Menyimpan..."

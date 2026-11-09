@@ -281,7 +281,7 @@ export default function BelanjaPage() {
       {/* Filter Rentang Tanggal Acara */}
       <Card className="p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
             <div>
               <label
                 htmlFor="filter-from"
@@ -294,7 +294,7 @@ export default function BelanjaPage() {
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="w-44"
+                className="w-full sm:w-44"
               />
             </div>
             <div>
@@ -309,7 +309,7 @@ export default function BelanjaPage() {
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="w-44"
+                className="w-full sm:w-44"
               />
             </div>
           </div>
@@ -558,8 +558,8 @@ export default function BelanjaPage() {
       {/* Modal Catat Pembelian Bahan */}
       {purchaseModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 backdrop-blur-xs">
-          <Card className="w-full max-w-md overflow-hidden shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 px-5 py-3.5">
+          <Card className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-stone-200 bg-stone-50 px-5 py-3.5">
               <h3 className="text-base font-bold text-stone-900">
                 Catat Pembelian & Penerimaan Bahan
               </h3>
@@ -572,7 +572,7 @@ export default function BelanjaPage() {
               </button>
             </div>
 
-            <form onSubmit={handlePurchaseSubmit} className="p-5 space-y-4">
+            <form onSubmit={handlePurchaseSubmit} className="space-y-4 overflow-y-auto p-5">
               {formError ? (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
                   {formError}

@@ -68,11 +68,11 @@ export function CashProjectionChart({
   }
 
   return (
-    <div className="h-80 w-full">
+    <div className="h-64 w-full min-w-0 sm:h-80">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={data}
-          margin={{ top: 20, right: 24, left: 12, bottom: 8 }}
+          margin={{ top: 20, right: 16, left: 4, bottom: 8 }}
         >
           <defs>
             <linearGradient id="cashClosingGradient" x1="0" y1="0" x2="0" y2="1">

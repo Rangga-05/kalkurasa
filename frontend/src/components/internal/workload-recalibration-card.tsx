@@ -133,12 +133,12 @@ export function WorkloadRecalibrationCard({
               Penyesuaian Waktu Produksi:
             </h3>
             {/* Dropdown Pemilihan Menu Produk */}
-            <div className="relative inline-flex items-center">
+            <div className="relative inline-flex max-w-full items-center">
               <select
                 value={selectedProductId}
                 onChange={(e) => handleProductChange(e.target.value)}
                 aria-label="Pilih Menu Produk untuk Kalibrasi Waktu Kerja"
-                className="cursor-pointer rounded-xl border border-amber-400 bg-white py-1 pl-3 pr-8 text-xs font-bold text-amber-950 shadow-2xs hover:border-amber-500 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                className="max-w-full cursor-pointer truncate rounded-xl border border-amber-400 bg-white py-1 pl-3 pr-8 text-xs font-bold text-amber-950 shadow-2xs hover:border-amber-500 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               >
                 {products.length > 0 ? (
                   products.map((p) => {

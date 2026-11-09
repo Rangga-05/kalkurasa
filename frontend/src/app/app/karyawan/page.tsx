@@ -312,11 +312,11 @@ export default function StaffDashboardPage() {
 
       {/* ELEMEN 2: Filter & Daftar Tugas Inline (Ubah Status & Input Durasi Aktual) */}
       <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs">
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="block text-xs font-semibold text-stone-600">
             Filter Tanggal Tenggat
           </label>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={dateFilter}

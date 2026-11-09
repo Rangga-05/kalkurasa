@@ -857,7 +857,7 @@ function OrderFormContent() {
                       className="rounded-3xl border-2 border-[#12100E] bg-[var(--bg-subtle)] p-4 text-[#12100E] shadow-[4px_4px_0px_#12100E]"
                     >
                       {prodInfo && prodVisual ? (
-                        <div className="mb-3 flex items-center gap-3.5 rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-2.5 shadow-[3px_3px_0px_#12100E]">
+                        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-2.5 shadow-[3px_3px_0px_#12100E] sm:flex-nowrap sm:gap-3.5">
                           <img
                             src={prodVisual.illustration}
                             alt={prodInfo.name}
@@ -875,7 +875,7 @@ function OrderFormContent() {
                               {prodVisual.laborMinsPerUnit}m/unit
                             </p>
                           </div>
-                          <Badge variant="emerald">
+                          <Badge variant="emerald" className="shrink-0">
                             {formatCategoryName(prodInfo.category)}
                           </Badge>
                         </div>

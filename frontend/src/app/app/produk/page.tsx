@@ -565,8 +565,8 @@ export default function ProdukPage() {
       {/* Modal Tambah / Ubah Produk */}
       {crudOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 p-4 backdrop-blur-xs">
-          <Card className="w-full max-w-lg overflow-hidden shadow-xl">
-            <div className="flex items-center justify-between border-b border-stone-200 bg-stone-50 px-5 py-3.5">
+          <Card className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-stone-200 bg-stone-50 px-5 py-3.5">
               <h3 className="text-base font-bold text-stone-900">
                 {editingProduct
                   ? `Ubah Produk: ${editingProduct.name}`
@@ -581,7 +581,7 @@ export default function ProdukPage() {
               </button>
             </div>
 
-            <form onSubmit={handleCrudSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleCrudSubmit} className="space-y-4 overflow-y-auto p-5">
               {crudError ? (
                 <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
                   {crudError}
@@ -859,7 +859,7 @@ export default function ProdukPage() {
                           return (
                             <div
                               key={`${row.ingredient_id}-${idx}`}
-                              className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white p-2"
+                              className="flex flex-col gap-2 rounded-lg border border-stone-200 bg-white p-2.5 sm:flex-row sm:items-center"
                             >
                               <select
                                 value={row.ingredient_id}
@@ -873,7 +873,7 @@ export default function ProdukPage() {
                                     )
                                   );
                                 }}
-                                className="flex-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs text-stone-900"
+                                className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-2 text-xs text-stone-900 sm:flex-1 sm:py-1.5"
                               >
                                 <option value="">-- Pilih Bahan --</option>
                                 {(ingredientsQuery.data ?? []).map((ing) => (
@@ -883,41 +883,43 @@ export default function ProdukPage() {
                                 ))}
                               </select>
 
-                              <div className="flex items-center gap-1.5">
-                                <Input
-                                  type="number"
-                                  step="0.001"
-                                  min="0.001"
-                                  value={row.qty_per_unit}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setDraftRecipes((prev) =>
-                                      prev.map((item, i) =>
-                                        i === idx
-                                          ? { ...item, qty_per_unit: val }
-                                          : item
-                                      )
-                                    );
-                                  }}
-                                  className="w-28 text-xs"
-                                />
-                                <span className="w-12 text-xs text-stone-600">
-                                  {ingMeta?.use_unit || "unit"}
-                                </span>
-                              </div>
+                              <div className="flex items-center justify-between gap-2 sm:justify-start">
+                                <div className="flex flex-1 items-center gap-1.5 sm:flex-initial">
+                                  <Input
+                                    type="number"
+                                    step="0.001"
+                                    min="0.001"
+                                    value={row.qty_per_unit}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setDraftRecipes((prev) =>
+                                        prev.map((item, i) =>
+                                          i === idx
+                                            ? { ...item, qty_per_unit: val }
+                                            : item
+                                        )
+                                      );
+                                    }}
+                                    className="w-full text-xs sm:w-28"
+                                  />
+                                  <span className="w-12 shrink-0 text-xs text-stone-600">
+                                    {ingMeta?.use_unit || "unit"}
+                                  </span>
+                                </div>
 
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setDraftRecipes((prev) =>
-                                    prev.filter((_, i) => i !== idx)
-                                  )
-                                }
-                                className="rounded p-1.5 text-rose-600 hover:bg-rose-50"
-                                title="Hapus Baris"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDraftRecipes((prev) =>
+                                      prev.filter((_, i) => i !== idx)
+                                    )
+                                  }
+                                  className="rounded p-1.5 text-rose-600 hover:bg-rose-50"
+                                  title="Hapus Baris"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
                           );
                         })}

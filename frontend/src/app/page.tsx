@@ -211,7 +211,7 @@ export default function KatalogHomePage() {
               </div>
 
               {/* Primary CTA Row */}
-              <div className="mt-7 flex flex-wrap items-center gap-3.5">
+              <div className="mt-7 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3.5">
                 <Link
                   href={`/pesan?product=${encodeURIComponent(
                     activeProducts.find(
@@ -220,17 +220,17 @@ export default function KatalogHomePage() {
                         activeShowcase.meta.flavorNumber
                     )?.id ?? activeShowcase.key
                   )}`}
-                  className="twist-btn inline-flex min-h-13 items-center gap-2.5 rounded-full bg-[#C2410C] px-7 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase"
+                  className="twist-btn inline-flex min-h-13 w-full items-center justify-center gap-2.5 rounded-full bg-[#C2410C] px-5 py-3.5 text-center text-sm font-extrabold tracking-wide text-white uppercase sm:w-auto sm:px-7"
                 >
-                  <ShoppingBag className="h-4 w-4" />
+                  <ShoppingBag className="h-4 w-4 shrink-0" />
                   <span>Pesan {activeShowcase.name}</span>
-                  <ArrowUpRight className="h-4 w-4" />
+                  <ArrowUpRight className="h-4 w-4 shrink-0" />
                 </Link>
                 <a
                   href="#katalog"
-                  className="twist-btn inline-flex min-h-13 items-center gap-2 rounded-full bg-[#FFFDF9] px-6 py-3.5 text-sm font-extrabold tracking-wide text-[#12100E] uppercase"
+                  className="twist-btn inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-full bg-[#FFFDF9] px-6 py-3.5 text-center text-sm font-extrabold tracking-wide text-[#12100E] uppercase sm:w-auto"
                 >
-                  <Utensils className="h-4 w-4 text-[#C2410C]" />
+                  <Utensils className="h-4 w-4 shrink-0 text-[#C2410C]" />
                   <span>Lihat Semua Foto Menu</span>
                 </a>
               </div>
@@ -287,27 +287,27 @@ export default function KatalogHomePage() {
             </div>
 
             {/* Right Column: Arched Studio Food Photography Showcase Card */}
-            <div className="lg:col-span-5">
+            <div className="mt-4 sm:mt-0 lg:col-span-5">
               <div className="relative mx-auto max-w-lg">
                 {/* Top-Left Floating Price Sticker */}
                 <div
                   style={{ backgroundColor: activeShowcase.meta.stickerBg }}
-                  className="twist-sticker absolute -top-4 -left-2 z-20 -rotate-3 rounded-2xl px-4 py-2 text-[#12100E] sm:-left-4"
+                  className="twist-sticker absolute -top-5 left-2 z-20 -rotate-3 rounded-2xl px-3 py-1.5 text-[#12100E] sm:-top-4 sm:-left-4 sm:px-4 sm:py-2"
                 >
-                  <p className="text-[10px] font-extrabold tracking-widest uppercase">
+                  <p className="text-[9px] font-extrabold tracking-widest uppercase sm:text-[10px]">
                     Harga Pre-Order
                   </p>
-                  <p className="font-mono-num text-xl font-extrabold">
+                  <p className="font-mono-num text-base font-extrabold sm:text-xl">
                     {formatRupiah(activeShowcase.price)}
-                    <span className="text-xs font-bold">
+                    <span className="text-[11px] font-bold sm:text-xs">
                       /{activeShowcase.unit}
                     </span>
                   </p>
                 </div>
 
                 {/* Top-Right Kitchen Capacity Pill */}
-                <div className="twist-sticker absolute -top-3 -right-2 z-20 rotate-2 rounded-full bg-[#12100E] px-3.5 py-1.5 text-[#D9F99D] sm:-right-3">
-                  <p className="font-mono-num text-xs font-extrabold">
+                <div className="twist-sticker absolute -top-3 right-2 z-20 rotate-2 rounded-full bg-[#12100E] px-2.5 py-1 text-[#D9F99D] sm:-right-3 sm:px-3.5 sm:py-1.5">
+                  <p className="font-mono-num text-[11px] font-extrabold sm:text-xs">
                     🔥 {activeShowcase.meta.ovenHoursPerUnit}j{" "}
                     {activeShowcase.meta.heatStationLabel} · ⏱️{" "}
                     {activeShowcase.meta.laborMinsPerUnit}m Tim
