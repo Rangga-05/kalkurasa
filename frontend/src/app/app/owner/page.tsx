@@ -121,7 +121,7 @@ export default function OwnerDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header Ringkas */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="amber">Pemilik Usaha (Owner)</Badge>
@@ -129,14 +129,14 @@ export default function OwnerDashboardPage() {
               {formatDateLong(data.today)}
             </span>
           </div>
-          <h1 className="font-display mt-1 text-2xl font-extrabold tracking-tight text-[#12100E] sm:text-3xl">
+          <h1 className="font-display mt-1 text-xl font-extrabold tracking-tight text-[#12100E] sm:text-3xl">
             Ringkasan Eksekutif &amp; Keputusan
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/app/pengaturan">
-            <Button variant="outline" size="sm">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          <Link href="/app/pengaturan" className="w-full sm:w-auto">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               Parameter Usaha
             </Button>
           </Link>
@@ -145,6 +145,7 @@ export default function OwnerDashboardPage() {
             size="sm"
             onClick={() => void loadDashboard()}
             disabled={loading}
+            className="w-full sm:w-auto"
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
@@ -156,62 +157,62 @@ export default function OwnerDashboardPage() {
 
       {/* 4 KPI Utama (Ringkas & Bebas Overload) */}
       <section aria-label="Indikator Kinerja Utama" className="space-y-3">
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[4px_4px_0px_#12100E]">
-            <div className="flex items-center justify-between text-xs font-extrabold text-[#5C5046] uppercase">
-              <span>Ketepatan Waktu</span>
-              <Clock className="h-4 w-4 text-[#15803D]" />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
+          <div className="rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E]">
+            <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#5C5046] uppercase sm:text-xs">
+              <span className="truncate">Ketepatan Waktu</span>
+              <Clock className="h-3.5 w-3.5 shrink-0 text-[#15803D] sm:h-4 sm:w-4" />
             </div>
-            <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
               {formatPercent(kpi.on_time_rate)}
             </p>
-            <p className="mt-1 text-xs font-semibold text-[#5C5046]">
-              {kpi.on_time_orders}/{kpi.completed_orders} selesai tepat jadwal
+            <p className="mt-0.5 text-[11px] leading-snug font-semibold text-[#5C5046] sm:mt-1 sm:text-xs">
+              {kpi.on_time_orders}/{kpi.completed_orders} tepat jadwal
             </p>
           </div>
 
-          <div className="rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[4px_4px_0px_#12100E]">
-            <div className="flex items-center justify-between text-xs font-extrabold text-[#5C5046] uppercase">
-              <span>Utilisasi Dapur</span>
-              <CalendarRange className="h-4 w-4 text-[#C2410C]" />
+          <div className="rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E]">
+            <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#5C5046] uppercase sm:text-xs">
+              <span className="truncate">Utilisasi Dapur</span>
+              <CalendarRange className="h-3.5 w-3.5 shrink-0 text-[#C2410C] sm:h-4 sm:w-4" />
             </div>
-            <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
               {formatPercent(kpi.avg_utilization)}
             </p>
-            <p className="mt-1 text-xs font-semibold text-[#5C5046]">
-              Puncak {formatPercent(kpi.peak_utilization)} ({kpi.active_production_days} hari aktif)
+            <p className="mt-0.5 text-[11px] leading-snug font-semibold text-[#5C5046] sm:mt-1 sm:text-xs">
+              Puncak {formatPercent(kpi.peak_utilization)} ({kpi.active_production_days} hr)
             </p>
           </div>
 
-          <div className="rounded-3xl border-2 border-[#12100E] bg-[#ECFCCB] p-4 shadow-[4px_4px_0px_#12100E]">
-            <div className="flex items-center justify-between text-xs font-extrabold text-[#12100E] uppercase">
-              <span>Margin Realisasi</span>
-              <CheckCircle2 className="h-4 w-4 text-[#15803D]" />
+          <div className="rounded-2xl border-2 border-[#12100E] bg-[#ECFCCB] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E]">
+            <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#12100E] uppercase sm:text-xs">
+              <span className="truncate">Margin Realisasi</span>
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#15803D] sm:h-4 sm:w-4" />
             </div>
-            <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
               {formatPercent(kpi.realized_margin)}
             </p>
-            <p className="mt-1 text-xs font-bold text-[#3D352E]">
+            <p className="mt-0.5 truncate text-[11px] leading-snug font-bold text-[#3D352E] sm:mt-1 sm:text-xs">
               Omzet {formatRupiah(kpi.total_revenue)}
             </p>
           </div>
 
           <div
-            className={`rounded-3xl border-2 border-[#12100E] p-4 shadow-[4px_4px_0px_#12100E] ${
+            className={`rounded-2xl border-2 border-[#12100E] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E] ${
               kpi.vulnerable_cash_days > 0 ? "bg-[#FFE4E6]" : "bg-[#FEF9C3]"
             }`}
           >
-            <div className="flex items-center justify-between text-xs font-extrabold text-[#12100E] uppercase">
-              <span>Status Kas 14 Hari</span>
-              <Wallet className="h-4 w-4 text-[#12100E]" />
+            <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#12100E] uppercase sm:text-xs">
+              <span className="truncate">Kas 14 Hari</span>
+              <Wallet className="h-3.5 w-3.5 shrink-0 text-[#12100E] sm:h-4 sm:w-4" />
             </div>
-            <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
               {kpi.vulnerable_cash_days === 0
                 ? "Aman"
                 : `${kpi.vulnerable_cash_days} Hari Rawan`}
             </p>
-            <p className="mt-1 text-xs font-bold text-[#3D352E]">
-              Terendah: {formatRupiah(kpi.cash_lowest)}
+            <p className="mt-0.5 truncate text-[11px] leading-snug font-bold text-[#3D352E] sm:mt-1 sm:text-xs">
+              Min: {formatRupiah(kpi.cash_lowest)}
             </p>
           </div>
         </div>
@@ -222,17 +223,17 @@ export default function OwnerDashboardPage() {
             type="button"
             onClick={() => setShowAllKpis((v) => !v)}
             aria-expanded={showAllKpis}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#12100E] bg-[#F7EFE2] px-3.5 py-1 text-xs font-extrabold text-[#12100E] transition-colors hover:bg-[#FDE047]"
+            className="flex w-full items-center justify-between gap-2 rounded-2xl border border-[#12100E] bg-[#F7EFE2] px-3.5 py-2 text-left text-xs font-extrabold text-[#12100E] transition-colors hover:bg-[#FDE047] sm:inline-flex sm:w-auto sm:justify-start sm:rounded-full sm:py-1"
           >
             {showAllKpis ? (
               <>
-                <ChevronUp className="h-3.5 w-3.5" />
                 <span>Sembunyikan 3 Metrik Tambahan</span>
+                <ChevronUp className="h-3.5 w-3.5 shrink-0" />
               </>
             ) : (
               <>
-                <ChevronDown className="h-3.5 w-3.5" />
                 <span>Lihat Selisih Bahan, Pembatalan, &amp; Statistik Tawar Balik</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
               </>
             )}
           </button>
@@ -286,21 +287,21 @@ export default function OwnerDashboardPage() {
       <div
         role="tablist"
         aria-label="Fokus tampilan Dashboard Owner"
-        className="grid grid-cols-1 gap-2 rounded-3xl border-2 border-[#12100E] bg-[#F7EFE2] p-2 shadow-[4px_4px_0px_#12100E] sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center"
+        className="grid grid-cols-2 gap-1.5 rounded-2xl border-2 border-[#12100E] bg-[#F7EFE2] p-1.5 shadow-[4px_4px_0px_#12100E] sm:gap-2 sm:rounded-3xl sm:p-2 xl:flex xl:flex-wrap xl:items-center"
       >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "decisions"}
           onClick={() => setActiveTab("decisions")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "decisions"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <Scale className="h-3.5 w-3.5 shrink-0" />
-          <span>1. Keputusan Masuk ({queue.length})</span>
+          <span>1. Keputusan ({queue.length})</span>
         </button>
 
         <button
@@ -308,14 +309,14 @@ export default function OwnerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "cash_margin"}
           onClick={() => setActiveTab("cash_margin")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "cash_margin"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <Wallet className="h-3.5 w-3.5 shrink-0" />
-          <span>2. Arus Kas &amp; Margin</span>
+          <span>2. Kas &amp; Margin</span>
         </button>
 
         <button
@@ -323,14 +324,14 @@ export default function OwnerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "calendar"}
           onClick={() => setActiveTab("calendar")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "calendar"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <CalendarRange className="h-3.5 w-3.5 shrink-0" />
-          <span>3. Kalender Kapasitas</span>
+          <span>3. Kalender</span>
         </button>
 
         <button
@@ -338,14 +339,14 @@ export default function OwnerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "simulation"}
           onClick={() => setActiveTab("simulation")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "simulation"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
-          <span>4. Simulasi &amp; Kalibrasi</span>
+          <span>4. Simulasi</span>
         </button>
       </div>
 
@@ -466,44 +467,35 @@ export default function OwnerDashboardPage() {
                   Belum ada pesanan untuk perhitungan margin realisasi.
                 </p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-[#12100E] font-extrabold text-[#12100E]">
-                        <th className="py-2.5 pr-3">Pesanan</th>
-                        <th className="px-3 py-2.5">Status</th>
-                        <th className="px-3 py-2.5 text-right">Total</th>
-                        <th className="py-2.5 pl-3 text-right">
-                          Margin Est → Realisasi
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#12100E]/15">
-                      {kpi.orders_margin.slice(0, 6).map((row) => {
-                        const realM = toNumber(row.realized_margin);
-                        return (
-                          <tr key={row.order_id} className="hover:bg-[#F7EFE2]">
-                            <td className="py-2.5 pr-3">
-                              <Link
-                                href={`/app/pesanan/${row.order_id}`}
-                                className="font-mono-num font-extrabold text-[#C2410C] hover:underline"
-                              >
-                                #{row.code}
-                              </Link>
-                              <div className="text-[11px] font-semibold text-[#5C5046]">
-                                {row.customer_name} ·{" "}
-                                {formatDateShort(row.event_date)}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <OrderStatusBadge status={row.status} />
-                            </td>
-                            <td className="font-mono-num px-3 py-2.5 text-right font-extrabold text-[#12100E]">
+                <>
+                  {/* Tampilan Mobile: Daftar Kartu Ringkas Bebas Scroll Horizontal */}
+                  <div className="space-y-2.5 sm:hidden">
+                    {kpi.orders_margin.slice(0, 6).map((row) => {
+                      const realM = toNumber(row.realized_margin);
+                      return (
+                        <div
+                          key={row.order_id}
+                          className="rounded-2xl border-2 border-[#12100E] bg-[#FFF9F0] p-3 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <Link
+                              href={`/app/pesanan/${row.order_id}`}
+                              className="font-mono-num text-sm font-extrabold text-[#C2410C] hover:underline"
+                            >
+                              #{row.code}
+                            </Link>
+                            <OrderStatusBadge status={row.status} />
+                          </div>
+                          <p className="mt-1 font-semibold text-[#5C5046]">
+                            {row.customer_name} · {formatDateShort(row.event_date)}
+                          </p>
+                          <div className="mt-2 flex items-center justify-between border-t border-[#12100E]/15 pt-2">
+                            <span className="font-mono-num font-extrabold text-[#12100E]">
                               {formatRupiah(row.total)}
-                            </td>
-                            <td className="font-mono-num py-2.5 pl-3 text-right">
-                              <span className="text-[#5C5046]">
-                                {formatPercent(row.estimated_margin)} →{" "}
+                            </span>
+                            <div className="font-mono-num text-right">
+                              <span className="text-[11px] text-[#5C5046]">
+                                Est {formatPercent(row.estimated_margin)} →{" "}
                               </span>
                               <span
                                 className={`font-extrabold ${
@@ -514,13 +506,70 @@ export default function OwnerDashboardPage() {
                               >
                                 {formatPercent(row.realized_margin)}
                               </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Tampilan Tablet & Desktop: Tabel Lengkap */}
+                  <div className="hidden overflow-x-auto sm:block">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b-2 border-[#12100E] font-extrabold text-[#12100E]">
+                          <th className="py-2.5 pr-3">Pesanan</th>
+                          <th className="px-3 py-2.5">Status</th>
+                          <th className="px-3 py-2.5 text-right">Total</th>
+                          <th className="py-2.5 pl-3 text-right">
+                            Margin Est → Realisasi
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#12100E]/15">
+                        {kpi.orders_margin.slice(0, 6).map((row) => {
+                          const realM = toNumber(row.realized_margin);
+                          return (
+                            <tr key={row.order_id} className="hover:bg-[#F7EFE2]">
+                              <td className="py-2.5 pr-3">
+                                <Link
+                                  href={`/app/pesanan/${row.order_id}`}
+                                  className="font-mono-num font-extrabold text-[#C2410C] hover:underline"
+                                >
+                                  #{row.code}
+                                </Link>
+                                <div className="text-[11px] font-semibold text-[#5C5046]">
+                                  {row.customer_name} ·{" "}
+                                  {formatDateShort(row.event_date)}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <OrderStatusBadge status={row.status} />
+                              </td>
+                              <td className="font-mono-num px-3 py-2.5 text-right font-extrabold text-[#12100E]">
+                                {formatRupiah(row.total)}
+                              </td>
+                              <td className="font-mono-num py-2.5 pl-3 text-right">
+                                <span className="text-[#5C5046]">
+                                  {formatPercent(row.estimated_margin)} →{" "}
+                                </span>
+                                <span
+                                  className={`font-extrabold ${
+                                    realM < 0.2
+                                      ? "text-[#BE123C]"
+                                      : "text-[#15803D]"
+                                  }`}
+                                >
+                                  {formatPercent(row.realized_margin)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -530,7 +579,7 @@ export default function OwnerDashboardPage() {
       {/* TAB 3: KALENDER KAPASITAS BULAN INI */}
       {activeTab === "calendar" && (
         <div className="min-w-0 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-extrabold text-[#12100E]">
               Kalender Kapasitas Bulan Ini
             </h2>
@@ -550,13 +599,13 @@ export default function OwnerDashboardPage() {
           />
 
           {selectedCapDay ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] px-4 py-3 text-xs shadow-[4px_4px_0px_#12100E]">
-              <div>
+            <div className="flex flex-col items-start justify-between gap-2 rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] px-4 py-3 text-xs shadow-[4px_4px_0px_#12100E] sm:flex-row sm:items-center">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="font-extrabold text-[#12100E]">
                   {formatDateLong(selectedCapDay.date)}
                 </span>
-                <span className="ml-2 font-semibold text-[#5C5046]">
-                  Utilisasi Puncak:{" "}
+                <span className="font-semibold text-[#5C5046]">
+                  · Utilisasi Puncak:{" "}
                   <strong>{formatPercent(selectedCapDay.utilization)}</strong>
                 </span>
               </div>

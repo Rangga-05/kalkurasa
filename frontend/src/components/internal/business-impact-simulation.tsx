@@ -71,8 +71,8 @@ export function BusinessImpactSimulation({ className = "" }: { className?: strin
       <CardHeader className="border-b border-stone-100 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-600" />
+            <div className="flex flex-wrap items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-amber-600" />
               <CardTitle className="text-base font-bold text-stone-900">
                 Simulasi Dampak Bisnis 30 Hari (Business Impact Analysis)
               </CardTitle>
@@ -86,7 +86,7 @@ export function BusinessImpactSimulation({ className = "" }: { className?: strin
           </div>
 
           {/* Pemilih Skala Usaha */}
-          <div className="flex items-center gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1 sm:flex sm:w-auto sm:items-center">
             {(Object.keys(SCALE_DATA) as ScaleOption[]).map((key) => {
               const isActive = scale === key;
               return (
@@ -94,7 +94,7 @@ export function BusinessImpactSimulation({ className = "" }: { className?: strin
                   key={key}
                   type="button"
                   onClick={() => setScale(key)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
+                  className={`rounded-lg px-2 py-1.5 text-center text-[11px] font-semibold transition sm:px-2.5 sm:py-1 sm:text-xs ${
                     isActive
                       ? "bg-amber-600 text-white shadow-2xs"
                       : "text-stone-600 hover:text-stone-900"

@@ -113,32 +113,32 @@ export function WorkloadRecalibrationCard({
 
   return (
     <div
-      className={`rounded-2xl border border-amber-300 bg-linear-to-r from-amber-50/90 via-amber-50/50 to-white p-5 text-amber-950 shadow-xs ${className}`}
+      className={`rounded-2xl border border-amber-300 bg-linear-to-r from-amber-50/90 via-amber-50/50 to-white p-3.5 text-amber-950 shadow-xs sm:p-5 ${className}`}
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         {/* Kolom Kiri: Deteksi Deviasi Riil & Pemilih Menu */}
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-900">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-700" />
-              Rekomendasi Rekalibrasi Beban Kerja (Skenario S6)
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-900 sm:text-xs">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+              <span>Rekomendasi Rekalibrasi Beban Kerja (Skenario S6)</span>
             </span>
             <Badge variant="amber" className="text-[11px]">
               {userRole === "owner" ? "Wewenang Pemilik & Manajer" : "Wewenang Manajer Operasional"}
             </Badge>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h3 className="text-base font-bold text-stone-900">
+          <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5">
+            <h3 className="text-sm font-bold text-stone-900 sm:text-base">
               Penyesuaian Waktu Produksi:
             </h3>
             {/* Dropdown Pemilihan Menu Produk */}
-            <div className="relative inline-flex max-w-full items-center">
+            <div className="relative inline-flex w-full max-w-full items-center sm:w-auto">
               <select
                 value={selectedProductId}
                 onChange={(e) => handleProductChange(e.target.value)}
                 aria-label="Pilih Menu Produk untuk Kalibrasi Waktu Kerja"
-                className="max-w-full cursor-pointer truncate rounded-xl border border-amber-400 bg-white py-1 pl-3 pr-8 text-xs font-bold text-amber-950 shadow-2xs hover:border-amber-500 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                className="w-full max-w-full cursor-pointer truncate rounded-xl border border-amber-400 bg-white py-1.5 pl-3 pr-8 text-xs font-bold text-amber-950 shadow-2xs hover:border-amber-500 focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20 sm:w-auto sm:py-1"
               >
                 {products.length > 0 ? (
                   products.map((p) => {
@@ -169,15 +169,15 @@ export function WorkloadRecalibrationCard({
           )}
 
           {isTartSelected && (
-            <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div className="grid grid-cols-1 gap-2 text-xs sm:flex sm:flex-wrap sm:items-center sm:gap-4">
               <div className="flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-white/90 px-3 py-1.5 shadow-2xs">
-                <Clock className="h-3.5 w-3.5 text-stone-500" />
+                <Clock className="h-3.5 w-3.5 shrink-0 text-stone-500" />
                 <span className="text-stone-600">Standar Awal:</span>
                 <strong className="font-semibold text-stone-900">{estimated} menit/unit</strong>
               </div>
 
               <div className="flex items-center gap-1.5 rounded-lg border border-amber-200/80 bg-white/90 px-3 py-1.5 shadow-2xs">
-                <TrendingUp className="h-3.5 w-3.5 text-amber-600" />
+                <TrendingUp className="h-3.5 w-3.5 shrink-0 text-amber-600" />
                 <span className="text-stone-600">Rata-rata Riil Staf:</span>
                 <strong className="font-semibold text-amber-900">{avgActual} menit/unit</strong>
               </div>
@@ -186,11 +186,11 @@ export function WorkloadRecalibrationCard({
         </div>
 
         {/* Kolom Kanan: Kontrol Penyesuaian oleh Manajer */}
-        <div className="flex shrink-0 flex-col gap-2.5 rounded-xl border border-amber-200 bg-white p-4 shadow-xs sm:min-w-80">
-          <div className="flex items-center justify-between gap-2">
+        <div className="flex w-full shrink-0 flex-col gap-2.5 rounded-xl border border-amber-200 bg-white p-3.5 shadow-xs sm:w-auto sm:min-w-80 sm:p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="flex items-center gap-1 text-xs font-bold text-stone-800">
-              <Sliders className="h-3.5 w-3.5 text-amber-600" />
-              Durasi Kerja ({selectedProductName}):
+              <Sliders className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <span className="truncate">Durasi Kerja ({selectedProductName}):</span>
             </label>
             <span className="text-[11px] text-stone-500">Bisa diubah Manajer</span>
           </div>

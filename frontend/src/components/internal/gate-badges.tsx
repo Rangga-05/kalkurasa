@@ -55,32 +55,32 @@ export function GateBadges({
         return (
           <div
             key={g.gate}
-            className={`min-w-0 rounded-2xl border-2 border-[#12100E] p-3 transition-all ${
+            className={`min-w-0 rounded-2xl border-2 border-[#12100E] p-2.5 transition-all sm:p-3 ${
               passed
                 ? "bg-[#ECFCCB] text-[#12100E]"
                 : "bg-[#FFE4E6] text-[#9F1239]"
             }`}
           >
             <div className="flex items-center justify-between gap-1">
-              <span className="truncate text-[11px] font-extrabold tracking-wide uppercase">
+              <span className="truncate text-[10px] font-extrabold tracking-wide uppercase sm:text-[11px]">
                 {meta.name}
               </span>
               {passed ? (
                 <CheckCircle2
-                  className="h-4 w-4 shrink-0 text-[#15803D]"
+                  className="h-3.5 w-3.5 shrink-0 text-[#15803D] sm:h-4 sm:w-4"
                   aria-hidden="true"
                 />
               ) : (
                 <XCircle
-                  className="h-4 w-4 shrink-0 text-[#BE123C]"
+                  className="h-3.5 w-3.5 shrink-0 text-[#BE123C] sm:h-4 sm:w-4"
                   aria-hidden="true"
                 />
               )}
             </div>
-            <p className="font-mono-num mt-1 truncate text-sm font-extrabold">
+            <p className="font-mono-num mt-1 truncate text-xs font-extrabold sm:text-sm">
               {formatGateMetric(g.gate, g.value)}
             </p>
-            <p className="font-mono-num truncate text-[10px] font-bold opacity-80">
+            <p className="font-mono-num mt-0.5 text-[10px] leading-tight font-bold opacity-80">
               Syarat {gateComparator(g.gate)}{" "}
               {formatGateMetric(g.gate, g.threshold)}
             </p>

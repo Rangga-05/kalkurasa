@@ -170,60 +170,60 @@ export default function ManagerDashboardPage() {
       </div>
 
       {/* 4 KPI Operasional Ringkas */}
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[4px_4px_0px_#12100E]">
-          <div className="flex items-center justify-between text-xs font-extrabold text-[#5C5046] uppercase">
-            <span>Ketepatan Jadwal</span>
-            <Clock className="h-4 w-4 text-[#15803D]" />
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4">
+        <div className="rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E]">
+          <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#5C5046] uppercase sm:text-xs">
+            <span className="truncate">Ketepatan Jadwal</span>
+            <Clock className="h-3.5 w-3.5 shrink-0 text-[#15803D] sm:h-4 sm:w-4" />
           </div>
-          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+          <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
             {formatPercent(kpi.on_time_rate)}
           </p>
-          <p className="mt-1 text-xs font-semibold text-[#5C5046]">
-            {kpi.on_time_orders}/{kpi.completed_orders} pesanan tepat waktu
+          <p className="mt-0.5 text-[11px] leading-snug font-semibold text-[#5C5046] sm:mt-1 sm:text-xs">
+            {kpi.on_time_orders}/{kpi.completed_orders} tepat waktu
           </p>
         </div>
 
-        <div className="rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[4px_4px_0px_#12100E]">
-          <div className="flex items-center justify-between text-xs font-extrabold text-[#5C5046] uppercase">
-            <span>Utilisasi Rata-rata</span>
-            <CalendarRange className="h-4 w-4 text-[#C2410C]" />
+        <div className="rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E]">
+          <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#5C5046] uppercase sm:text-xs">
+            <span className="truncate">Utilisasi Rata-rata</span>
+            <CalendarRange className="h-3.5 w-3.5 shrink-0 text-[#C2410C] sm:h-4 sm:w-4" />
           </div>
-          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+          <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
             {formatPercent(kpi.avg_utilization)}
           </p>
-          <p className="mt-1 text-xs font-semibold text-[#5C5046]">
+          <p className="mt-0.5 text-[11px] leading-snug font-semibold text-[#5C5046] sm:mt-1 sm:text-xs">
             Puncak {formatPercent(kpi.peak_utilization)}
           </p>
         </div>
 
-        <div className="rounded-3xl border-2 border-[#12100E] bg-[#FEF9C3] p-4 shadow-[4px_4px_0px_#12100E]">
-          <div className="flex items-center justify-between text-xs font-extrabold text-[#12100E] uppercase">
-            <span>Perlu Keputusan</span>
-            <Scale className="h-4 w-4 text-[#C2410C]" />
+        <div className="rounded-2xl border-2 border-[#12100E] bg-[#FEF9C3] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E]">
+          <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#12100E] uppercase sm:text-xs">
+            <span className="truncate">Perlu Keputusan</span>
+            <Scale className="h-3.5 w-3.5 shrink-0 text-[#C2410C] sm:h-4 sm:w-4" />
           </div>
-          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+          <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
             {queue.length} Pesanan
           </p>
-          <p className="mt-1 text-xs font-bold text-[#3D352E]">
-            {dpAlerts.length} menunggu verifikasi DP
+          <p className="mt-0.5 text-[11px] leading-snug font-bold text-[#3D352E] sm:mt-1 sm:text-xs">
+            {dpAlerts.length} tunggu DP
           </p>
         </div>
 
         <div
-          className={`rounded-3xl border-2 border-[#12100E] p-4 shadow-[4px_4px_0px_#12100E] ${
+          className={`rounded-2xl border-2 border-[#12100E] p-3 shadow-[3px_3px_0px_#12100E] sm:rounded-3xl sm:p-4 sm:shadow-[4px_4px_0px_#12100E] ${
             lowStocks.length > 0 ? "bg-[#FFE4E6]" : "bg-[#ECFCCB]"
           }`}
         >
-          <div className="flex items-center justify-between text-xs font-extrabold text-[#12100E] uppercase">
-            <span>Stok &amp; Buffer Kas</span>
-            <CheckCircle2 className="h-4 w-4 text-[#15803D]" />
+          <div className="flex items-center justify-between gap-1 text-[10px] font-extrabold text-[#12100E] uppercase sm:text-xs">
+            <span className="truncate">Stok &amp; Kas</span>
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#15803D] sm:h-4 sm:w-4" />
           </div>
-          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
-            {lowStocks.length === 0 ? "Stok Aman" : `${lowStocks.length} Bahan Tipis`}
+          <p className="font-mono-num mt-1.5 text-lg font-extrabold text-[#12100E] sm:mt-2 sm:text-2xl">
+            {lowStocks.length === 0 ? "Stok Aman" : `${lowStocks.length} Tipis`}
           </p>
-          <p className="mt-1 text-xs font-bold text-[#3D352E]">
-            G3 Kas: {cashStatus.passed ? "Lolos Buffer" : "Perlu Perhatian"}
+          <p className="mt-0.5 text-[11px] leading-snug font-bold text-[#3D352E] sm:mt-1 sm:text-xs">
+            G3 Kas: {cashStatus.passed ? "Lolos" : "Rawan"}
           </p>
         </div>
       </div>
@@ -232,21 +232,21 @@ export default function ManagerDashboardPage() {
       <div
         role="tablist"
         aria-label="Fokus tampilan Dashboard Manajer"
-        className="grid grid-cols-1 gap-2 rounded-3xl border-2 border-[#12100E] bg-[#F7EFE2] p-2 shadow-[4px_4px_0px_#12100E] sm:grid-cols-2 xl:flex xl:flex-wrap xl:items-center"
+        className="grid grid-cols-2 gap-1.5 rounded-2xl border-2 border-[#12100E] bg-[#F7EFE2] p-1.5 shadow-[4px_4px_0px_#12100E] sm:gap-2 sm:rounded-3xl sm:p-2 xl:flex xl:flex-wrap xl:items-center"
       >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "schedule"}
           onClick={() => setActiveTab("schedule")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "schedule"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <UtensilsCrossed className="h-3.5 w-3.5 shrink-0" />
-          <span>1. Jadwal Produksi &amp; DP ({prodSchedule.length})</span>
+          <span>1. Jadwal ({prodSchedule.length})</span>
         </button>
 
         <button
@@ -254,14 +254,14 @@ export default function ManagerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "decisions_stock"}
           onClick={() => setActiveTab("decisions_stock")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "decisions_stock"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <Scale className="h-3.5 w-3.5 shrink-0" />
-          <span>2. Keputusan ({queue.length}) &amp; Stok ({lowStocks.length})</span>
+          <span>2. Keputusan ({queue.length})</span>
         </button>
 
         <button
@@ -269,14 +269,14 @@ export default function ManagerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "calendar"}
           onClick={() => setActiveTab("calendar")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "calendar"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <CalendarRange className="h-3.5 w-3.5 shrink-0" />
-          <span>3. Kalender Kapasitas</span>
+          <span>3. Kalender</span>
         </button>
 
         <button
@@ -284,14 +284,14 @@ export default function ManagerDashboardPage() {
           role="tab"
           aria-selected={activeTab === "simulation"}
           onClick={() => setActiveTab("simulation")}
-          className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all xl:justify-start ${
+          className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-center text-[11px] leading-tight font-extrabold uppercase transition-all sm:gap-2 sm:rounded-full sm:px-4 sm:text-xs xl:justify-start ${
             activeTab === "simulation"
               ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
               : "text-[#12100E] hover:bg-[#FFFDF9]"
           }`}
         >
           <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
-          <span>4. Simulasi &amp; Kalibrasi</span>
+          <span>4. Simulasi</span>
         </button>
       </div>
 
