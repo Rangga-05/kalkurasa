@@ -85,7 +85,7 @@ func validateProductRequest(req productRequest) (Product, *httpx.Validation) {
 	}, v
 }
 
-const productCols = `id::text, name, category, price, packaging_cost, overhead_cost, is_active`
+const productCols = `id::text, name, category, price, packaging_cost, overhead_cost, is_active, lead_time_days, waste_pct`
 
 // ListProducts mengembalikan daftar produk dengan paginasi.
 func (h *Handler) ListProducts(c *gin.Context) {
@@ -120,13 +120,11 @@ func (h *Handler) ListProducts(c *gin.Context) {
 	items := make([]Product, 0)
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.Name, &p.Category, &p.Price, &p.PackagingCost, &p.OverheadCost, &p.IsActive); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Category, &p.Price, &p.PackagingCost, &p.OverheadCost, &p.IsActive, &p.LeadTimeDays, &p.WastePct); err != nil {
 			httpx.HandleError(c, err)
 			return
 		}
 		p.OverheadPerUnit = p.OverheadCost
-		p.WastePct = decimal.RequireFromString("0.05")
-		p.LeadTimeDays = 2
 		items = append(items, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -151,14 +149,12 @@ func (h *Handler) GetProduct(c *gin.Context) {
 	var p Product
 	err := h.DB.QueryRow(c.Request.Context(),
 		`SELECT `+productCols+` FROM products WHERE id = $1::uuid`, id,
-	).Scan(&p.ID, &p.Name, &p.Category, &p.Price, &p.PackagingCost, &p.OverheadCost, &p.IsActive)
+	).Scan(&p.ID, &p.Name, &p.Category, &p.Price, &p.PackagingCost, &p.OverheadCost, &p.IsActive, &p.LeadTimeDays, &p.WastePct)
 	if err != nil {
 		httpx.HandleError(c, err)
 		return
 	}
 	p.OverheadPerUnit = p.OverheadCost
-	p.WastePct = decimal.RequireFromString("0.05")
-	p.LeadTimeDays = 2
 
 	httpx.OK(c, p)
 }
@@ -183,17 +179,15 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 	var out Product
 	err := db.WithTx(c.Request.Context(), h.DB, func(tx pgx.Tx) error {
 		err := tx.QueryRow(c.Request.Context(), `
-			INSERT INTO products (name, category, price, packaging_cost, overhead_cost, is_active)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO products (name, category, price, packaging_cost, overhead_cost, is_active, lead_time_days, waste_pct)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING `+productCols,
-			in.Name, in.Category, in.Price, in.PackagingCost, in.OverheadCost, in.IsActive,
-		).Scan(&out.ID, &out.Name, &out.Category, &out.Price, &out.PackagingCost, &out.OverheadCost, &out.IsActive)
+			in.Name, in.Category, in.Price, in.PackagingCost, in.OverheadCost, in.IsActive, in.LeadTimeDays, in.WastePct,
+		).Scan(&out.ID, &out.Name, &out.Category, &out.Price, &out.PackagingCost, &out.OverheadCost, &out.IsActive, &out.LeadTimeDays, &out.WastePct)
 		if err != nil {
 			return err
 		}
 		out.OverheadPerUnit = out.OverheadCost
-		out.WastePct = in.WastePct
-		out.LeadTimeDays = in.LeadTimeDays
 		return audit.Log(c.Request.Context(), tx, actor.ID, audit.ActionMaster, "products", out.ID, map[string]any{
 			"op":      "create",
 			"product": out,
@@ -232,17 +226,15 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 	err := db.WithTx(c.Request.Context(), h.DB, func(tx pgx.Tx) error {
 		err := tx.QueryRow(c.Request.Context(), `
 			UPDATE products
-			SET name = $2, category = $3, price = $4, packaging_cost = $5, overhead_cost = $6, is_active = $7
+			SET name = $2, category = $3, price = $4, packaging_cost = $5, overhead_cost = $6, is_active = $7, lead_time_days = $8, waste_pct = $9
 			WHERE id = $1::uuid
 			RETURNING `+productCols,
-			id, in.Name, in.Category, in.Price, in.PackagingCost, in.OverheadCost, in.IsActive,
-		).Scan(&out.ID, &out.Name, &out.Category, &out.Price, &out.PackagingCost, &out.OverheadCost, &out.IsActive)
+			id, in.Name, in.Category, in.Price, in.PackagingCost, in.OverheadCost, in.IsActive, in.LeadTimeDays, in.WastePct,
+		).Scan(&out.ID, &out.Name, &out.Category, &out.Price, &out.PackagingCost, &out.OverheadCost, &out.IsActive, &out.LeadTimeDays, &out.WastePct)
 		if err != nil {
 			return err
 		}
 		out.OverheadPerUnit = out.OverheadCost
-		out.WastePct = in.WastePct
-		out.LeadTimeDays = in.LeadTimeDays
 		return audit.Log(c.Request.Context(), tx, actor.ID, audit.ActionMaster, "products", out.ID, map[string]any{
 			"op":      "update",
 			"product": out,

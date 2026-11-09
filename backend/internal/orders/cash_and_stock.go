@@ -864,7 +864,7 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 	}
 
 	rows, err := q.Query(ctx, `
-		SELECT id::text, name, category, price, packaging_cost, overhead_cost, is_active
+		SELECT id::text, name, category, price, packaging_cost, overhead_cost, is_active, lead_time_days, waste_pct
 		FROM products
 		ORDER BY name ASC, id ASC
 	`)
@@ -881,12 +881,14 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 		PackagingCost decimal.Decimal
 		OverheadCost  decimal.Decimal
 		IsActive      bool
+		LeadTimeDays  int
+		WastePct      decimal.Decimal
 	}
 	prods := make([]prodRow, 0)
 	ids := make([]string, 0)
 	for rows.Next() {
 		var pr prodRow
-		if err := rows.Scan(&pr.ID, &pr.Name, &pr.Category, &pr.Price, &pr.PackagingCost, &pr.OverheadCost, &pr.IsActive); err != nil {
+		if err := rows.Scan(&pr.ID, &pr.Name, &pr.Category, &pr.Price, &pr.PackagingCost, &pr.OverheadCost, &pr.IsActive, &pr.LeadTimeDays, &pr.WastePct); err != nil {
 			return nil, err
 		}
 		prods = append(prods, pr)
@@ -954,7 +956,6 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 	}
 	recRows.Close()
 
-	onePlusWaste := decimal.NewFromInt(1).Add(params.WastePct)
 	out := make([]ProductCostingDTO, 0, len(prods))
 
 	for _, pr := range prods {
@@ -966,9 +967,15 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 		laborMin := loads["labor"]
 		laborCost := laborMin.Mul(params.LaborRatePerMin)
 
+		prodWaste := pr.WastePct
+		if !prodWaste.IsPositive() {
+			prodWaste = params.WastePct
+		}
+		onePlusWaste := decimal.NewFromInt(1).Add(prodWaste)
+
 		unitCost := engine.UnitCost(engine.CostInput{
 			IngredientCost: ingCost,
-			WastePct:       params.WastePct,
+			WastePct:       prodWaste,
 			PackagingCost:  pr.PackagingCost,
 			LaborMinutes:   laborMin,
 			LaborRate:      params.LaborRatePerMin,
@@ -986,7 +993,7 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 			IsActive:            pr.IsActive,
 			Price:               pr.Price.Round(2),
 			IngredientCost:      ingCost.Round(2),
-			WastePct:            params.WastePct.Round(4),
+			WastePct:            prodWaste.Round(4),
 			PackagingCost:       pr.PackagingCost.Round(2),
 			LaborMinutes:        laborMin.Round(2),
 			LaborCost:           laborCost.Round(2),

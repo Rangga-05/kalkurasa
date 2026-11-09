@@ -239,14 +239,18 @@ export default function TrackOrderDetailPage({
                     variant={statusMeta.tone}
                     className="self-start px-3 py-1 text-xs sm:text-sm"
                   >
-                    {statusMeta.label}
+                    {isFullyPaid && order.status === "confirmed"
+                      ? "Terkonfirmasi (Lunas 100%)"
+                      : statusMeta.label}
                   </Badge>
                 </div>
               </CardHeader>
 
               <CardContent className="space-y-4">
                 <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-3.5 text-xs text-stone-700 sm:text-sm">
-                  {statusMeta.description}
+                  {isFullyPaid && order.status === "confirmed"
+                    ? "Pembayaran telah lunas 100%. Pesanan Anda masuk ke jadwal belanja bahan dan produksi dapur kami."
+                    : statusMeta.description}
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -406,7 +410,7 @@ export default function TrackOrderDetailPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <OrderTimeline status={order.status} />
+                <OrderTimeline status={order.status} isFullyPaid={isFullyPaid} />
               </CardContent>
             </Card>
 

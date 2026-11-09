@@ -51,7 +51,7 @@ export default function OwnerDashboardPage() {
 
   const dashboardQuery = useQuery({
     queryKey: ["owner-dashboard"],
-    queryFn: getOwnerDashboard,
+    queryFn: ({ signal }) => getOwnerDashboard(signal),
   });
 
   const data = dashboardQuery.data ?? null;

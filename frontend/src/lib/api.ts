@@ -118,6 +118,23 @@ export function getErrorMessage(
   return fallback;
 }
 
+function normalizeSignal(signal?: unknown): AbortSignal | undefined {
+  if (!signal) return undefined;
+  if (typeof AbortSignal !== "undefined" && signal instanceof AbortSignal) {
+    return signal;
+  }
+  if (
+    typeof signal === "object" &&
+    signal !== null &&
+    "signal" in signal &&
+    typeof AbortSignal !== "undefined" &&
+    (signal as { signal?: unknown }).signal instanceof AbortSignal
+  ) {
+    return (signal as { signal: AbortSignal }).signal;
+  }
+  return undefined;
+}
+
 async function requestJson<T>(
   path: string,
   init: RequestInit = {}
@@ -128,14 +145,18 @@ async function requestJson<T>(
   }
   headers.set("Accept", "application/json");
 
+  const safeSignal = normalizeSignal(init.signal);
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal: safeSignal,
       headers,
       credentials: "include",
     });
-  } catch {
+  } catch (err: unknown) {
+    console.error(`[API Network Error] ${path}:`, err);
     throw new ApiError(
       0,
       "network_error",
@@ -182,14 +203,18 @@ async function requestListJson<T>(
   }
   headers.set("Accept", "application/json");
 
+  const safeSignal = normalizeSignal(init.signal);
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
+      signal: safeSignal,
       headers,
       credentials: "include",
     });
-  } catch {
+  } catch (err: unknown) {
+    console.error(`[API Network Error] ${path}:`, err);
     throw new ApiError(
       0,
       "network_error",
@@ -897,11 +922,11 @@ export async function updateSettings(
  * Mengambil ringkasan Dashboard Pemilik Usaha (khusus Owner).
  */
 export async function getOwnerDashboard(
-  signal?: AbortSignal
+  signal?: AbortSignal | { signal?: AbortSignal }
 ): Promise<OwnerDashboardResult> {
   return requestJson<OwnerDashboardResult>("/dashboard/owner", {
     method: "GET",
-    signal,
+    signal: normalizeSignal(signal),
   });
 }
 
@@ -910,11 +935,11 @@ export async function getOwnerDashboard(
  * Mengambil ringkasan Dashboard Manajer Operasional (Manager & Owner).
  */
 export async function getManagerDashboard(
-  signal?: AbortSignal
+  signal?: AbortSignal | { signal?: AbortSignal }
 ): Promise<ManagerDashboardResult> {
   return requestJson<ManagerDashboardResult>("/dashboard/manager", {
     method: "GET",
-    signal,
+    signal: normalizeSignal(signal),
   });
 }
 
@@ -923,11 +948,11 @@ export async function getManagerDashboard(
  * Mengambil ringkasan Dashboard Karyawan tanpa harga/margin/kas (Staff, Manager, Owner).
  */
 export async function getStaffDashboard(
-  signal?: AbortSignal
+  signal?: AbortSignal | { signal?: AbortSignal }
 ): Promise<StaffDashboardResult> {
   return requestJson<StaffDashboardResult>("/dashboard/staff", {
     method: "GET",
-    signal,
+    signal: normalizeSignal(signal),
   });
 }
 

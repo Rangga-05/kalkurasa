@@ -80,7 +80,13 @@ function getStepIndex(status: OrderStatus): number {
   }
 }
 
-export function OrderTimeline({ status }: { status: OrderStatus }) {
+export function OrderTimeline({
+  status,
+  isFullyPaid,
+}: {
+  status: OrderStatus;
+  isFullyPaid?: boolean;
+}) {
   const isTerminalNegative =
     status === "rejected" || status === "cancelled" || status === "expired";
   const currentIdx = getStepIndex(status);
@@ -176,7 +182,9 @@ export function OrderTimeline({ status }: { status: OrderStatus }) {
                   {step.label}
                 </p>
                 <p className="mt-0.5 text-xs leading-relaxed opacity-80">
-                  {step.description}
+                  {isFullyPaid && step.key === "confirmed"
+                    ? "Pembayaran telah diverifikasi lunas, bahan baku dijadwalkan untuk dibeli."
+                    : step.description}
                 </p>
               </div>
             </li>

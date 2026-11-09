@@ -1200,10 +1200,11 @@ func (tx *memTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, 
 		}
 		return &memRows{rows: rows}, nil
 
-	case strings.HasPrefix(q, "select id::text, name, category, price, packaging_cost, overhead_cost, is_active from products order by name asc, id asc"):
+	case strings.HasPrefix(q, "select id::text, name, category, price, packaging_cost, overhead_cost, is_active, lead_time_days, waste_pct from products order by name asc, id asc") ||
+		strings.HasPrefix(q, "select id::text, name, category, price, packaging_cost, overhead_cost, is_active from products order by name asc, id asc"):
 		var rows [][]any
 		for _, p := range tx.db.products {
-			rows = append(rows, []any{p.ID, p.Name, p.Category, p.Price, p.PackagingCost, p.OverheadCost, p.IsActive})
+			rows = append(rows, []any{p.ID, p.Name, p.Category, p.Price, p.PackagingCost, p.OverheadCost, p.IsActive, 2, decimal.RequireFromString("0.05")})
 		}
 		return &memRows{rows: rows}, nil
 

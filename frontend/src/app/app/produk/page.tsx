@@ -220,8 +220,8 @@ export default function ProdukPage() {
         ? prod.overhead_per_unit
         : prod.overhead_cost;
     setOverheadPerUnit(String(toNumber(ovh)));
-    setWastePct(String(toNumber(prod.waste_pct) || 0.05));
-    setLeadTimeDays(String(prod.lead_time_days || 2));
+    setWastePct(String(prod.waste_pct !== undefined ? toNumber(prod.waste_pct) : 0.05));
+    setLeadTimeDays(String(prod.lead_time_days !== undefined ? prod.lead_time_days : 2));
     setIsActive(prod.is_active);
     setCrudError(null);
     setCrudOpen(true);
@@ -278,6 +278,11 @@ export default function ProdukPage() {
       return;
     }
     const leadNum = Number.parseInt(leadTimeDays, 10);
+    const cleanWaste = wastePct.replace(",", ".");
+    const wasteNum = Number.parseFloat(cleanWaste);
+    const validWaste = Number.isFinite(wasteNum) && wasteNum >= 0 ? cleanWaste : "0.05";
+    const validLead = Number.isFinite(leadNum) && leadNum >= 0 ? leadNum : 2;
+
     if (!editingProduct) {
       createMutation.mutate({
         name: name.trim(),
@@ -286,8 +291,8 @@ export default function ProdukPage() {
         packaging_cost: packagingCost,
         overhead_cost: overheadPerUnit,
         overhead_per_unit: overheadPerUnit,
-        waste_pct: wastePct,
-        lead_time_days: Number.isFinite(leadNum) ? leadNum : 1,
+        waste_pct: validWaste,
+        lead_time_days: validLead,
         is_active: isActive,
       });
     } else {
@@ -300,8 +305,8 @@ export default function ProdukPage() {
           packaging_cost: packagingCost,
           overhead_cost: overheadPerUnit,
           overhead_per_unit: overheadPerUnit,
-          waste_pct: wastePct,
-          lead_time_days: Number.isFinite(leadNum) ? leadNum : 1,
+          waste_pct: validWaste,
+          lead_time_days: validLead,
           is_active: isActive,
         },
       });
@@ -416,8 +421,8 @@ export default function ProdukPage() {
                       </div>
                       <p className="mt-1 text-xs text-stone-500">
                         Lead Time Minimum:{" "}
-                        <strong>H-{prod.lead_time_days || 2} hari</strong> · Waste
-                        Bahan: <strong>{formatPercent(prod.waste_pct || cost?.waste_pct || 0.05)}</strong>
+                        <strong>H-{prod.lead_time_days !== undefined ? prod.lead_time_days : 2} hari</strong> · Waste
+                        Bahan: <strong>{formatPercent(prod.waste_pct !== undefined ? prod.waste_pct : (cost?.waste_pct || 0.05))}</strong>
                       </p>
                     </div>
 

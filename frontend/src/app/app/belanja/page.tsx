@@ -26,7 +26,6 @@ import {
   formatDateShort,
   formatNumber,
   formatPercent,
-  formatRupiah,
   toDateKeyWIB,
   toNumber,
 } from "@/lib/format";
@@ -326,12 +325,6 @@ export default function BelanjaPage() {
               <Badge variant="sky">
                 Lead Belanja: <strong>H-{data.lead_days} hari</strong>
               </Badge>
-              {!isStaff && data.total_estimated !== undefined ? (
-                <Badge variant="emerald">
-                  Total Estimasi Belanja:{" "}
-                  <strong>{formatRupiah(data.total_estimated)}</strong>
-                </Badge>
-              ) : null}
             </div>
           ) : null}
         </div>

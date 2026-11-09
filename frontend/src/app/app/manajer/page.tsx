@@ -54,7 +54,7 @@ export default function ManagerDashboardPage() {
 
   const dashboardQuery = useQuery({
     queryKey: ["manager-dashboard"],
-    queryFn: getManagerDashboard,
+    queryFn: ({ signal }) => getManagerDashboard(signal),
   });
 
   const data = dashboardQuery.data ?? null;
