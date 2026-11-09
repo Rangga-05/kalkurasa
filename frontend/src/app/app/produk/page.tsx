@@ -32,6 +32,8 @@ import {
   formatNumber,
   formatPercent,
   formatRupiah,
+  normalizeProductCategoryValue,
+  PRODUCT_CATEGORY_OPTIONS,
   toNumber,
 } from "@/lib/format";
 import { useToast } from "@/components/providers";
@@ -212,7 +214,7 @@ export default function ProdukPage() {
   const openEditModal = (prod: Product) => {
     setEditingProduct(prod);
     setName(prod.name);
-    setCategory(prod.category);
+    setCategory(normalizeProductCategoryValue(prod.category));
     setPrice(String(toNumber(prod.price)));
     setPackagingCost(String(toNumber(prod.packaging_cost)));
     const ovh = prod.overhead_per_unit;
@@ -608,12 +610,11 @@ export default function ProdukPage() {
                     onChange={(e) => setCategory(e.target.value)}
                     className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
                   >
-                    <option value="snack_box">Paket Snack Box</option>
-                    <option value="kue_tart">Kue Tart & Perayaan</option>
-                    <option value="cupcake">Cupcake & Hampers</option>
-                    <option value="nasi_box">Katering Nasi Box</option>
-                    <option value="kue_kering">Kue Kering & Toples</option>
-                    <option value="brownies">Brownies & Cake Potong</option>
+                    {PRODUCT_CATEGORY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

@@ -426,7 +426,7 @@ func SeedDemoData(ctx context.Context, conn db.Conn, demoPassword string, actorI
 				},
 			},
 			{
-				id: DemoProdCupcakeID, name: "Cupcake Box (Isi 6)", category: "kue_tart",
+				id: DemoProdCupcakeID, name: "Cupcake Box (Isi 6)", category: "cupcake",
 				price: "95000.0000", packagingCost: "6000.0000", overheadCost: "3500.0000",
 				ovenLoad: "0.2500", laborLoad: "35.0000",
 				recipes: []demoRecipeSeed{

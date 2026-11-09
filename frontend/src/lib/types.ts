@@ -68,10 +68,24 @@ export interface LogoutResponse {
   message: string;
 }
 
+export const PRODUCT_CATEGORIES = [
+  "katering",
+  "nasi_box",
+  "snack_box",
+  "kue_tart",
+  "cupcake",
+  "kue_kering",
+  "kue_loyang",
+  "brownies",
+  "umum",
+] as const;
+
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
 export interface PublicProduct {
   id: string;
   name: string;
-  category: string;
+  category: ProductCategory | string;
   price: DecimalValue;
 }
 
@@ -663,7 +677,7 @@ export interface CreateCashEntryRequest {
 export interface Product {
   id: string;
   name: string;
-  category: string;
+  category: ProductCategory | string;
   price: DecimalValue;
   packaging_cost?: DecimalValue;
   overhead_per_unit?: DecimalValue;
@@ -675,7 +689,7 @@ export interface Product {
 
 export interface CreateProductRequest {
   name: string;
-  category?: string;
+  category?: ProductCategory | string;
   price: DecimalValue;
   packaging_cost?: DecimalValue;
   overhead_cost?: DecimalValue;
@@ -687,7 +701,7 @@ export interface CreateProductRequest {
 
 export interface UpdateProductRequest {
   name?: string;
-  category?: string;
+  category?: ProductCategory | string;
   price?: DecimalValue;
   packaging_cost?: DecimalValue;
   overhead_cost?: DecimalValue;
@@ -753,7 +767,7 @@ export interface Resource {
 export interface ProductCostingDTO {
   product_id: string;
   name: string;
-  category: string;
+  category: ProductCategory | string;
   is_active: boolean;
   price: DecimalValue;
   ingredient_cost: DecimalValue;

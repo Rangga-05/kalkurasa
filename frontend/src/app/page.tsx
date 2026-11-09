@@ -21,7 +21,11 @@ import {
   XCircle,
 } from "lucide-react";
 import { getPublicProducts, getErrorMessage } from "@/lib/api";
-import { formatCategoryName, formatRupiah } from "@/lib/format";
+import {
+  formatCategoryName,
+   formatRupiah,
+  normalizeProductCategoryValue,
+} from "@/lib/format";
 import {
   getProductVisualMeta,
   SIGNATURE_SHOWCASE_ITEMS,
@@ -131,14 +135,19 @@ export default function KatalogHomePage() {
   }, [products]);
 
   const categories = useMemo(() => {
-    const unique = Array.from(new Set(activeProducts.map((p) => p.category)));
-    return unique.sort();
+    const unique = Array.from(
+      new Set(
+        activeProducts.map((p) => normalizeProductCategoryValue(p.category))
+      )
+    );
+    return unique;
   }, [activeProducts]);
 
   const filteredProducts = useMemo(() => {
     return activeProducts.filter((product) => {
+      const normalizedCat = normalizeProductCategoryValue(product.category);
       const matchesCategory =
-        selectedCategory === "ALL" || product.category === selectedCategory;
+        selectedCategory === "ALL" || normalizedCat === selectedCategory;
       const q = searchQuery.trim().toLowerCase();
       const visual = getProductVisualMeta(product);
       const matchesSearch =
@@ -588,7 +597,7 @@ export default function KatalogHomePage() {
               </button>
               {categories.map((cat) => {
                 const count = activeProducts.filter(
-                  (p) => p.category === cat
+                  (p) => normalizeProductCategoryValue(p.category) === cat
                 ).length;
                 const isSelected = selectedCategory === cat;
                 return (

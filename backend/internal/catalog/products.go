@@ -46,12 +46,27 @@ type productRequest struct {
 	IsActive        *bool            `json:"is_active"`
 }
 
+// ValidProductCategories adalah daftar kategori produk yang diizinkan (enum).
+var ValidProductCategories = []string{
+	"katering",
+	"nasi_box",
+	"snack_box",
+	"kue_tart",
+	"cupcake",
+	"kue_kering",
+	"kue_loyang",
+	"brownies",
+	"umum",
+}
+
 func validateProductRequest(req productRequest) (Product, *httpx.Validation) {
 	v := httpx.NewValidation()
 	name := v.Str("Nama produk", req.Name, 120)
 	cat := v.OptStr("Kategori", req.Category, 60)
 	if cat == "" {
 		cat = "umum"
+	} else {
+		cat = v.OneOf("Kategori", cat, ValidProductCategories...)
 	}
 	price := v.Dec("Harga jual", req.Price, httpx.MoneyOpts(false, false))
 	packaging := v.Dec("Biaya kemasan", req.PackagingCost, httpx.MoneyOpts(false, true))

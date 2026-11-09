@@ -356,7 +356,7 @@ func main() {
 		{
 			id:            prodCupcakeID,
 			name:          "Cupcake Box (Isi 6)",
-			category:      "kue_tart",
+			category:      "cupcake",
 			price:         "95000.0000",
 			packagingCost: "6000.0000",
 			overheadCost:  "3500.0000",

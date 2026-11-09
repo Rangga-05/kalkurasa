@@ -180,7 +180,7 @@ export const SIGNATURE_SHOWCASE_ITEMS: Array<{
   {
     key: "nasi_box",
     name: "Nasi Box Ayam Bakar Rempah",
-    categoryLabel: "Nasi Kotak Nusantara",
+    categoryLabel: "Katering Nasi Box",
     price: 32000,
     unit: "box",
     minOrder: 15,
@@ -189,7 +189,7 @@ export const SIGNATURE_SHOWCASE_ITEMS: Array<{
   {
     key: "snack_box",
     name: "Snack Box Pasar Pagi (Isi 4)",
-    categoryLabel: "Snack Box Artisan",
+    categoryLabel: "Paket Snack Box",
     price: 22500,
     unit: "box",
     minOrder: 20,
@@ -198,7 +198,7 @@ export const SIGNATURE_SHOWCASE_ITEMS: Array<{
   {
     key: "kue_basah",
     name: "Tart Ulang Tahun Dark Ganache",
-    categoryLabel: "Celebration Tart",
+    categoryLabel: "Kue Tart & Perayaan",
     price: 245000,
     unit: "loyang 20cm",
     minOrder: 1,
@@ -207,7 +207,7 @@ export const SIGNATURE_SHOWCASE_ITEMS: Array<{
   {
     key: "cupcake",
     name: "Cupcake Box Tiga Swirl (Isi 6)",
-    categoryLabel: "Gourmet Cupcakes",
+    categoryLabel: "Cupcake & Hampers",
     price: 115000,
     unit: "box isi 6",
     minOrder: 2,
@@ -216,7 +216,7 @@ export const SIGNATURE_SHOWCASE_ITEMS: Array<{
   {
     key: "kue_kering",
     name: "Nastar Klasik Wisjman & Cengkeh",
-    categoryLabel: "Kue Kering Stoples",
+    categoryLabel: "Kue Kering & Toples",
     price: 135000,
     unit: "stoples 500g",
     minOrder: 2,
@@ -225,7 +225,7 @@ export const SIGNATURE_SHOWCASE_ITEMS: Array<{
   {
     key: "pastry",
     name: "Fudgy Brownies Almond Sea Salt",
-    categoryLabel: "Artisan Pastry",
+    categoryLabel: "Brownies & Kue Loyang",
     price: 95000,
     unit: "loyang 22x10cm",
     minOrder: 2,
@@ -246,16 +246,21 @@ export function getProductVisualMeta(
       : productOrName.category || ""
   ).toLowerCase();
 
-  if (nameLower.includes("nasi") || catLower.includes("nasi")) {
+  if (
+    nameLower.includes("nasi") ||
+    catLower === "katering" ||
+    catLower === "nasi_box"
+  ) {
     return VISUAL_MAP.nasi_box;
   }
-  if (nameLower.includes("cupcake")) {
+  if (nameLower.includes("cupcake") || catLower === "cupcake") {
     return VISUAL_MAP.cupcake;
   }
   if (
     nameLower.includes("tart") ||
     nameLower.includes("ulang tahun") ||
-    nameLower.includes("cake")
+    nameLower.includes("cake") ||
+    catLower === "kue_tart"
   ) {
     return VISUAL_MAP.kue_basah;
   }
@@ -263,7 +268,7 @@ export function getProductVisualMeta(
     nameLower.includes("nastar") ||
     nameLower.includes("kastengel") ||
     nameLower.includes("putri salju") ||
-    catLower.includes("kering")
+    catLower === "kue_kering"
   ) {
     return VISUAL_MAP.kue_kering;
   }
@@ -271,11 +276,12 @@ export function getProductVisualMeta(
     nameLower.includes("brownies") ||
     nameLower.includes("bolen") ||
     nameLower.includes("croissant") ||
-    catLower.includes("pastry")
+    catLower === "kue_loyang" ||
+    catLower === "brownies"
   ) {
     return VISUAL_MAP.pastry;
   }
-  if (nameLower.includes("snack") || catLower.includes("snack")) {
+  if (nameLower.includes("snack") || catLower === "snack_box") {
     return VISUAL_MAP.snack_box;
   }
 

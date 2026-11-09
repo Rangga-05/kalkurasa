@@ -126,18 +126,43 @@ export function addDaysDateKey(dateKey: string, days: number): string {
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
+  katering: "Katering Nasi Box",
+  nasi_box: "Katering Nasi Box",
   snack_box: "Paket Snack Box",
   kue_tart: "Kue Tart & Perayaan",
   cupcake: "Cupcake & Hampers",
-  nasi_box: "Katering Nasi Box",
   kue_kering: "Kue Kering & Toples",
-  brownies: "Brownies & Cake Potong",
+  kue_loyang: "Brownies & Kue Loyang",
+  brownies: "Brownies & Kue Loyang",
+  umum: "Sajian Umum",
 };
 
+export const PRODUCT_CATEGORY_OPTIONS: Array<{
+  value: string;
+  label: string;
+}> = [
+  { value: "katering", label: "Katering Nasi Box" },
+  { value: "snack_box", label: "Paket Snack Box" },
+  { value: "kue_tart", label: "Kue Tart & Perayaan" },
+  { value: "cupcake", label: "Cupcake & Hampers" },
+  { value: "kue_kering", label: "Kue Kering & Toples" },
+  { value: "kue_loyang", label: "Brownies & Kue Loyang" },
+  { value: "umum", label: "Sajian Umum" },
+];
+
+export function normalizeProductCategoryValue(category: string): string {
+  const c = (category || "").trim().toLowerCase();
+  if (c === "nasi_box") return "katering";
+  if (c === "brownies") return "kue_loyang";
+  if (PRODUCT_CATEGORY_OPTIONS.some((opt) => opt.value === c)) return c;
+  return "umum";
+}
+
 export function formatCategoryName(category: string): string {
-  if (!category) return "Lainnya";
+  if (!category) return "Sajian Umum";
+  const key = category.trim().toLowerCase();
   return (
-    CATEGORY_LABELS[category] ??
+    CATEGORY_LABELS[key] ??
     category
       .replace(/_/g, " ")
       .replace(/\b\w/g, (l) => l.toUpperCase())
