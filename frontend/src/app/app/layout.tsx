@@ -188,8 +188,7 @@ export default function InternalAppLayout({
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["auth-me"] });
       toast.info("Berhasil Keluar", "Sesi Anda telah diakhiri.");
-      router.replace("/login");
-      router.refresh();
+      window.location.assign("/login");
     },
     onError: (err) => {
       toast.error("Gagal Keluar", getErrorMessage(err));

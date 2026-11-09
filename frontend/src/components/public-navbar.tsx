@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpRight,
@@ -23,7 +23,6 @@ import { KalkurasaLogoIcon } from "@/components/kalkurasa-logo";
 
 export function PublicNavbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -46,12 +45,12 @@ export function PublicNavbar() {
         variant: "info",
       });
       setMobileMenuOpen(false);
-      router.push("/");
+      window.location.assign("/");
     },
     onError: () => {
       queryClient.setQueryData(["auth-me"], null);
       setMobileMenuOpen(false);
-      router.push("/");
+      window.location.assign("/");
     },
   });
 

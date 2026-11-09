@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,7 +55,6 @@ const registerSchema = z.object({
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 function RegisterFormContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next");
   const queryClient = useQueryClient();
@@ -88,8 +87,7 @@ function RegisterFormContent() {
           nextPath.startsWith("/lacak"))
           ? nextPath
           : "/pesanan-saya";
-      router.push(safeTarget);
-      router.refresh();
+      window.location.assign(safeTarget);
     },
     onError: (err) => {
       const msg = getErrorMessage(

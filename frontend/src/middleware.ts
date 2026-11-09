@@ -32,6 +32,19 @@ function decodeSessionCookie(token: string | undefined): DecodedJwtPayload | nul
   }
 }
 
+function withNoCacheHeaders(response: NextResponse): NextResponse {
+  response.headers.set("x-middleware-cache", "no-cache");
+  response.headers.set(
+    "Cache-Control",
+    "private, no-cache, no-store, max-age=0, must-revalidate"
+  );
+  return response;
+}
+
+function redirectNoCache(url: URL): NextResponse {
+  return withNoCacheHeaders(NextResponse.redirect(url));
+}
+
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
   const sessionToken = request.cookies.get("session")?.value;
@@ -42,16 +55,16 @@ export function middleware(request: NextRequest) {
   // hapus cookie session yang basi dan biarkan halaman /login terbuka agar tidak terjadi redirect loop.
   if (pathname === "/login" || pathname === "/daftar") {
     if (searchParams.get("reauth") === "1") {
-      const response = NextResponse.next();
+      const response = withNoCacheHeaders(NextResponse.next());
       response.cookies.delete("session");
       return response;
     }
     if (session?.role) {
       const nextParam = searchParams.get("next");
       const target = resolvePostLoginRedirect(session.role, nextParam);
-      return NextResponse.redirect(new URL(target, request.url));
+      return redirectNoCache(new URL(target, request.url));
     }
-    return NextResponse.next();
+    return withNoCacheHeaders(NextResponse.next());
   }
 
   // Proteksi halaman pelanggan /pesanan-saya
@@ -59,14 +72,14 @@ export function middleware(request: NextRequest) {
     if (!session?.role) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("next", "/pesanan-saya");
-      return NextResponse.redirect(loginUrl);
+      return redirectNoCache(loginUrl);
     }
     if (session.role !== "customer") {
-      return NextResponse.redirect(
+      return redirectNoCache(
         new URL(getDashboardPathForRole(session.role), request.url)
       );
     }
-    return NextResponse.next();
+    return withNoCacheHeaders(NextResponse.next());
   }
 
   // Proteksi seluruh area internal /app dan /app/...
@@ -75,22 +88,24 @@ export function middleware(request: NextRequest) {
     if (!session?.role) {
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("next", pathname);
-      return NextResponse.redirect(loginUrl);
+      return redirectNoCache(loginUrl);
     }
 
     if (session.role === "customer") {
-      return NextResponse.redirect(new URL("/pesanan-saya", request.url));
+      return redirectNoCache(new URL("/pesanan-saya", request.url));
     }
 
     const userDashboard = getDashboardPathForRole(session.role);
 
     if (pathname === "/app") {
-      return NextResponse.redirect(new URL(userDashboard, request.url));
+      return redirectNoCache(new URL(userDashboard, request.url));
     }
 
     if (!canRoleAccessInternalPath(session.role, pathname)) {
-      return NextResponse.redirect(new URL(userDashboard, request.url));
+      return redirectNoCache(new URL(userDashboard, request.url));
     }
+
+    return withNoCacheHeaders(NextResponse.next());
   }
 
   return NextResponse.next();
