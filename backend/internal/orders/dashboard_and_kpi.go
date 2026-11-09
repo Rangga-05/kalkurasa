@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -105,6 +106,7 @@ func GetKPI(ctx context.Context, conn db.Conn, actorRole string) (*KPIResult, er
 		return nil, httpx.Err(http.StatusForbidden, "forbidden", "Anda tidak memiliki izin untuk melihat KPI.")
 	}
 
+	ctx, _ = withOrderReqCache(ctx)
 	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
 		return nil, err
 	}
@@ -439,13 +441,74 @@ type OwnerDashboardResult struct {
 	CapacityCalendar []CapacityCalendarDay `json:"capacity_calendar"`
 }
 
+// warmDashboardCache memuat data bersama (kapasitas, biaya produk, seluruh pesanan, dan peristiwa kas)
+// secara paralel bila menggunakan connection pool sehingga fungsi-fungsi turunan pada dashboard
+// dapat membaca dari cache per-request tanpa mengulang query ke database.
+func warmDashboardCache(ctx context.Context, conn db.Conn) (time.Time, error) {
+	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
+		return time.Time{}, err
+	}
+	params, err := LoadSettingsParams(ctx, conn)
+	if err != nil {
+		return time.Time{}, err
+	}
+	today := todayQ(ctx, conn)
+
+	if isConcurrentPool(conn) {
+		var wg sync.WaitGroup
+		errs := make([]error, 4)
+		wg.Add(4)
+		go func() {
+			defer wg.Done()
+			_, errs[0] = LoadCapacities(ctx, conn)
+		}()
+		go func() {
+			defer wg.Done()
+			_, errs[1] = GetProductsCosting(ctx, conn)
+		}()
+		go func() {
+			defer wg.Done()
+			_, errs[2] = ListOrders(ctx, conn, OrderListFilter{ActorRole: auth.RoleOwner})
+		}()
+		go func() {
+			defer wg.Done()
+			_, errs[3] = LoadCashEvents(ctx, conn, today, params)
+		}()
+		wg.Wait()
+		for _, e := range errs {
+			if e != nil {
+				return time.Time{}, e
+			}
+		}
+		return today, nil
+	}
+
+	if _, err := LoadCapacities(ctx, conn); err != nil {
+		return time.Time{}, err
+	}
+	if _, err := GetProductsCosting(ctx, conn); err != nil {
+		return time.Time{}, err
+	}
+	if _, err := ListOrders(ctx, conn, OrderListFilter{ActorRole: auth.RoleOwner}); err != nil {
+		return time.Time{}, err
+	}
+	if _, err := LoadCashEvents(ctx, conn, today, params); err != nil {
+		return time.Time{}, err
+	}
+	return today, nil
+}
+
 // GetOwnerDashboard mengembalikan data lengkap untuk GET /api/v1/dashboard/owner (khusus owner).
 func GetOwnerDashboard(ctx context.Context, conn db.Conn, actorRole string) (*OwnerDashboardResult, error) {
 	if actorRole != auth.RoleOwner {
 		return nil, httpx.Err(http.StatusForbidden, "forbidden", "Hanya pemilik usaha (owner) yang berhak mengakses dashboard pemilik.")
 	}
 
-	today := db.TodayQ(ctx, conn)
+	ctx, _ = withOrderReqCache(ctx)
+	today, err := warmDashboardCache(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
 	todayKey := engine.DateKey(today)
 	monthKey := today.Format("2006-01")
 
@@ -511,7 +574,11 @@ func GetManagerDashboard(ctx context.Context, conn db.Conn, actorRole string) (*
 		return nil, httpx.Err(http.StatusForbidden, "forbidden", "Anda tidak memiliki izin untuk mengakses dashboard manajer.")
 	}
 
-	today := db.TodayQ(ctx, conn)
+	ctx, _ = withOrderReqCache(ctx)
+	today, err := warmDashboardCache(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
 	todayKey := engine.DateKey(today)
 	monthKey := today.Format("2006-01")
 
@@ -639,7 +706,14 @@ func GetStaffDashboard(ctx context.Context, conn db.Conn, actorID, actorRole str
 		return nil, httpx.Err(http.StatusForbidden, "forbidden", "Anda tidak memiliki izin untuk mengakses dashboard karyawan.")
 	}
 
-	today := db.TodayQ(ctx, conn)
+	ctx, _ = withOrderReqCache(ctx)
+	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	if _, err := LoadSettingsParams(ctx, conn); err != nil {
+		return nil, err
+	}
+	today := todayQ(ctx, conn)
 	todayKey := engine.DateKey(today)
 
 	// Gunakan filter RoleStaff supaya aturan visibilitas karyawan selalu ditegakkan

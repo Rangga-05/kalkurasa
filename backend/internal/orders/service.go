@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -78,6 +79,17 @@ func DefaultSettingsParams() SettingsParams {
 
 // LoadSettingsParams membaca tabel settings dan menimpanya di atas default.
 func LoadSettingsParams(ctx context.Context, q db.DBTX) (SettingsParams, error) {
+	rc := getOrderReqCache(ctx, q)
+	if rc != nil {
+		rc.mu.Lock()
+		if rc.hasSettings {
+			s := rc.settings
+			rc.mu.Unlock()
+			return s, nil
+		}
+		rc.mu.Unlock()
+	}
+
 	p := DefaultSettingsParams()
 	rows, err := q.Query(ctx, `SELECT key, value::text FROM settings`)
 	if err != nil {
@@ -100,12 +112,15 @@ func LoadSettingsParams(ctx context.Context, q db.DBTX) (SettingsParams, error) 
 		return fallback
 	}
 
+	var demoTodayRaw string
 	for rows.Next() {
 		var k, raw string
 		if err := rows.Scan(&k, &raw); err != nil {
 			return p, err
 		}
 		switch k {
+		case "demo_today":
+			demoTodayRaw = strings.Trim(strings.TrimSpace(raw), `"`)
 		case "capacity_limit":
 			p.EvalParams.CapacityLimit = parseDec(raw, p.EvalParams.CapacityLimit)
 		case "status_green_below":
@@ -146,7 +161,30 @@ func LoadSettingsParams(ctx context.Context, q db.DBTX) (SettingsParams, error) 
 			p.PlatformFee = parseDec(raw, p.PlatformFee)
 		}
 	}
-	return p, rows.Err()
+	if err := rows.Err(); err != nil {
+		return p, err
+	}
+
+	if rc != nil {
+		rc.mu.Lock()
+		rc.settings = p
+		rc.hasSettings = true
+		if !rc.hasToday {
+			if demoTodayRaw != "" && demoTodayRaw != "null" {
+				if parsed, parseErr := db.ParseDate(demoTodayRaw); parseErr == nil {
+					rc.today = parsed
+					rc.hasToday = true
+				}
+			}
+			if !rc.hasToday {
+				rc.today = db.TodayQ(ctx, nil)
+				rc.hasToday = true
+			}
+		}
+		rc.mu.Unlock()
+	}
+
+	return p, nil
 }
 
 // ProductMeta menyimpan informasi produk beserta biaya dan beban per unit.
@@ -317,6 +355,20 @@ func LockDays(ctx context.Context, tx pgx.Tx, dates []time.Time) error {
 
 // LoadCapacities memuat seluruh sumber daya dan menghitung kapasitas efektif harian via engine.Capacity.
 func LoadCapacities(ctx context.Context, q db.DBTX) (map[string]decimal.Decimal, error) {
+	rc := getOrderReqCache(ctx, q)
+	if rc != nil {
+		rc.mu.Lock()
+		if rc.hasCaps {
+			cp := make(map[string]decimal.Decimal, len(rc.caps))
+			for k, v := range rc.caps {
+				cp[k] = v
+			}
+			rc.mu.Unlock()
+			return cp, nil
+		}
+		rc.mu.Unlock()
+	}
+
 	rows, err := q.Query(ctx, `SELECT code, count, amount_per_unit_day, efficiency FROM resources`)
 	if err != nil {
 		return nil, err
@@ -331,7 +383,21 @@ func LoadCapacities(ctx context.Context, q db.DBTX) (map[string]decimal.Decimal,
 		}
 		caps[r.Code] = engine.Capacity(r)
 	}
-	return caps, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if rc != nil {
+		rc.mu.Lock()
+		cp := make(map[string]decimal.Decimal, len(caps))
+		for k, v := range caps {
+			cp[k] = v
+		}
+		rc.caps = cp
+		rc.hasCaps = true
+		rc.mu.Unlock()
+	}
+	return caps, nil
 }
 
 // LoadExistingLoads memuat beban existing pada rentang tanggal produksi [fromDate, toDate]
@@ -339,6 +405,48 @@ func LoadCapacities(ctx context.Context, q db.DBTX) (map[string]decimal.Decimal,
 func LoadExistingLoads(ctx context.Context, q db.DBTX, fromDate, toDate time.Time) (map[string]map[string]decimal.Decimal, error) {
 	fromKey := engine.DateKey(fromDate)
 	toKey := engine.DateKey(toDate)
+
+	if rc := getOrderReqCache(ctx, q); rc != nil {
+		rc.mu.Lock()
+		hasFull := rc.hasFullOrders && rc.hasCosting
+		var ordersSnap []OrderDetail
+		var costingSnap []ProductCostingDTO
+		if hasFull {
+			ordersSnap = rc.fullOrders
+			costingSnap = rc.costing
+		}
+		rc.mu.Unlock()
+
+		if hasFull {
+			loadsByProd := make(map[string]map[string]decimal.Decimal, len(costingSnap))
+			for _, c := range costingSnap {
+				loadsByProd[c.ProductID] = c.Loads
+			}
+			out := make(map[string]map[string]decimal.Decimal)
+			for _, o := range ordersSnap {
+				if o.Status != StatusAccepted && o.Status != StatusConfirmed && o.Status != StatusInProduction {
+					continue
+				}
+				if o.ProductionDate < fromKey || o.ProductionDate > toKey {
+					continue
+				}
+				for _, it := range o.Items {
+					pLoads := loadsByProd[it.ProductID]
+					if len(pLoads) == 0 {
+						continue
+					}
+					qtyDec := decimal.NewFromInt(int64(it.Qty))
+					if out[o.ProductionDate] == nil {
+						out[o.ProductionDate] = make(map[string]decimal.Decimal)
+					}
+					for code, ld := range pLoads {
+						out[o.ProductionDate][code] = out[o.ProductionDate][code].Add(qtyDec.Mul(ld))
+					}
+				}
+			}
+			return out, nil
+		}
+	}
 
 	rows, err := q.Query(ctx, `
 		SELECT o.production_date::text, r.code, COALESCE(SUM(oi.qty * pl.load), 0)
@@ -378,6 +486,18 @@ func LoadExistingLoads(ctx context.Context, q db.DBTX, fromDate, toDate time.Tim
 // pesanan aktif lain (status accepted, confirmed, in_production, ready, delivering).
 func LoadCashEvents(ctx context.Context, q db.DBTX, today time.Time, params SettingsParams) ([]engine.CashEvent, error) {
 	todayKey := engine.DateKey(today)
+	rc := getOrderReqCache(ctx, q)
+	if rc != nil {
+		rc.mu.Lock()
+		if rc.hasCashEvents && rc.cashEventsKey == todayKey {
+			cp := make([]engine.CashEvent, len(rc.cashEvents))
+			copy(cp, rc.cashEvents)
+			rc.mu.Unlock()
+			return cp, nil
+		}
+		rc.mu.Unlock()
+	}
+
 	events := make([]engine.CashEvent, 0)
 
 	// 1. Entri kas manual (cash_entries) mulai dari hari ini
@@ -479,7 +599,21 @@ func LoadCashEvents(ctx context.Context, q db.DBTX, today time.Time, params Sett
 			events = append(events, engine.CashEvent{Date: shopDate, Amount: shoppingCost.Neg()})
 		}
 	}
-	return events, ordRows.Err()
+	if err := ordRows.Err(); err != nil {
+		return nil, err
+	}
+
+	if rc != nil {
+		rc.mu.Lock()
+		cp := make([]engine.CashEvent, len(events))
+		copy(cp, events)
+		rc.cashEvents = cp
+		rc.cashEventsKey = todayKey
+		rc.hasCashEvents = true
+		rc.mu.Unlock()
+	}
+
+	return events, nil
 }
 
 // GateDTO adalah format JSON gerbang evaluasi sesuai Bagian 9 brief.

@@ -20,9 +20,9 @@ type Config struct {
 
 // Load reads configuration from environment variables.
 func Load() *Config {
-	maxConns, _ := strconv.ParseInt(getEnv("DB_MAX_CONNS", "3"), 10, 32)
+	maxConns, _ := strconv.ParseInt(getEnv("DB_MAX_CONNS", "10"), 10, 32)
 	if maxConns < 1 {
-		maxConns = 3
+		maxConns = 10
 	}
 
 	cookieSecure, _ := strconv.ParseBool(getEnv("COOKIE_SECURE", "false"))

@@ -649,7 +649,7 @@ func GetCashProjection(ctx context.Context, q db.DBTX, days int, actorRole strin
 	if err != nil {
 		return nil, err
 	}
-	today := db.TodayQ(ctx, q)
+	today := todayQ(ctx, q)
 
 	events, err := LoadCashEvents(ctx, q, today, params)
 	if err != nil {
@@ -858,6 +858,18 @@ type ProductCostingDTO struct {
 // GetProductsCosting menghitung biaya per unit (engine.UnitCost), margin (engine.Margin),
 // harga minimal (engine.MinPrice), dan diskon maksimum (engine.MaxDiscount) untuk seluruh produk.
 func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, error) {
+	rc := getOrderReqCache(ctx, q)
+	if rc != nil {
+		rc.mu.Lock()
+		if rc.hasCosting {
+			cp := make([]ProductCostingDTO, len(rc.costing))
+			copy(cp, rc.costing)
+			rc.mu.Unlock()
+			return cp, nil
+		}
+		rc.mu.Unlock()
+	}
+
 	params, err := LoadSettingsParams(ctx, q)
 	if err != nil {
 		return nil, err
@@ -1007,6 +1019,15 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 			MaxDiscount:         maxDisc.Round(4),
 			Loads:               loads,
 		})
+	}
+
+	if rc != nil {
+		rc.mu.Lock()
+		cp := make([]ProductCostingDTO, len(out))
+		copy(cp, out)
+		rc.costing = cp
+		rc.hasCosting = true
+		rc.mu.Unlock()
 	}
 
 	return out, nil

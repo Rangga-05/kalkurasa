@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,6 +25,16 @@ import (
 // pesanan berstatus 'accepted' yang sudah melewati dp_deadline dan paid < dp_required
 // diubah menjadi 'expired' sehingga kapasitasnya dilepas, serta dicatat di audit_logs.
 func ExpireOverdueOrders(ctx context.Context, q db.DBTX, now time.Time) (int, error) {
+	rc := getOrderReqCache(ctx, q)
+	if rc != nil {
+		rc.mu.Lock()
+		if rc.expiredDone {
+			rc.mu.Unlock()
+			return 0, nil
+		}
+		rc.mu.Unlock()
+	}
+
 	rows, err := q.Query(ctx, `
 		UPDATE orders
 		SET status = 'expired', updated_at = $1
@@ -70,6 +81,12 @@ func ExpireOverdueOrders(ctx context.Context, q db.DBTX, now time.Time) (int, er
 		}); err != nil {
 			return len(expired), err
 		}
+	}
+
+	if rc != nil {
+		rc.mu.Lock()
+		rc.expiredDone = true
+		rc.mu.Unlock()
 	}
 	return len(expired), nil
 }
@@ -1359,6 +1376,7 @@ type DecisionQueueItem struct {
 // GetDecisionQueue memuat daftar pesanan berstatus pending_decision beserta
 // pratinjau dampak terkini (utilisasi, margin, titik terendah kas sebelum & sesudah).
 func GetDecisionQueue(ctx context.Context, conn db.Conn, actorRole string) ([]DecisionQueueItem, error) {
+	ctx, _ = withOrderReqCache(ctx)
 	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
 		return nil, err
 	}
@@ -1366,19 +1384,7 @@ func GetDecisionQueue(ctx context.Context, conn db.Conn, actorRole string) ([]De
 	if err != nil {
 		return nil, err
 	}
-	today := db.TodayQ(ctx, conn)
-
-	rows, err := conn.Query(ctx, `
-		SELECT id::text, code, source, customer_name, customer_contact, delivery_type,
-		       event_date, production_date, status, total, dp_required, created_at
-		FROM orders
-		WHERE status = 'pending_decision'
-		ORDER BY event_date ASC, created_at ASC, id ASC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+	today := todayQ(ctx, conn)
 
 	type rawOrder struct {
 		ID              string
@@ -1394,32 +1400,194 @@ func GetDecisionQueue(ctx context.Context, conn db.Conn, actorRole string) ([]De
 		DPRequired      decimal.Decimal
 		CreatedAt       time.Time
 	}
+
 	var pending []rawOrder
-	for rows.Next() {
-		var r rawOrder
-		if err := rows.Scan(
-			&r.ID, &r.Code, &r.Source, &r.CustomerName, &r.CustomerContact, &r.DeliveryType,
-			&r.EventDate, &r.ProductionDate, &r.Status, &r.Total, &r.DPRequired, &r.CreatedAt,
-		); err != nil {
+	var pendingIDs []string
+	itemsByOrder := make(map[string][]OrderItemDetail)
+	pidsSeen := make(map[string]bool)
+	var allPIDs []string
+
+	rc := getOrderReqCache(ctx, conn)
+	usedCachedOrders := false
+	if rc != nil {
+		rc.mu.Lock()
+		if rc.hasFullOrders {
+			usedCachedOrders = true
+			for _, o := range rc.fullOrders {
+				if o.Status != StatusPendingDecision {
+					continue
+				}
+				evDate, _ := time.Parse("2006-01-02", o.EventDate)
+				prDate, _ := time.Parse("2006-01-02", o.ProductionDate)
+				pending = append(pending, rawOrder{
+					ID:              o.ID,
+					Code:            o.Code,
+					Source:          o.Source,
+					CustomerName:    o.CustomerName,
+					CustomerContact: o.CustomerContact,
+					DeliveryType:    o.DeliveryType,
+					EventDate:       evDate,
+					ProductionDate:  prDate,
+					Status:          o.Status,
+					Total:           o.Total,
+					DPRequired:      o.DPRequired,
+					CreatedAt:       o.CreatedAt,
+				})
+				cpItems := make([]OrderItemDetail, len(o.Items))
+				copy(cpItems, o.Items)
+				itemsByOrder[o.ID] = cpItems
+				for _, it := range cpItems {
+					if !pidsSeen[it.ProductID] {
+						pidsSeen[it.ProductID] = true
+						allPIDs = append(allPIDs, it.ProductID)
+					}
+				}
+			}
+			sort.Slice(pending, func(i, j int) bool {
+				if !pending[i].EventDate.Equal(pending[j].EventDate) {
+					return pending[i].EventDate.Before(pending[j].EventDate)
+				}
+				if !pending[i].CreatedAt.Equal(pending[j].CreatedAt) {
+					return pending[i].CreatedAt.Before(pending[j].CreatedAt)
+				}
+				return pending[i].ID < pending[j].ID
+			})
+		}
+		rc.mu.Unlock()
+	}
+
+	if !usedCachedOrders {
+		rows, err := conn.Query(ctx, `
+			SELECT id::text, code, source, customer_name, customer_contact, delivery_type,
+			       event_date, production_date, status, total, dp_required, created_at
+			FROM orders
+			WHERE status = 'pending_decision'
+			ORDER BY event_date ASC, created_at ASC, id ASC
+		`)
+		if err != nil {
 			return nil, err
 		}
-		pending = append(pending, r)
+		defer rows.Close()
+
+		for rows.Next() {
+			var r rawOrder
+			if err := rows.Scan(
+				&r.ID, &r.Code, &r.Source, &r.CustomerName, &r.CustomerContact, &r.DeliveryType,
+				&r.EventDate, &r.ProductionDate, &r.Status, &r.Total, &r.DPRequired, &r.CreatedAt,
+			); err != nil {
+				return nil, err
+			}
+			pending = append(pending, r)
+			pendingIDs = append(pendingIDs, r.ID)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		rows.Close()
+
+		if len(pending) == 0 {
+			return []DecisionQueueItem{}, nil
+		}
+
+		// 1. Batch-load seluruh item pesanan untuk semua pesanan pending_decision dalam 1 query
+		itemRows, err := conn.Query(ctx, `
+			SELECT oi.order_id::text, oi.id::text, oi.product_id::text, p.name, oi.qty, oi.unit_price, oi.unit_cost
+			FROM order_items oi
+			JOIN products p ON p.id = oi.product_id
+			WHERE oi.order_id = ANY($1::uuid[])
+			ORDER BY oi.id ASC
+		`, pendingIDs)
+		if err != nil {
+			return nil, err
+		}
+		for itemRows.Next() {
+			var ordID string
+			var it OrderItemDetail
+			if err := itemRows.Scan(&ordID, &it.ID, &it.ProductID, &it.ProductName, &it.Qty, &it.UnitPrice, &it.UnitCost); err != nil {
+				itemRows.Close()
+				return nil, err
+			}
+			it.Subtotal = it.UnitPrice.Mul(decimal.NewFromInt(int64(it.Qty))).Round(2)
+			itemsByOrder[ordID] = append(itemsByOrder[ordID], it)
+			if !pidsSeen[it.ProductID] {
+				pidsSeen[it.ProductID] = true
+				allPIDs = append(allPIDs, it.ProductID)
+			}
+		}
+		if err := itemRows.Err(); err != nil {
+			itemRows.Close()
+			return nil, err
+		}
+		itemRows.Close()
+	} else if len(pending) == 0 {
+		return []DecisionQueueItem{}, nil
 	}
-	if err := rows.Err(); err != nil {
+
+	// 2. Muat metadata produk & biaya satu kali untuk seluruh pesanan pending
+	prodMeta, err := LoadProductsMeta(ctx, conn, allPIDs, params)
+	if err != nil {
 		return nil, err
 	}
-	rows.Close()
+
+	// 3. Muat kapasitas, peristiwa kas, dan beban existing rentang gabungan satu kali saja
+	caps, err := LoadCapacities(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	cashEvents, err := LoadCashEvents(ctx, conn, today, params)
+	if err != nil {
+		return nil, err
+	}
+
+	minDate := today
+	maxDate := today.AddDate(0, 0, params.EvalParams.LeadTimeDays+16)
+	for _, r := range pending {
+		if r.ProductionDate.Before(minDate) {
+			minDate = r.ProductionDate
+		}
+		if evEnd := r.EventDate.AddDate(0, 0, 16); evEnd.After(maxDate) {
+			maxDate = evEnd
+		}
+	}
+	existingLoads, err := LoadExistingLoads(ctx, conn, minDate, maxDate)
+	if err != nil {
+		return nil, err
+	}
 
 	out := make([]DecisionQueueItem, 0, len(pending))
 	for _, r := range pending {
-		itemDetails, evalItems, totalUnits, err := loadOrderItemsAndEval(ctx, conn, r.ID, params)
-		if err != nil {
-			return nil, err
+		rawItems := itemsByOrder[r.ID]
+		itemDetails := make([]OrderItemDetail, len(rawItems))
+		copy(itemDetails, rawItems)
+
+		evalItems := make([]engine.EvalItem, 0, len(itemDetails))
+		totalUnits := 0
+		for i := range itemDetails {
+			it := &itemDetails[i]
+			pm := prodMeta[it.ProductID]
+			it.UnitCost = pm.UnitCost
+			evalItems = append(evalItems, engine.EvalItem{
+				ProductID:           it.ProductID,
+				Qty:                 it.Qty,
+				UnitPrice:           it.UnitPrice,
+				UnitCost:            pm.UnitCost,
+				PurchaseCostPerUnit: pm.PurchaseCostPerUnit,
+				UnitLoads:           pm.UnitLoads,
+			})
+			totalUnits += it.Qty
 		}
-		evalRes, err := EvaluateOrder(ctx, conn, today, r.EventDate, r.ProductionDate, evalItems, params)
-		if err != nil {
-			return nil, err
-		}
+
+		evalRes := engine.EvaluateOrder(engine.EvalInput{
+			Today:          today,
+			EventDate:      r.EventDate,
+			ProductionDate: r.ProductionDate,
+			DPDate:         today,
+			Items:          evalItems,
+			Params:         params.EvalParams,
+			Capacities:     caps,
+			ExistingLoads:  existingLoads,
+			CashEvents:     cashEvents,
+		})
 		evalDTO := ToEvaluationDTO(evalRes)
 		isBig := evalRes.Total.GreaterThanOrEqual(params.BigOrderTotal) || totalUnits >= params.BigOrderUnits
 		canDecide := actorRole == auth.RoleOwner || (actorRole == auth.RoleManager && !isBig)
@@ -1503,7 +1671,7 @@ func GetCapacityCalendar(ctx context.Context, conn db.Conn, monthStr string) ([]
 
 	var startDate time.Time
 	if strings.TrimSpace(monthStr) == "" {
-		today := db.TodayQ(ctx, conn)
+		today := todayQ(ctx, conn)
 		startDate = time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
 	} else {
 		parsed, err := time.Parse("2006-01", strings.TrimSpace(monthStr))
@@ -1699,12 +1867,36 @@ func GetOrderByID(ctx context.Context, conn db.Conn, orderID, actorRole string) 
 
 // ListOrders memuat daftar pesanan internal dengan filter status & tanggal (disaring bila peran staff).
 func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]OrderDetail, error) {
+	ctx, _ = withOrderReqCache(ctx)
 	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	params, err := LoadSettingsParams(ctx, conn)
 	if err != nil {
 		return nil, err
+	}
+
+	isUnfilteredNonStaff := filter.Status == "" &&
+		filter.Date == "" &&
+		filter.EventDate == "" &&
+		filter.From == "" &&
+		filter.To == "" &&
+		filter.Search == "" &&
+		filter.ActorRole != auth.RoleStaff
+
+	rc := getOrderReqCache(ctx, conn)
+	if rc != nil && isUnfilteredNonStaff {
+		rc.mu.Lock()
+		if rc.hasFullOrders {
+			cp := make([]OrderDetail, len(rc.fullOrders))
+			copy(cp, rc.fullOrders)
+			for i := range cp {
+				cp[i].CanDecide = filter.ActorRole == auth.RoleOwner || (filter.ActorRole == auth.RoleManager && !cp[i].IsBigOrder)
+			}
+			rc.mu.Unlock()
+			return cp, nil
+		}
+		rc.mu.Unlock()
 	}
 
 	// 1. Muat seluruh pesanan dalam 1 query batch
@@ -1762,47 +1954,49 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 		return []OrderDetail{}, nil
 	}
 
-	// 2. Batch load order items
 	itemsByOrderID := make(map[string][]OrderItemDetail, len(rawOrders))
 	totalUnitsByOrderID := make(map[string]int, len(rawOrders))
-	itemRows, err := conn.Query(ctx, `
-		SELECT oi.order_id::text, oi.id::text, oi.product_id::text, p.name, oi.qty, oi.unit_price, oi.unit_cost
-		FROM order_items oi
-		JOIN products p ON p.id = oi.product_id
-		WHERE oi.order_id = ANY($1::uuid[])
-		ORDER BY oi.id ASC
-	`, orderIDs)
-	if err != nil {
-		return nil, err
-	}
-	for itemRows.Next() {
-		var ordID string
-		var it OrderItemDetail
-		if err := itemRows.Scan(&ordID, &it.ID, &it.ProductID, &it.ProductName, &it.Qty, &it.UnitPrice, &it.UnitCost); err != nil {
-			itemRows.Close()
-			return nil, err
-		}
-		totalUnitsByOrderID[ordID] += it.Qty
-		if filter.ActorRole == auth.RoleStaff {
-			it.UnitPrice = decimal.Zero
-			it.UnitCost = decimal.Zero
-			it.Subtotal = decimal.Zero
-		} else {
-			it.UnitPrice = it.UnitPrice.Round(2)
-			it.UnitCost = it.UnitCost.Round(2)
-			it.Subtotal = it.UnitPrice.Mul(decimal.NewFromInt(int64(it.Qty))).Round(2)
-		}
-		itemsByOrderID[ordID] = append(itemsByOrderID[ordID], it)
-	}
-	if err := itemRows.Err(); err != nil {
-		itemRows.Close()
-		return nil, err
-	}
-	itemRows.Close()
-
-	// 3. Batch load evaluations (jika non-staff)
 	gatesByOrderID := make(map[string][]GateDTO, len(rawOrders))
-	if filter.ActorRole != auth.RoleStaff {
+	paymentsByOrderID := make(map[string][]PaymentItem, len(rawOrders))
+	tasksByOrderID := make(map[string][]TaskItem, len(rawOrders))
+
+	loadItemsFn := func() error {
+		itemRows, err := conn.Query(ctx, `
+			SELECT oi.order_id::text, oi.id::text, oi.product_id::text, p.name, oi.qty, oi.unit_price, oi.unit_cost
+			FROM order_items oi
+			JOIN products p ON p.id = oi.product_id
+			WHERE oi.order_id = ANY($1::uuid[])
+			ORDER BY oi.id ASC
+		`, orderIDs)
+		if err != nil {
+			return err
+		}
+		defer itemRows.Close()
+		for itemRows.Next() {
+			var ordID string
+			var it OrderItemDetail
+			if err := itemRows.Scan(&ordID, &it.ID, &it.ProductID, &it.ProductName, &it.Qty, &it.UnitPrice, &it.UnitCost); err != nil {
+				return err
+			}
+			totalUnitsByOrderID[ordID] += it.Qty
+			if filter.ActorRole == auth.RoleStaff {
+				it.UnitPrice = decimal.Zero
+				it.UnitCost = decimal.Zero
+				it.Subtotal = decimal.Zero
+			} else {
+				it.UnitPrice = it.UnitPrice.Round(2)
+				it.UnitCost = it.UnitCost.Round(2)
+				it.Subtotal = it.UnitPrice.Mul(decimal.NewFromInt(int64(it.Qty))).Round(2)
+			}
+			itemsByOrderID[ordID] = append(itemsByOrderID[ordID], it)
+		}
+		return itemRows.Err()
+	}
+
+	loadEvalsFn := func() error {
+		if filter.ActorRole == auth.RoleStaff {
+			return nil
+		}
 		evRows, err := conn.Query(ctx, `
 			SELECT order_id::text, gate, value, threshold, passed
 			FROM order_evaluations
@@ -1810,29 +2004,26 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 			ORDER BY gate ASC
 		`, orderIDs)
 		if err != nil {
-			return nil, err
+			return err
 		}
+		defer evRows.Close()
 		for evRows.Next() {
 			var ordID string
 			var g GateDTO
 			if err := evRows.Scan(&ordID, &g.Gate, &g.Value, &g.Threshold, &g.Passed); err != nil {
-				evRows.Close()
-				return nil, err
+				return err
 			}
 			g.Value = g.Value.Round(4)
 			g.Threshold = g.Threshold.Round(4)
 			gatesByOrderID[ordID] = append(gatesByOrderID[ordID], g)
 		}
-		if err := evRows.Err(); err != nil {
-			evRows.Close()
-			return nil, err
-		}
-		evRows.Close()
+		return evRows.Err()
 	}
 
-	// 4. Batch load payments (jika non-staff)
-	paymentsByOrderID := make(map[string][]PaymentItem, len(rawOrders))
-	if filter.ActorRole != auth.RoleStaff {
+	loadPaymentsFn := func() error {
+		if filter.ActorRole == auth.RoleStaff {
+			return nil
+		}
 		payRows, err := conn.Query(ctx, `
 			SELECT order_id::text, id::text, amount, method, paid_at, COALESCE(note, ''), recorded_by::text
 			FROM payments
@@ -1840,54 +2031,75 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 			ORDER BY paid_at ASC, id ASC
 		`, orderIDs)
 		if err != nil {
-			return nil, err
+			return err
 		}
+		defer payRows.Close()
 		for payRows.Next() {
 			var ordID string
 			var pm PaymentItem
 			if err := payRows.Scan(&ordID, &pm.ID, &pm.Amount, &pm.Method, &pm.PaidAt, &pm.Note, &pm.RecordedBy); err != nil {
-				payRows.Close()
-				return nil, err
+				return err
 			}
 			pm.OrderID = ordID
 			pm.Amount = pm.Amount.Round(2)
 			paymentsByOrderID[ordID] = append(paymentsByOrderID[ordID], pm)
 		}
-		if err := payRows.Err(); err != nil {
-			payRows.Close()
-			return nil, err
-		}
-		payRows.Close()
+		return payRows.Err()
 	}
 
-	// 5. Batch load tasks
-	tasksByOrderID := make(map[string][]TaskItem, len(rawOrders))
-	taskRows, err := conn.Query(ctx, `
-		SELECT order_id::text, id::text, type, title, due_date, assignee_id::text, status, actual_minutes, created_at
-		FROM tasks
-		WHERE order_id = ANY($1::uuid[])
-		ORDER BY due_date ASC, created_at ASC, id ASC
-	`, orderIDs)
-	if err != nil {
-		return nil, err
+	loadTasksFn := func() error {
+		taskRows, err := conn.Query(ctx, `
+			SELECT order_id::text, id::text, type, title, due_date, assignee_id::text, status, actual_minutes, created_at
+			FROM tasks
+			WHERE order_id = ANY($1::uuid[])
+			ORDER BY due_date ASC, created_at ASC, id ASC
+		`, orderIDs)
+		if err != nil {
+			return err
+		}
+		defer taskRows.Close()
+		for taskRows.Next() {
+			var ordID string
+			var tk TaskItem
+			var dueTime time.Time
+			if err := taskRows.Scan(&ordID, &tk.ID, &tk.Type, &tk.Title, &dueTime, &tk.AssigneeID, &tk.Status, &tk.ActualMinutes, &tk.CreatedAt); err != nil {
+				return err
+			}
+			tk.OrderID = ordID
+			tk.DueDate = engine.DateKey(dueTime)
+			tasksByOrderID[ordID] = append(tasksByOrderID[ordID], tk)
+		}
+		return taskRows.Err()
 	}
-	for taskRows.Next() {
-		var ordID string
-		var tk TaskItem
-		var dueTime time.Time
-		if err := taskRows.Scan(&ordID, &tk.ID, &tk.Type, &tk.Title, &dueTime, &tk.AssigneeID, &tk.Status, &tk.ActualMinutes, &tk.CreatedAt); err != nil {
-			taskRows.Close()
+
+	if isConcurrentPool(conn) {
+		var wg sync.WaitGroup
+		errs := make([]error, 4)
+		wg.Add(4)
+		go func() { defer wg.Done(); errs[0] = loadItemsFn() }()
+		go func() { defer wg.Done(); errs[1] = loadEvalsFn() }()
+		go func() { defer wg.Done(); errs[2] = loadPaymentsFn() }()
+		go func() { defer wg.Done(); errs[3] = loadTasksFn() }()
+		wg.Wait()
+		for _, e := range errs {
+			if e != nil {
+				return nil, e
+			}
+		}
+	} else {
+		if err := loadItemsFn(); err != nil {
 			return nil, err
 		}
-		tk.OrderID = ordID
-		tk.DueDate = engine.DateKey(dueTime)
-		tasksByOrderID[ordID] = append(tasksByOrderID[ordID], tk)
+		if err := loadEvalsFn(); err != nil {
+			return nil, err
+		}
+		if err := loadPaymentsFn(); err != nil {
+			return nil, err
+		}
+		if err := loadTasksFn(); err != nil {
+			return nil, err
+		}
 	}
-	if err := taskRows.Err(); err != nil {
-		taskRows.Close()
-		return nil, err
-	}
-	taskRows.Close()
 
 	// 6. Assemble OrderDetails & Filter
 	out := make([]OrderDetail, 0, len(rawOrders))
@@ -2093,6 +2305,15 @@ func ListOrders(ctx context.Context, conn db.Conn, filter OrderListFilter) ([]Or
 		}
 
 		out = append(out, d)
+	}
+
+	if rc != nil && isUnfilteredNonStaff {
+		rc.mu.Lock()
+		cp := make([]OrderDetail, len(out))
+		copy(cp, out)
+		rc.fullOrders = cp
+		rc.hasFullOrders = true
+		rc.mu.Unlock()
 	}
 
 	return out, nil
@@ -2549,34 +2770,34 @@ func ListTasks(ctx context.Context, conn db.Conn, filter TaskFilter) ([]TaskItem
 	}
 	rows.Close()
 
-	// Muat item pesanan (hanya product_id, product_name, qty — TANPA harga/biaya)
+	// Muat item pesanan dalam 1 batch query (hanya product_id, product_name, qty — TANPA harga/biaya)
 	itemsByOrder := make(map[string][]TaskOrderItem, len(orderIDs))
-	for _, oid := range orderIDs {
+	if len(orderIDs) > 0 {
 		itRows, err := conn.Query(ctx, `
-			SELECT oi.product_id::text, p.name, oi.qty
+			SELECT oi.order_id::text, oi.id::text, oi.product_id::text, p.name, oi.qty, oi.unit_price, oi.unit_cost
 			FROM order_items oi
 			JOIN products p ON p.id = oi.product_id
-			WHERE oi.order_id = $1::uuid
+			WHERE oi.order_id = ANY($1::uuid[])
 			ORDER BY oi.id ASC
-		`, oid)
+		`, orderIDs)
 		if err != nil {
 			return nil, err
 		}
-		var list []TaskOrderItem
 		for itRows.Next() {
+			var ordID, itemID string
 			var it TaskOrderItem
-			if err := itRows.Scan(&it.ProductID, &it.ProductName, &it.Qty); err != nil {
+			var dummyPrice, dummyCost decimal.Decimal
+			if err := itRows.Scan(&ordID, &itemID, &it.ProductID, &it.ProductName, &it.Qty, &dummyPrice, &dummyCost); err != nil {
 				itRows.Close()
 				return nil, err
 			}
-			list = append(list, it)
+			itemsByOrder[ordID] = append(itemsByOrder[ordID], it)
 		}
 		if err := itRows.Err(); err != nil {
 			itRows.Close()
 			return nil, err
 		}
 		itRows.Close()
-		itemsByOrder[oid] = list
 	}
 
 	for i := range out {
