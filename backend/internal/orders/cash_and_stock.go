@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -85,18 +86,6 @@ func GetShoppingList(ctx context.Context, q db.DBTX, fromDate, toDate time.Time,
 	fromKey := engine.DateKey(fromDate)
 	toKey := engine.DateKey(toDate)
 
-	// 1. Muat seluruh bahan aktif
-	ingRows, err := q.Query(ctx, `
-		SELECT id::text, name, use_unit, buy_unit, buy_unit_size, buy_price, stock, min_stock, rounding, is_active
-		FROM ingredients
-		WHERE is_active = true
-		ORDER BY name ASC, id ASC
-	`)
-	if err != nil {
-		return nil, err
-	}
-	defer ingRows.Close()
-
 	type ingMeta struct {
 		ID          string
 		Name        string
@@ -109,62 +98,92 @@ func GetShoppingList(ctx context.Context, q db.DBTX, fromDate, toDate time.Time,
 		Rounding    string
 		IsActive    bool
 	}
-	ings := make([]ingMeta, 0)
-	ingByID := make(map[string]ingMeta)
-	for ingRows.Next() {
-		var im ingMeta
-		if err := ingRows.Scan(
-			&im.ID, &im.Name, &im.UseUnit, &im.BuyUnit,
-			&im.BuyUnitSize, &im.BuyPrice, &im.Stock, &im.MinStock,
-			&im.Rounding, &im.IsActive,
-		); err != nil {
-			return nil, err
-		}
-		ings = append(ings, im)
-		ingByID[im.ID] = im
-	}
-	if err := ingRows.Err(); err != nil {
-		return nil, err
-	}
-	ingRows.Close()
-
-	// 2. Hitung kebutuhan bahan dari pesanan confirmed & in_production pada rentang [fromDate, toDate]
-	reqRows, err := q.Query(ctx, `
-		SELECT ri.ingredient_id::text,
-		       COALESCE(SUM(oi.qty * ri.qty_per_unit), 0) AS req_qty,
-		       MIN(o.event_date) AS min_event_date,
-		       COUNT(DISTINCT o.id) AS order_count
-		FROM orders o
-		JOIN order_items oi ON oi.order_id = o.id
-		JOIN recipe_items ri ON ri.product_id = oi.product_id
-		WHERE o.status IN ('confirmed', 'in_production')
-		  AND o.event_date >= $1::date
-		  AND o.event_date <= $2::date
-		GROUP BY ri.ingredient_id
-	`, fromKey, toKey)
-	if err != nil {
-		return nil, err
-	}
-	defer reqRows.Close()
-
 	type reqInfo struct {
 		ReqQty       decimal.Decimal
 		MinEventDate time.Time
 		OrderCount   int
 	}
+
+	ings := make([]ingMeta, 0)
+	ingByID := make(map[string]ingMeta)
 	reqs := make(map[string]reqInfo)
-	for reqRows.Next() {
-		var iid string
-		var rq reqInfo
-		if err := reqRows.Scan(&iid, &rq.ReqQty, &rq.MinEventDate, &rq.OrderCount); err != nil {
+
+	loadIngsFn := func() error {
+		ingRows, err := q.Query(ctx, `
+			SELECT id::text, name, use_unit, buy_unit, buy_unit_size, buy_price, stock, min_stock, rounding, is_active
+			FROM ingredients
+			WHERE is_active = true
+			ORDER BY name ASC, id ASC
+		`)
+		if err != nil {
+			return err
+		}
+		defer ingRows.Close()
+		for ingRows.Next() {
+			var im ingMeta
+			if err := ingRows.Scan(
+				&im.ID, &im.Name, &im.UseUnit, &im.BuyUnit,
+				&im.BuyUnitSize, &im.BuyPrice, &im.Stock, &im.MinStock,
+				&im.Rounding, &im.IsActive,
+			); err != nil {
+				return err
+			}
+			ings = append(ings, im)
+			ingByID[im.ID] = im
+		}
+		return ingRows.Err()
+	}
+
+	loadReqsFn := func() error {
+		reqRows, err := q.Query(ctx, `
+			SELECT ri.ingredient_id::text,
+			       COALESCE(SUM(oi.qty * ri.qty_per_unit), 0) AS req_qty,
+			       MIN(o.event_date) AS min_event_date,
+			       COUNT(DISTINCT o.id) AS order_count
+			FROM orders o
+			JOIN order_items oi ON oi.order_id = o.id
+			JOIN recipe_items ri ON ri.product_id = oi.product_id
+			WHERE o.status IN ('confirmed', 'in_production')
+			  AND o.event_date >= $1::date
+			  AND o.event_date <= $2::date
+			GROUP BY ri.ingredient_id
+		`, fromKey, toKey)
+		if err != nil {
+			return err
+		}
+		defer reqRows.Close()
+		for reqRows.Next() {
+			var iid string
+			var rq reqInfo
+			if err := reqRows.Scan(&iid, &rq.ReqQty, &rq.MinEventDate, &rq.OrderCount); err != nil {
+				return err
+			}
+			reqs[iid] = rq
+		}
+		return reqRows.Err()
+	}
+
+	if isConcurrentPool(q) {
+		var wg sync.WaitGroup
+		var errIng, errReq error
+		wg.Add(2)
+		go func() { defer wg.Done(); errIng = loadIngsFn() }()
+		go func() { defer wg.Done(); errReq = loadReqsFn() }()
+		wg.Wait()
+		if errIng != nil {
+			return nil, errIng
+		}
+		if errReq != nil {
+			return nil, errReq
+		}
+	} else {
+		if err := loadIngsFn(); err != nil {
 			return nil, err
 		}
-		reqs[iid] = rq
+		if err := loadReqsFn(); err != nil {
+			return nil, err
+		}
 	}
-	if err := reqRows.Err(); err != nil {
-		return nil, err
-	}
-	reqRows.Close()
 
 	isStaff := actorRole == auth.RoleStaff
 	items := make([]ShoppingListItem, 0)
@@ -916,59 +935,83 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 	}
 
 	loadsByProd := make(map[string]map[string]decimal.Decimal, len(prods))
-	loadRows, err := q.Query(ctx, `
-		SELECT pl.product_id::text, r.code, pl.load
-		FROM product_loads pl
-		JOIN resources r ON r.id = pl.resource_id
-		WHERE pl.product_id = ANY($1::uuid[])
-	`, ids)
-	if err != nil {
-		return nil, err
-	}
-	defer loadRows.Close()
-	for loadRows.Next() {
-		var pid, code string
-		var ld decimal.Decimal
-		if err := loadRows.Scan(&pid, &code, &ld); err != nil {
-			return nil, err
-		}
-		if loadsByProd[pid] == nil {
-			loadsByProd[pid] = make(map[string]decimal.Decimal)
-		}
-		loadsByProd[pid][code] = ld
-	}
-	if err := loadRows.Err(); err != nil {
-		return nil, err
-	}
-	loadRows.Close()
-
 	ingCostByProd := make(map[string]decimal.Decimal, len(prods))
-	recRows, err := q.Query(ctx, `
-		SELECT ri.product_id::text, ri.qty_per_unit, i.buy_price, i.buy_unit_size
-		FROM recipe_items ri
-		JOIN ingredients i ON i.id = ri.ingredient_id
-		WHERE ri.product_id = ANY($1::uuid[])
-	`, ids)
-	if err != nil {
-		return nil, err
+
+	loadProdLoadsFn := func() error {
+		loadRows, err := q.Query(ctx, `
+			SELECT pl.product_id::text, r.code, pl.load
+			FROM product_loads pl
+			JOIN resources r ON r.id = pl.resource_id
+			WHERE pl.product_id = ANY($1::uuid[])
+		`, ids)
+		if err != nil {
+			return err
+		}
+		defer loadRows.Close()
+		for loadRows.Next() {
+			var pid, code string
+			var ld decimal.Decimal
+			if err := loadRows.Scan(&pid, &code, &ld); err != nil {
+				return err
+			}
+			if loadsByProd[pid] == nil {
+				loadsByProd[pid] = make(map[string]decimal.Decimal)
+			}
+			loadsByProd[pid][code] = ld
+		}
+		return loadRows.Err()
 	}
-	defer recRows.Close()
-	for recRows.Next() {
-		var pid string
-		var qty, bp, bus decimal.Decimal
-		if err := recRows.Scan(&pid, &qty, &bp, &bus); err != nil {
+
+	loadProdRecsFn := func() error {
+		recRows, err := q.Query(ctx, `
+			SELECT ri.product_id::text, ri.qty_per_unit, i.buy_price, i.buy_unit_size
+			FROM recipe_items ri
+			JOIN ingredients i ON i.id = ri.ingredient_id
+			WHERE ri.product_id = ANY($1::uuid[])
+		`, ids)
+		if err != nil {
+			return err
+		}
+		defer recRows.Close()
+		for recRows.Next() {
+			var pid string
+			var qty, bp, bus decimal.Decimal
+			if err := recRows.Scan(&pid, &qty, &bp, &bus); err != nil {
+				return err
+			}
+			if bus.IsPositive() {
+				ingCostByProd[pid] = ingCostByProd[pid].Add(qty.Mul(bp).DivRound(bus, 8))
+			}
+		}
+		return recRows.Err()
+	}
+
+	if isConcurrentPool(q) {
+		var wg sync.WaitGroup
+		var errL, errR error
+		wg.Add(2)
+		go func() { defer wg.Done(); errL = loadProdLoadsFn() }()
+		go func() { defer wg.Done(); errR = loadProdRecsFn() }()
+		wg.Wait()
+		if errL != nil {
+			return nil, errL
+		}
+		if errR != nil {
+			return nil, errR
+		}
+	} else {
+		if err := loadProdLoadsFn(); err != nil {
 			return nil, err
 		}
-		if bus.IsPositive() {
-			ingCostByProd[pid] = ingCostByProd[pid].Add(qty.Mul(bp).DivRound(bus, 8))
+		if err := loadProdRecsFn(); err != nil {
+			return nil, err
 		}
 	}
-	if err := recRows.Err(); err != nil {
-		return nil, err
-	}
-	recRows.Close()
 
 	out := make([]ProductCostingDTO, 0, len(prods))
+	metaMap := make(map[string]ProductMeta, len(prods))
+	metaActive := make(map[string]bool, len(prods))
+	globalOnePlusWaste := decimal.NewFromInt(1).Add(params.WastePct)
 
 	for _, pr := range prods {
 		loads := loadsByProd[pr.ID]
@@ -997,6 +1040,28 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 		margin := engine.Margin(pr.Price, unitCost)
 		minPrice := engine.MinPrice(unitCost, params.EvalParams.MarginMin)
 		maxDisc := engine.MaxDiscount(pr.Price, minPrice)
+
+		metaUnitCost := engine.UnitCost(engine.CostInput{
+			IngredientCost: ingCost,
+			WastePct:       params.WastePct,
+			PackagingCost:  pr.PackagingCost,
+			LaborMinutes:   laborMin,
+			LaborRate:      params.LaborRatePerMin,
+			OverheadCost:   pr.OverheadCost,
+		})
+		metaMap[pr.ID] = ProductMeta{
+			ID:                  pr.ID,
+			Name:                pr.Name,
+			Category:            pr.Category,
+			DefaultPrice:        pr.Price,
+			PackagingCost:       pr.PackagingCost,
+			OverheadCost:        pr.OverheadCost,
+			IngredientCost:      ingCost,
+			UnitCost:            metaUnitCost,
+			PurchaseCostPerUnit: ingCost.Mul(globalOnePlusWaste).Add(pr.PackagingCost),
+			UnitLoads:           loads,
+		}
+		metaActive[pr.ID] = pr.IsActive
 
 		out = append(out, ProductCostingDTO{
 			ProductID:           pr.ID,
@@ -1027,6 +1092,9 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 		copy(cp, out)
 		rc.costing = cp
 		rc.hasCosting = true
+		rc.prodMeta = metaMap
+		rc.prodMetaActive = metaActive
+		rc.hasProdMeta = true
 		rc.mu.Unlock()
 	}
 

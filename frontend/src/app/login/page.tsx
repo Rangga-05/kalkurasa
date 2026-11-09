@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +17,13 @@ import {
   ShieldCheck,
   UserCheck,
 } from "lucide-react";
-import { login, getErrorMessage } from "@/lib/api";
+import {
+  login,
+  getErrorMessage,
+  getOwnerDashboard,
+  getManagerDashboard,
+  getStaffDashboard,
+} from "@/lib/api";
 import { resolvePostLoginRedirect, ROLE_LABELS } from "@/lib/format";
 import type { UserRole } from "@/lib/types";
 import { PublicNavbar } from "@/components/public-navbar";
@@ -106,18 +112,41 @@ function LoginFormContent() {
     },
   });
 
+  useEffect(() => {
+    router.prefetch("/app/owner");
+    router.prefetch("/app/manajer");
+    router.prefetch("/app/karyawan");
+    router.prefetch("/app/admin");
+    router.prefetch("/pesanan-saya");
+  }, [router]);
+
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (res) => {
       setServerError("");
       queryClient.setQueryData(["auth-me"], res.user);
+      if (res.user.role === "owner") {
+        void queryClient.prefetchQuery({
+          queryKey: ["owner-dashboard"],
+          queryFn: ({ signal }) => getOwnerDashboard(signal),
+        });
+      } else if (res.user.role === "manager") {
+        void queryClient.prefetchQuery({
+          queryKey: ["manager-dashboard"],
+          queryFn: ({ signal }) => getManagerDashboard(signal),
+        });
+      } else if (res.user.role === "staff") {
+        void queryClient.prefetchQuery({
+          queryKey: ["staff-dashboard"],
+          queryFn: ({ signal }) => getStaffDashboard(signal),
+        });
+      }
       toast.success(
         `Selamat datang, ${res.user.name}`,
         `Masuk sebagai ${ROLE_LABELS[res.user.role]}`
       );
       const target = resolvePostLoginRedirect(res.user.role, nextPath);
       router.push(target);
-      router.refresh();
     },
     onError: (err) => {
       const msg = getErrorMessage(err, "Email atau kata sandi salah.");
@@ -279,6 +308,7 @@ function LoginFormContent() {
                       shouldValidate: true,
                     });
                     setServerError("");
+                    router.prefetch(resolvePostLoginRedirect(acc.role, nextPath));
                   }}
                   className={`card-interactive flex flex-col items-start justify-between rounded-xl border p-3.5 text-left transition-all ${
                     isSelected

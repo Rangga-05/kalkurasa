@@ -32,8 +32,11 @@ type orderReqCache struct {
 	hasCaps bool
 	caps    map[string]decimal.Decimal
 
-	hasCosting bool
-	costing    []ProductCostingDTO
+	hasCosting     bool
+	costing        []ProductCostingDTO
+	hasProdMeta    bool
+	prodMeta       map[string]ProductMeta
+	prodMetaActive map[string]bool
 
 	hasCashEvents bool
 	cashEventsKey string

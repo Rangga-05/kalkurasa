@@ -369,8 +369,8 @@ func GetKPI(ctx context.Context, conn db.Conn, actorRole string) (*KPIResult, er
 	aggEstMargin := engine.Margin(totalRevenue, totalEstCost).Round(4)
 	aggRealMargin := engine.Margin(totalRevenue, totalActCost).Round(4)
 
-	// 7. Proyeksi kas 14 hari untuk menghitung hari kas rawan
-	cashProj, err := GetCashProjection(ctx, conn, 14, auth.RoleOwner)
+	// 7. Proyeksi kas 14 hari untuk menghitung hari kas rawan (gunakan RoleManager agar tidak mengulang query cash_entries)
+	cashProj, err := GetCashProjection(ctx, conn, 14, auth.RoleManager)
 	if err != nil {
 		return nil, err
 	}
@@ -445,36 +445,51 @@ type OwnerDashboardResult struct {
 // secara paralel bila menggunakan connection pool sehingga fungsi-fungsi turunan pada dashboard
 // dapat membaca dari cache per-request tanpa mengulang query ke database.
 func warmDashboardCache(ctx context.Context, conn db.Conn) (time.Time, error) {
-	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
-		return time.Time{}, err
-	}
-	params, err := LoadSettingsParams(ctx, conn)
-	if err != nil {
-		return time.Time{}, err
-	}
-	today := todayQ(ctx, conn)
-
 	if isConcurrentPool(conn) {
-		var wg sync.WaitGroup
-		errs := make([]error, 4)
-		wg.Add(4)
+		var wg1 sync.WaitGroup
+		var errExp, errSet, errCap error
+		var params SettingsParams
+		wg1.Add(3)
 		go func() {
-			defer wg.Done()
-			_, errs[0] = LoadCapacities(ctx, conn)
+			defer wg1.Done()
+			_, errExp = ExpireOverdueOrders(ctx, conn, time.Now().UTC())
 		}()
 		go func() {
-			defer wg.Done()
-			_, errs[1] = GetProductsCosting(ctx, conn)
+			defer wg1.Done()
+			params, errSet = LoadSettingsParams(ctx, conn)
 		}()
 		go func() {
-			defer wg.Done()
-			_, errs[2] = ListOrders(ctx, conn, OrderListFilter{ActorRole: auth.RoleOwner})
+			defer wg1.Done()
+			_, errCap = LoadCapacities(ctx, conn)
+		}()
+		wg1.Wait()
+		if errExp != nil {
+			return time.Time{}, errExp
+		}
+		if errSet != nil {
+			return time.Time{}, errSet
+		}
+		if errCap != nil {
+			return time.Time{}, errCap
+		}
+		today := todayQ(ctx, conn)
+
+		var wg2 sync.WaitGroup
+		errs := make([]error, 3)
+		wg2.Add(3)
+		go func() {
+			defer wg2.Done()
+			_, errs[0] = GetProductsCosting(ctx, conn)
 		}()
 		go func() {
-			defer wg.Done()
-			_, errs[3] = LoadCashEvents(ctx, conn, today, params)
+			defer wg2.Done()
+			_, errs[1] = ListOrders(ctx, conn, OrderListFilter{ActorRole: auth.RoleOwner})
 		}()
-		wg.Wait()
+		go func() {
+			defer wg2.Done()
+			_, errs[2] = LoadCashEvents(ctx, conn, today, params)
+		}()
+		wg2.Wait()
 		for _, e := range errs {
 			if e != nil {
 				return time.Time{}, e
@@ -483,6 +498,14 @@ func warmDashboardCache(ctx context.Context, conn db.Conn) (time.Time, error) {
 		return today, nil
 	}
 
+	if _, err := ExpireOverdueOrders(ctx, conn, time.Now().UTC()); err != nil {
+		return time.Time{}, err
+	}
+	params, err := LoadSettingsParams(ctx, conn)
+	if err != nil {
+		return time.Time{}, err
+	}
+	today := todayQ(ctx, conn)
 	if _, err := LoadCapacities(ctx, conn); err != nil {
 		return time.Time{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -207,6 +208,32 @@ func LoadProductsMeta(ctx context.Context, q db.DBTX, ids []string, params Setti
 	out := make(map[string]ProductMeta, len(ids))
 	if len(ids) == 0 {
 		return out, nil
+	}
+
+	if rc := getOrderReqCache(ctx, q); rc != nil {
+		rc.mu.Lock()
+		if rc.hasProdMeta {
+			allFound := true
+			for _, id := range ids {
+				pm, ok := rc.prodMeta[id]
+				if !ok {
+					allFound = false
+					break
+				}
+				if !rc.prodMetaActive[id] {
+					rc.mu.Unlock()
+					return nil, httpx.Err(http.StatusUnprocessableEntity, "validation_error", fmt.Sprintf("Produk %q sedang tidak aktif.", pm.Name))
+				}
+				out[id] = pm
+			}
+			rc.mu.Unlock()
+			if allFound {
+				return out, nil
+			}
+			out = make(map[string]ProductMeta, len(ids))
+		} else {
+			rc.mu.Unlock()
+		}
 	}
 
 	rows, err := q.Query(ctx, `
@@ -498,110 +525,131 @@ func LoadCashEvents(ctx context.Context, q db.DBTX, today time.Time, params Sett
 		rc.mu.Unlock()
 	}
 
-	events := make([]engine.CashEvent, 0)
+	var ceEvents []engine.CashEvent
+	var ordEvents []engine.CashEvent
 
-	// 1. Entri kas manual (cash_entries) mulai dari hari ini
-	ceRows, err := q.Query(ctx, `
-		SELECT entry_date, amount
-		FROM cash_entries
-		WHERE entry_date >= $1::date
-	`, todayKey)
-	if err != nil {
-		return nil, err
-	}
-	defer ceRows.Close()
-
-	for ceRows.Next() {
-		var dt time.Time
-		var amt decimal.Decimal
-		if err := ceRows.Scan(&dt, &amt); err != nil {
-			return nil, err
+	loadCEFn := func() error {
+		ceRows, err := q.Query(ctx, `
+			SELECT entry_date, amount
+			FROM cash_entries
+			WHERE entry_date >= $1::date
+		`, todayKey)
+		if err != nil {
+			return err
 		}
-		events = append(events, engine.CashEvent{Date: dt, Amount: amt})
-	}
-	if err := ceRows.Err(); err != nil {
-		return nil, err
-	}
+		defer ceRows.Close()
 
-	// 2. Jadwal kas dari pesanan aktif yang sudah direservasi
-	onePlusWaste := decimal.NewFromInt(1).Add(params.WastePct)
-	ordRows, err := q.Query(ctx, `
-		SELECT o.id::text, o.status, o.event_date, o.total, o.dp_required, o.dp_deadline, o.paid,
-		       COALESCE((
-		           SELECT SUM(oi.qty * (
-		               COALESCE((
-		                   SELECT SUM(ri.qty_per_unit * i.buy_price / i.buy_unit_size)
-		                   FROM recipe_items ri
-		                   JOIN ingredients i ON i.id = ri.ingredient_id
-		                   WHERE ri.product_id = p.id
-		               ), 0) * $2::numeric + p.packaging_cost
-		           ))
-		           FROM order_items oi
-		           JOIN products p ON p.id = oi.product_id
-		           WHERE oi.order_id = o.id
-		       ), 0) AS shopping_cost
-		FROM orders o
-		WHERE o.status IN ('accepted', 'confirmed', 'in_production', 'ready', 'delivering')
-		  AND o.event_date >= $1::date - interval '1 day'
-	`, todayKey, onePlusWaste)
-	if err != nil {
-		return nil, err
-	}
-	defer ordRows.Close()
-
-	for ordRows.Next() {
-		var oid, status string
-		var eventDate time.Time
-		var total, dpReq, paid, shoppingCost decimal.Decimal
-		var dpDeadline *time.Time
-		if err := ordRows.Scan(&oid, &status, &eventDate, &total, &dpReq, &dpDeadline, &paid, &shoppingCost); err != nil {
-			return nil, err
-		}
-
-		// DP / pembayaran yang sudah diterima pada pesanan aktif masuk pada hari ini;
-		// sisa DP yang belum terbayar masuk pada tanggal dp_deadline (atau hari ini bila sudah lewat).
-		if paid.IsPositive() {
-			paidCapped := paid
-			if paidCapped.GreaterThan(total) {
-				paidCapped = total
+		for ceRows.Next() {
+			var dt time.Time
+			var amt decimal.Decimal
+			if err := ceRows.Scan(&dt, &amt); err != nil {
+				return err
 			}
-			events = append(events, engine.CashEvent{Date: today, Amount: paidCapped})
+			ceEvents = append(ceEvents, engine.CashEvent{Date: dt, Amount: amt})
 		}
-		unpaidDP := dpReq.Sub(paid)
-		if unpaidDP.IsPositive() {
-			dpDate := today
-			if dpDeadline != nil {
-				dl := time.Date(dpDeadline.Year(), dpDeadline.Month(), dpDeadline.Day(), 0, 0, 0, 0, time.UTC)
-				if dl.After(today) {
-					dpDate = dl
+		return ceRows.Err()
+	}
+
+	loadOrdFn := func() error {
+		onePlusWaste := decimal.NewFromInt(1).Add(params.WastePct)
+		ordRows, err := q.Query(ctx, `
+			SELECT o.id::text, o.status, o.event_date, o.total, o.dp_required, o.dp_deadline, o.paid,
+			       COALESCE((
+			           SELECT SUM(oi.qty * (
+			               COALESCE((
+			                   SELECT SUM(ri.qty_per_unit * i.buy_price / i.buy_unit_size)
+			                   FROM recipe_items ri
+			                   JOIN ingredients i ON i.id = ri.ingredient_id
+			                   WHERE ri.product_id = p.id
+			               ), 0) * $2::numeric + p.packaging_cost
+			           ))
+			           FROM order_items oi
+			           JOIN products p ON p.id = oi.product_id
+			           WHERE oi.order_id = o.id
+			       ), 0) AS shopping_cost
+			FROM orders o
+			WHERE o.status IN ('accepted', 'confirmed', 'in_production', 'ready', 'delivering')
+			  AND o.event_date >= $1::date - interval '1 day'
+		`, todayKey, onePlusWaste)
+		if err != nil {
+			return err
+		}
+		defer ordRows.Close()
+
+		for ordRows.Next() {
+			var oid, status string
+			var eventDate time.Time
+			var total, dpReq, paid, shoppingCost decimal.Decimal
+			var dpDeadline *time.Time
+			if err := ordRows.Scan(&oid, &status, &eventDate, &total, &dpReq, &dpDeadline, &paid, &shoppingCost); err != nil {
+				return err
+			}
+
+			if paid.IsPositive() {
+				paidCapped := paid
+				if paidCapped.GreaterThan(total) {
+					paidCapped = total
 				}
+				ordEvents = append(ordEvents, engine.CashEvent{Date: today, Amount: paidCapped})
 			}
-			events = append(events, engine.CashEvent{Date: dpDate, Amount: unpaidDP})
-		}
-
-		// Pelunasan masuk pada hari setelah tanggal acara (Bagian 7)
-		expectedPaid := paid
-		if dpReq.GreaterThan(expectedPaid) {
-			expectedPaid = dpReq
-		}
-		remaining := total.Sub(expectedPaid)
-		if remaining.IsPositive() {
-			settleDate := eventDate.AddDate(0, 0, 1)
-			events = append(events, engine.CashEvent{Date: settleDate, Amount: remaining})
-		}
-
-		// Belanja bahan keluar pada tanggal acara - shopping_lead_days untuk pesanan yang belum diproduksi
-		if (status == StatusAccepted || status == StatusConfirmed) && shoppingCost.IsPositive() {
-			shopDate := eventDate.AddDate(0, 0, -params.EvalParams.ShoppingLeadDays)
-			if shopDate.Before(today) {
-				shopDate = today
+			unpaidDP := dpReq.Sub(paid)
+			if unpaidDP.IsPositive() {
+				dpDate := today
+				if dpDeadline != nil {
+					dl := time.Date(dpDeadline.Year(), dpDeadline.Month(), dpDeadline.Day(), 0, 0, 0, 0, time.UTC)
+					if dl.After(today) {
+						dpDate = dl
+					}
+				}
+				ordEvents = append(ordEvents, engine.CashEvent{Date: dpDate, Amount: unpaidDP})
 			}
-			events = append(events, engine.CashEvent{Date: shopDate, Amount: shoppingCost.Neg()})
+
+			expectedPaid := paid
+			if dpReq.GreaterThan(expectedPaid) {
+				expectedPaid = dpReq
+			}
+			remaining := total.Sub(expectedPaid)
+			if remaining.IsPositive() {
+				settleDate := eventDate.AddDate(0, 0, 1)
+				ordEvents = append(ordEvents, engine.CashEvent{Date: settleDate, Amount: remaining})
+			}
+
+			if (status == StatusAccepted || status == StatusConfirmed) && shoppingCost.IsPositive() {
+				shopDate := eventDate.AddDate(0, 0, -params.EvalParams.ShoppingLeadDays)
+				if shopDate.Before(today) {
+					shopDate = today
+				}
+				ordEvents = append(ordEvents, engine.CashEvent{Date: shopDate, Amount: shoppingCost.Neg()})
+			}
+		}
+		return ordRows.Err()
+	}
+
+	if isConcurrentPool(q) {
+		var wg sync.WaitGroup
+		var errCE, errOrd error
+		wg.Add(2)
+		go func() { defer wg.Done(); errCE = loadCEFn() }()
+		go func() { defer wg.Done(); errOrd = loadOrdFn() }()
+		wg.Wait()
+		if errCE != nil {
+			return nil, errCE
+		}
+		if errOrd != nil {
+			return nil, errOrd
+		}
+	} else {
+		if err := loadCEFn(); err != nil {
+			return nil, err
+		}
+		if err := loadOrdFn(); err != nil {
+			return nil, err
 		}
 	}
-	if err := ordRows.Err(); err != nil {
-		return nil, err
-	}
+
+	events := make([]engine.CashEvent, 0, len(ceEvents)+len(ordEvents))
+	events = append(events, ceEvents...)
+	events = append(events, ordEvents...)
 
 	if rc != nil {
 		rc.mu.Lock()

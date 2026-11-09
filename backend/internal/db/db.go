@@ -21,6 +21,11 @@ func New(ctx context.Context, databaseURL string, maxConns int32) (*pgxpool.Pool
 	}
 
 	cfg.MaxConns = maxConns
+	if maxConns >= 4 {
+		cfg.MinConns = 4
+	} else {
+		cfg.MinConns = maxConns
+	}
 
 	// Force simple protocol — required for Supabase Transaction pooler.
 	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
