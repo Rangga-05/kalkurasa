@@ -336,51 +336,49 @@ export default function InternalAppLayout({
           </div>
         </header>
 
-        {/* Overlay Slide-Over Drawer Navigasi Mobile (Mengambang di Depan Layar) */}
+        {/* Modal Pop-up Navigasi Mobile Ditengah dengan Animasi */}
         {mobileMenuOpen ? (
           <div
-            className="fixed inset-0 z-50 flex lg:hidden print:hidden"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 lg:hidden print:hidden"
             role="dialog"
             aria-modal="true"
             aria-label="Menu navigasi internal"
           >
-            {/* Backdrop Gelap Blur (Klik di luar untuk menutup) */}
+            {/* Backdrop Gelap Blur dengan Animasi Fade-In */}
             <div
-              className="fixed inset-0 bg-[#12100E]/55 backdrop-blur-xs transition-opacity"
+              className="animate-modal-backdrop fixed inset-0 bg-[#12100E]/60 backdrop-blur-xs"
               onClick={() => setMobileMenuOpen(false)}
               aria-hidden="true"
             />
 
-            {/* Panel Drawer di Depan Sebelah Kiri */}
-            <aside
-              id="internal-mobile-drawer"
-              className="relative z-10 flex h-full w-72 max-w-[84vw] flex-col border-r-2 border-[#12100E] bg-[var(--bg-surface)] shadow-[8px_0px_0px_#12100E]"
+            {/* Modal Dialog Card Ditengah dengan Animasi Pop/Scale-In */}
+            <div
+              id="internal-mobile-dialog"
+              className="animate-modal-pop relative z-10 flex max-h-[85vh] w-full max-w-sm flex-col overflow-hidden rounded-3xl border-2 border-[#12100E] bg-[var(--bg-surface)] shadow-[8px_8px_0px_#12100E]"
             >
-              {/* Header Drawer */}
-              <div className="flex shrink-0 items-center justify-between border-b-2 border-[#12100E] bg-[#F7EFE2] px-4 py-3.5">
-                <Link
-                  href={user ? getDashboardPathForRole(user.role) : "/app"}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex min-w-0 items-center gap-2.5 text-[#12100E]"
-                >
-                  <div className="h-9 w-9 shrink-0">
-                    <KalkurasaLogoIcon className="h-9 w-9" />
+              {/* Header Modal */}
+              <div className="flex shrink-0 items-center justify-between border-b-2 border-[#12100E] bg-[#F7EFE2] px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2.5 text-[#12100E]">
+                  <div className="h-8 w-8 shrink-0">
+                    <KalkurasaLogoIcon className="h-8 w-8" />
                   </div>
                   <div className="min-w-0">
-                    <span className="font-display block truncate text-base font-extrabold tracking-tight uppercase">
-                      Kalku<span className="text-[#EA580C]">rasa</span>
+                    <span className="font-display block truncate text-sm font-extrabold tracking-tight uppercase">
+                      Menu Navigasi Dapur
                     </span>
-                    <span className="block truncate text-[10px] font-bold text-[#5C5046]">
-                      Little Chef · Kendali Dapur
-                    </span>
+                    {user && (
+                      <span className="block truncate text-[10px] font-bold text-[#C2410C]">
+                        {ROLE_LABELS[user.role]}
+                      </span>
+                    )}
                   </div>
-                </Link>
+                </div>
 
                 <button
                   type="button"
                   onClick={() => setMobileMenuOpen(false)}
                   aria-label="Tutup menu navigasi"
-                  className="btn-tactile inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border-2 border-[#12100E] bg-[#FFFDF9] text-[#12100E]"
+                  className="btn-tactile inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border-2 border-[#12100E] bg-[#FFFDF9] text-[#12100E]"
                 >
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -389,7 +387,7 @@ export default function InternalAppLayout({
               {/* Daftar Menu Scrollable */}
               <nav
                 aria-label="Menu internal mobile"
-                className="flex-1 space-y-1.5 overflow-y-auto px-3.5 py-4"
+                className="flex-1 space-y-1 overflow-y-auto px-3 py-3"
               >
                 {filteredNav.map((item) => {
                   const Icon = item.icon;
@@ -403,7 +401,7 @@ export default function InternalAppLayout({
                       prefetch={true}
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
-                        "flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all",
+                        "flex min-h-[42px] items-center gap-3 rounded-xl px-3 py-2 text-xs font-bold transition-all",
                         active
                           ? "border-2 border-[#12100E] bg-[#C2410C] text-white shadow-[2px_2px_0px_#12100E]"
                           : "text-[var(--ink-primary)] hover:bg-[var(--bg-subtle)]"
@@ -416,21 +414,21 @@ export default function InternalAppLayout({
                 })}
               </nav>
 
-              {/* Footer Info Pengguna & Logout */}
-              <div className="shrink-0 space-y-3 border-t-2 border-[#12100E] bg-[#F7EFE2]/60 p-4">
+              {/* Footer Modal: User & Actions */}
+              <div className="shrink-0 space-y-2.5 border-t-2 border-[#12100E] bg-[#F7EFE2]/70 p-3.5">
                 {user ? (
-                  <div className="rounded-xl border border-[#12100E] bg-[#FFFDF9] p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-extrabold text-[#12100E]">
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-[#12100E] bg-[#FFFDF9] px-3 py-2 text-xs">
+                    <div className="min-w-0">
+                      <p className="truncate font-extrabold text-[#12100E]">
                         {user.name}
                       </p>
-                      <Badge variant="default" className="text-[10px]">
-                        {ROLE_LABELS[user.role]}
-                      </Badge>
+                      <p className="truncate font-mono text-[10px] text-[#5C5046]">
+                        {user.email}
+                      </p>
                     </div>
-                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#5C5046]">
-                      {user.email}
-                    </p>
+                    <Badge variant="default" className="text-[9px]">
+                      {ROLE_LABELS[user.role]}
+                    </Badge>
                   </div>
                 ) : null}
 
@@ -454,7 +452,7 @@ export default function InternalAppLayout({
                   </Button>
                 </div>
               </div>
-            </aside>
+            </div>
           </div>
         ) : null}
 

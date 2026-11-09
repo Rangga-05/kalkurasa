@@ -429,11 +429,150 @@ export default function BelanjaPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          {/* Tampilan Mobile: Kartu Belanja Bebas Horisontal Scroll */}
+          <div className="space-y-3.5 p-3.5 sm:hidden">
+            {items.map((item) => {
+              const needBuy = toNumber(item.qty_buy_units) > 0;
+              return (
+                <div
+                  key={item.ingredient_id}
+                  className={`rounded-2xl border-2 border-[#12100E] p-3.5 text-xs transition-all shadow-[3px_3px_0px_#12100E] ${
+                    needBuy ? "bg-[#FFFDF9]" : "bg-[#F7EFE2]/60"
+                  }`}
+                >
+                  {/* Header: Nama Bahan & Status Badge */}
+                  <div className="space-y-1.5 border-b border-[#12100E]/15 pb-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-display text-base font-extrabold text-[#12100E]">
+                        {item.ingredient_name}
+                      </h3>
+                      {needBuy ? (
+                        <span className="shrink-0 rounded-full border border-amber-600 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                          Perlu Dibeli
+                        </span>
+                      ) : (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-600 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Stok Cukup
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge
+                        variant={item.rounding_rule === "pack" ? "amber" : "slate"}
+                        className="text-[10px]"
+                      >
+                        {item.rounding_rule === "pack"
+                          ? `Kemasan Utuh (1 ${item.buy_unit} = ${formatNumber(item.buy_unit_size)} ${item.use_unit})`
+                          : `Curah / Loose (${item.use_unit})`}
+                      </Badge>
+                      {item.below_min_stock ? (
+                        <Badge variant="rose" className="text-[10px]">
+                          Di Bawah Stok Min ({formatNumber(item.min_stock)} {item.use_unit})
+                        </Badge>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#5C5046]">
+                      <span className="inline-flex items-center gap-1 font-semibold text-stone-900">
+                        <Calendar className="h-3.5 w-3.5 text-amber-700" />
+                        Jadwal Beli: {formatDateShort(item.purchase_date)}
+                      </span>
+                      <span>Acara: {formatDateShort(item.earliest_event)}</span>
+                    </div>
+
+                    {item.order_codes?.length > 0 ? (
+                      <p className="text-[11px] text-stone-500">
+                        Pesanan: {item.order_codes.join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {/* Metrik Kunci (2 Kolom) */}
+                  <div className="grid grid-cols-2 gap-2 py-2.5">
+                    <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-2.5">
+                      <span className="block text-[10px] font-semibold text-stone-500 uppercase">
+                        Kebutuhan Resep
+                      </span>
+                      <span className="font-mono-num text-xs font-bold text-stone-900">
+                        {formatNumber(item.required_qty)} {item.use_unit}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-2.5">
+                      <span className="block text-[10px] font-semibold text-stone-500 uppercase">
+                        Stok Saat Ini
+                      </span>
+                      <span
+                        className={`font-mono-num text-xs font-bold ${
+                          item.below_min_stock ? "text-rose-700" : "text-stone-900"
+                        }`}
+                      >
+                        {formatNumber(item.stock)} {item.use_unit}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-2.5">
+                      <span className="block text-[10px] font-semibold text-stone-500 uppercase">
+                        Kekurangan (+Buffer)
+                      </span>
+                      <span
+                        className={`font-mono-num text-xs font-bold ${
+                          toNumber(item.need_qty) > 0 ? "text-amber-900" : "text-emerald-700"
+                        }`}
+                      >
+                        {toNumber(item.need_qty) > 0
+                          ? `${formatNumber(item.need_qty)} ${item.use_unit}`
+                          : "0 (Cukup)"}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-2.5">
+                      <span className="block text-[10px] font-bold text-amber-900 uppercase">
+                        Rekomendasi Beli
+                      </span>
+                      {needBuy ? (
+                        <div>
+                          <span className="font-mono-num text-xs font-extrabold text-amber-900">
+                            {formatNumber(item.qty_buy_units)} {item.buy_unit}
+                          </span>
+                          <span className="block text-[10px] text-stone-500">
+                            ≈ {formatNumber(item.buy_use_units)} {item.use_unit}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-mono-num text-xs font-bold text-stone-400">
+                          0 {item.buy_unit}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tombol Aksi Beli */}
+                  <div className="border-t border-[#12100E]/15 pt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={needBuy ? "default" : "outline"}
+                      onClick={() => openPurchaseForItem(item)}
+                      className="w-full justify-center gap-1.5 py-2.5 text-xs font-bold"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5" />
+                      Catat Pembelian Bahan
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Tampilan Tablet & Desktop: Tabel Rinci */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-xs">
               <thead className="border-b border-stone-200 bg-stone-100/80 text-[11px] font-semibold uppercase tracking-wider text-stone-600">
                 <tr>
-                  <th className="px-4 py-3">Bahan Baku</th>
+                  <th className="min-w-44 px-4 py-3">Bahan Baku</th>
                   <th className="px-3 py-3">Jadwal Beli</th>
                   <th className="px-3 py-3 text-right">Kebutuhan Resep</th>
                   <th className="px-3 py-3 text-right">Stok Saat Ini</th>

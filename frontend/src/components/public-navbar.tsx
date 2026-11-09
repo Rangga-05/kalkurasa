@@ -228,13 +228,13 @@ export function PublicNavbar() {
       {mobileMenuOpen ? (
         <>
           <div
-            className="fixed inset-0 z-40 bg-[#12100E]/45 backdrop-blur-xs lg:hidden"
+            className="animate-modal-backdrop fixed inset-0 z-40 bg-[#12100E]/45 backdrop-blur-xs lg:hidden"
             onClick={() => setMobileMenuOpen(false)}
             aria-hidden="true"
           />
           <div
             id="public-mobile-drawer"
-            className="absolute top-full right-3 left-3 z-50 mt-1 rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[6px_6px_0px_#12100E] lg:hidden"
+            className="animate-modal-pop absolute top-full right-3 left-3 z-50 mt-1 rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[6px_6px_0px_#12100E] lg:hidden"
           >
           <nav className="flex flex-col gap-2" aria-label="Navigasi Mobile">
             <Link
