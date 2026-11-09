@@ -215,10 +215,7 @@ export default function ProdukPage() {
     setCategory(prod.category);
     setPrice(String(toNumber(prod.price)));
     setPackagingCost(String(toNumber(prod.packaging_cost)));
-    const ovh =
-      prod.overhead_per_unit !== undefined
-        ? prod.overhead_per_unit
-        : prod.overhead_cost;
+    const ovh = prod.overhead_per_unit;
     setOverheadPerUnit(String(toNumber(ovh)));
     setWastePct(String(prod.waste_pct !== undefined ? toNumber(prod.waste_pct) : 0.05));
     setLeadTimeDays(String(prod.lead_time_days !== undefined ? prod.lead_time_days : 2));
@@ -490,7 +487,7 @@ export default function ProdukPage() {
                             Overhead
                           </span>
                           <span className="font-semibold text-stone-800">
-                            {formatRupiah(cost.overhead_per_unit ?? cost.overhead_cost ?? prod.overhead_per_unit ?? prod.overhead_cost ?? 0)}
+                            {formatRupiah(cost.overhead_per_unit ?? prod.overhead_per_unit ?? 0)}
                           </span>
                         </div>
                       </div>

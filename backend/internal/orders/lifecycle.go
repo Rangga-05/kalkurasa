@@ -898,6 +898,7 @@ type TransitionOrderInput struct {
 	ActorRole     string
 	ToStatus      string
 	ActualMinutes *int
+	Force         bool
 }
 
 // TransitionOrder memvalidasi dan menjalankan transisi status pesanan sesuai Bagian 8.5:
@@ -915,15 +916,16 @@ func TransitionOrder(ctx context.Context, conn db.Conn, req TransitionOrderInput
 	err := db.WithTx(ctx, conn, func(tx pgx.Tx) error {
 		now := time.Now().UTC()
 		var (
-			code, curStatus string
-			total, paid     decimal.Decimal
+			code, curStatus     string
+			total, paid         decimal.Decimal
+			eventDate, prodDate time.Time
 		)
 		err := tx.QueryRow(ctx, `
-			SELECT code, status, total, paid
+			SELECT code, status, total, paid, event_date, production_date
 			FROM orders
 			WHERE id = $1::uuid
 			FOR UPDATE
-		`, req.OrderID).Scan(&code, &curStatus, &total, &paid)
+		`, req.OrderID).Scan(&code, &curStatus, &total, &paid, &eventDate, &prodDate)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return httpx.Err(http.StatusNotFound, "not_found", "Pesanan tidak ditemukan.")
 		}
@@ -967,6 +969,28 @@ func TransitionOrder(ctx context.Context, conn db.Conn, req TransitionOrderInput
 		if req.ActorRole == auth.RoleStaff && !staffAllowed {
 			return httpx.Err(http.StatusForbidden, "forbidden",
 				"Karyawan hanya berhak mengubah status dari Dalam Produksi ke Siap, atau dari Siap ke Diantar/Siap Diambil.")
+		}
+
+		// Validasi jadwal tanggal operasional katering (Bagian 8.4 & 8.5):
+		today := db.TodayQ(ctx, tx)
+		todayKey := engine.DateKey(today)
+		prodKey := engine.DateKey(prodDate)
+		eventKey := engine.DateKey(eventDate)
+
+		// 1. Mulai produksi (in_production) atau selesai masak (ready) dijadwalkan pada production_date
+		if (req.ToStatus == StatusInProduction || req.ToStatus == StatusReady) && todayKey < prodKey {
+			if !req.Force || req.ActorRole != auth.RoleOwner {
+				return httpx.Err(http.StatusUnprocessableEntity, "validation_error",
+					fmt.Sprintf("Pesanan dijadwalkan untuk diproduksi pada tanggal %s. Tahapan produksi baru dapat dilakukan pada tanggal jadwal produksi atau setelahnya.", prodKey))
+			}
+		}
+
+		// 2. Penyerahan/pengantaran (delivering) dan penyelesaian pesanan (completed) hanya boleh dilakukan pada hari-H acara atau setelahnya
+		if (req.ToStatus == StatusDelivering || req.ToStatus == StatusCompleted) && todayKey < eventKey {
+			if !req.Force || req.ActorRole != auth.RoleOwner {
+				return httpx.Err(http.StatusUnprocessableEntity, "validation_error",
+					fmt.Sprintf("Pesanan dijadwalkan untuk acara pada tanggal %s. Penyerahan dan penyelesaian pesanan baru dapat dilakukan pada hari-H acara atau setelahnya.", eventKey))
+			}
 		}
 
 		// Bagian 8.4: Saat paid >= total pada status delivering atau ready -> boleh completed
@@ -1031,12 +1055,16 @@ func TransitionOrder(ctx context.Context, conn db.Conn, req TransitionOrderInput
 			return err
 		}
 
-		if err := audit.Log(ctx, tx, req.ActorID, audit.ActionStatus, "orders", req.OrderID, map[string]any{
+		auditDetail := map[string]any{
 			"op":          "transition_order",
 			"code":        code,
 			"from_status": curStatus,
 			"to_status":   req.ToStatus,
-		}); err != nil {
+		}
+		if req.Force && (todayKey < prodKey || todayKey < eventKey) {
+			auditDetail["force_date_override"] = true
+		}
+		if err := audit.Log(ctx, tx, req.ActorID, audit.ActionStatus, "orders", req.OrderID, auditDetail); err != nil {
 			return err
 		}
 
@@ -2374,6 +2402,7 @@ func loadOrderDetailTx(ctx context.Context, q db.DBTX, orderID, actorRole string
 		Notes:                notesStr,
 		EventDate:            engine.DateKey(eventDate),
 		ProductionDate:       engine.DateKey(prodDate),
+		Today:                engine.DateKey(db.TodayQ(ctx, q)),
 		Status:               status,
 		Subtotal:             subtotalPtr,
 		TaxPct:               taxPctPtr,

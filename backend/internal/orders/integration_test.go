@@ -894,6 +894,7 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 			WHERE day >= $1::date AND day <= $2::date
 		`, engine.DateKey(startDate), engine.DateKey(endLockCleanupDate))
 		_, _ = pool.Exec(cleanCtx, `DELETE FROM rate_limits WHERE key LIKE 'order:198.51.100.%' OR key LIKE 'register:198.51.100.%'`)
+		_, _ = pool.Exec(cleanCtx, `DELETE FROM settings WHERE key = 'demo_today'`)
 	}
 
 	cleanup()
@@ -1297,6 +1298,12 @@ func TestLifecycle_PostgresAU1FullFlow(t *testing.T) {
 	// =========================================================================
 	// 6. Transisi Status sampai Completed + Pengurangan Stok Bahan & Stock Movements
 	// =========================================================================
+	// Set demo_today ke dateBStr agar operasional hari ini sesuai dengan tanggal produksi & acara Order 2
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO settings (key, value) VALUES ('demo_today', to_jsonb($1::text))
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+	`, dateBStr)
+
 	// 6a. confirmed -> in_production (oleh manager)
 	wTr1 := performJSON(router, http.MethodPost, "/api/v1/orders/"+order2ID+"/transition", map[string]any{
 		"to_status": orders.StatusInProduction,

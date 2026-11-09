@@ -847,6 +847,17 @@ func (tx *memTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 		}
 		return &memRow{err: pgx.ErrNoRows}
 
+	case strings.HasPrefix(q, "select code, status, total, paid, event_date, production_date from orders where id = $1::uuid"):
+		oid := fmt.Sprint(args[0])
+		tx.db.mu.Lock()
+		defer tx.db.mu.Unlock()
+		for _, o := range tx.db.orders {
+			if o.ID == oid {
+				return &memRow{vals: []any{o.Code, o.Status, o.Total, o.Paid, o.EventDate, o.ProductionDate}}
+			}
+		}
+		return &memRow{err: pgx.ErrNoRows}
+
 	case strings.HasPrefix(q, "select code, status, total, paid from orders where id = $1::uuid"):
 		oid := fmt.Sprint(args[0])
 		tx.db.mu.Lock()

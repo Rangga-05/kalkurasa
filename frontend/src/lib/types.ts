@@ -292,6 +292,7 @@ export interface OrderDetail {
   notes?: string;
   event_date: string; // YYYY-MM-DD
   production_date: string; // YYYY-MM-DD
+  today?: string; // YYYY-MM-DD
   status: OrderStatus;
   subtotal?: DecimalValue;
   tax_pct?: DecimalValue;
@@ -390,6 +391,7 @@ export interface PaymentResult {
 export interface TransitionOrderRequest {
   to_status: "in_production" | "ready" | "delivering" | "completed";
   actual_minutes?: number;
+  force?: boolean;
 }
 
 export interface CancelOrderRequest {

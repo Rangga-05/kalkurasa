@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Ban,
+  Calendar,
   CheckCircle2,
   ClipboardList,
   CreditCard,
@@ -16,6 +17,7 @@ import {
   Printer,
   RefreshCw,
   ShieldCheck,
+  Truck,
 } from "lucide-react";
 import { useInternalSession } from "@/components/internal/use-internal-session";
 import { GateBadges } from "@/components/internal/gate-badges";
@@ -42,6 +44,7 @@ import {
   RESOURCE_LABELS,
   TASK_STATUS_LABELS,
   TASK_TYPE_LABELS,
+  toDateKeyWIB,
   toNumber,
 } from "@/lib/format";
 import type { CancelOrderResult, OrderDetail } from "@/lib/types";
@@ -55,6 +58,7 @@ export default function OrderDetailPage({
   const { user } = useInternalSession();
   const role = user?.role ?? "staff";
   const isStaff = role === "staff";
+  const isOwner = role === "owner";
   const canManage = role === "owner" || role === "manager";
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
@@ -154,7 +158,8 @@ export default function OrderDetailPage({
   }
 
   async function handleTransition(
-    toStatus: "in_production" | "ready" | "delivering" | "completed"
+    toStatus: "in_production" | "ready" | "delivering" | "completed",
+    force?: boolean
   ) {
     if (!order) return;
     setActionError(null);
@@ -175,6 +180,7 @@ export default function OrderDetailPage({
       const updated = await transitionOrder(order.id, {
         to_status: toStatus,
         actual_minutes: mins,
+        force,
       });
       setOrder(updated);
       setActionSuccess(`Status pesanan berhasil diubah ke "${toStatus}".`);
@@ -284,6 +290,10 @@ export default function OrderDetailPage({
   const isFullyPaid = remainingNum <= 0 || (paidNum >= totalNum && totalNum > 0);
   const dpRemainingNum = Math.max(0, Math.round(dpNum - paidNum));
   const isDpUnpaid = paidNum < dpNum && dpRemainingNum > 0;
+
+  const todayStr = order.today || toDateKeyWIB(new Date());
+  const isProductionDateArrived = todayStr >= order.production_date;
+  const isEventDateArrived = todayStr >= order.event_date;
 
   const canRecordPayment =
     canManage &&
@@ -467,6 +477,32 @@ export default function OrderDetailPage({
                         </Link>
                       </div>
                     </div>
+                  ) : !isProductionDateArrived ? (
+                    <div className="flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50/90 p-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-blue-700 shrink-0" />
+                        <span className="text-xs font-semibold text-blue-950">
+                          Jadwal produksi pesanan adalah tanggal {formatDateLong(order.production_date)}. Produksi belum dapat dimulai sebelum tanggal tersebut.
+                        </span>
+                      </div>
+                      {isOwner && (
+                        <div>
+                          <button
+                            type="button"
+                            disabled={submittingTransition}
+                            onClick={() => handleTransition("in_production", true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-2.5 py-1 text-xs font-bold text-blue-800 shadow-2xs hover:bg-blue-100 disabled:opacity-50 cursor-pointer"
+                          >
+                            {submittingTransition ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                            Mulai Lebih Awal (Override Pemilik)
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <button
                       type="button"
@@ -493,63 +529,120 @@ export default function OrderDetailPage({
 
               {/* in_production -> ready (staff, manager, owner) */}
               {order.status === "in_production" && (
-                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-                  <div className="flex flex-col">
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="Menit aktual (opsional)"
-                      value={actualMinutes}
-                      onChange={(e) => setActualMinutes(e.target.value)}
-                      title="Waktu riil memasak di dapur (menit). Digunakan sistem untuk kalibrasi HPP tenaga kerja."
-                      className="w-44 rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900 placeholder:text-stone-400"
-                    />
-                    <span className="mt-0.5 text-[10px] text-stone-500">
-                      ⏱ Waktu riil masak (evaluasi resep)
-                    </span>
+                <div className="flex flex-col gap-2">
+                  {!isProductionDateArrived && (
+                    <div className="flex flex-col gap-1.5 rounded-xl border border-amber-300 bg-amber-50/90 p-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-amber-700 shrink-0" />
+                        <span className="text-xs font-semibold text-amber-950">
+                          Jadwal produksi pesanan adalah tanggal {formatDateLong(order.production_date)}. Dapur disarankan menyelesaikan masak pada jadwal tanggal tersebut.
+                        </span>
+                      </div>
+                      {isOwner && (
+                        <div>
+                          <button
+                            type="button"
+                            disabled={submittingTransition}
+                            onClick={() => handleTransition("ready", true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-white px-2.5 py-1 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+                          >
+                            Tandai Selesai Masak Lebih Awal (Override Pemilik)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+                    <div className="flex flex-col">
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="Menit aktual (opsional)"
+                        value={actualMinutes}
+                        onChange={(e) => setActualMinutes(e.target.value)}
+                        title="Waktu riil memasak di dapur (menit). Digunakan sistem untuk kalibrasi HPP tenaga kerja."
+                        className="w-44 rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900 placeholder:text-stone-400"
+                      />
+                      <span className="mt-0.5 text-[10px] text-stone-500">
+                        ⏱ Waktu riil masak (evaluasi resep)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={submittingTransition || (!isProductionDateArrived && !isOwner)}
+                      onClick={() => handleTransition("ready")}
+                      title={
+                        !isProductionDateArrived && !isOwner
+                          ? `Jadwal produksi baru tiba pada tanggal ${formatDateLong(order.production_date)}`
+                          : undefined
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submittingTransition ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      )}
+                      Tandai Produksi Selesai (Ready)
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    disabled={submittingTransition}
-                    onClick={() => handleTransition("ready")}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {submittingTransition ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    )}
-                    Tandai Produksi Selesai (Ready)
-                  </button>
                 </div>
               )}
 
               {/* ready -> delivering (staff, manager, owner) */}
               {order.status === "ready" && (
-                <button
-                  type="button"
-                  disabled={submittingTransition}
-                  onClick={() => handleTransition("delivering")}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-sky-700 disabled:opacity-50"
-                >
-                  {submittingTransition ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <div className="flex flex-col gap-2">
+                  {!isEventDateArrived ? (
+                    <div className="flex flex-col gap-1.5 rounded-xl border border-sky-300 bg-sky-50/90 p-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-sky-700 shrink-0" />
+                        <span className="text-xs font-semibold text-sky-950">
+                          Pesanan dijadwalkan untuk acara pada tanggal <strong>{formatDateLong(order.event_date)}</strong>. Pengantaran atau penyerahan pesanan baru dapat dilakukan pada hari-H acara.
+                        </span>
+                      </div>
+                      {isOwner && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            disabled={submittingTransition}
+                            onClick={() => handleTransition("delivering", true)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400 bg-white px-2.5 py-1 text-xs font-bold text-sky-900 shadow-2xs hover:bg-sky-100 disabled:opacity-50 cursor-pointer"
+                          >
+                            Mulai Pengantaran Lebih Awal (Override Pemilik)
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <Play className="h-3.5 w-3.5" />
+                    <button
+                      type="button"
+                      disabled={submittingTransition}
+                      onClick={() => handleTransition("delivering")}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      {submittingTransition ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Truck className="h-3.5 w-3.5" />
+                      )}
+                      Mulai Pengantaran / Penyerahan (Delivering)
+                    </button>
                   )}
-                  Mulai Pengantaran / Penyerahan (Delivering)
-                </button>
+                </div>
               )}
 
-              {/* ready/delivering -> completed (manager, owner; wajib lunas) */}
+              {/* ready/delivering -> completed (manager, owner; wajib lunas & hari-H) */}
               {(order.status === "ready" || order.status === "delivering") &&
                 canManage && (
                   <button
                     type="button"
-                    disabled={submittingTransition || !isFullyPaid}
+                    disabled={submittingTransition || !isFullyPaid || !isEventDateArrived}
                     onClick={() => handleTransition("completed")}
                     title={
-                      !isFullyPaid
+                      !isEventDateArrived
+                        ? `Pesanan hanya dapat diselesaikan pada hari-H acara (${formatDateLong(order.event_date)})`
+                        : !isFullyPaid
                         ? "Pembayaran harus lunas terlebih dahulu sebelum pesanan diselesaikan"
                         : undefined
                     }
@@ -565,6 +658,17 @@ export default function OrderDetailPage({
                 )}
             </div>
           </div>
+          {(order.status === "ready" || order.status === "delivering") &&
+            canManage &&
+            !isEventDateArrived && (
+              <p className="mt-2 text-xs font-medium text-amber-800 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                <span>
+                  Catatan: Pesanan dijadwalkan untuk hari-H acara tanggal{" "}
+                  <strong>{formatDateLong(order.event_date)}</strong>. Pesanan baru dapat diselesaikan pada hari-H acara atau setelahnya.
+                </span>
+              </p>
+            )}
           {(order.status === "ready" || order.status === "delivering") &&
             canManage &&
             !isFullyPaid && (

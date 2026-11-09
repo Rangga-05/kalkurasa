@@ -815,6 +815,7 @@ type transitionRequest struct {
 	ToStatus      string `json:"to_status"`
 	Status        string `json:"status"`
 	ActualMinutes *int   `json:"actual_minutes,omitempty"`
+	Force         bool   `json:"force,omitempty"`
 }
 
 // TransitionOrder menangani POST /api/v1/orders/:id/transition (Bagian 8.5 & 9).
@@ -858,6 +859,7 @@ func (h *Handler) TransitionOrder(c *gin.Context) {
 		ActorRole:     actor.Role,
 		ToStatus:      toStatus,
 		ActualMinutes: req.ActualMinutes,
+		Force:         req.Force,
 	})
 	if err != nil {
 		httpx.HandleError(c, err)

@@ -284,7 +284,7 @@ export default function PengaturanPage() {
       "tax_pct",
     ];
 
-    const payload: Record<string, unknown> = {};
+    const payload: Record<string, string | number> = {};
     for (const key of allowedKeys) {
       const v = formValues[key];
       if (v === undefined || v === null) continue;

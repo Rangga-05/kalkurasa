@@ -1091,7 +1091,7 @@ func TestFullOrderLifecycle_AU1_ToCompleted(t *testing.T) {
 		t.Fatalf("step 5 expected confirmed & 3 tasks, got status=%q tasks=%d", payDPRes.Data.Status, len(payDPRes.Data.TasksCreated))
 	}
 
-	// 6. Transisi confirmed -> in_production: staff ditolak (403), manager berhasil (200)
+	// 6. Transisi confirmed -> in_production: staff ditolak (403)
 	wStaffInProd := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+pubOrd.Data.ID+"/transition", map[string]any{
 		"to_status": orders.StatusInProduction,
 	}, map[string]string{
@@ -1101,6 +1101,22 @@ func TestFullOrderLifecycle_AU1_ToCompleted(t *testing.T) {
 		t.Fatalf("step 6 staff confirmed->in_production expected 403, got %d", wStaffInProd.Code)
 	}
 
+	// 6a. Uji validasi tanggal operasional: pada demo_today 2026-11-10, pesanan dengan jadwal produksi 2026-11-14 ditolak 422
+	wMgrEarly := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+pubOrd.Data.ID+"/transition", map[string]any{
+		"to_status": orders.StatusInProduction,
+	}, map[string]string{
+		"Authorization": "Bearer " + env.managerToken,
+	})
+	if wMgrEarly.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("step 6a manager early in_production expected 422, got %d (%s)", wMgrEarly.Code, wMgrEarly.Body.String())
+	}
+
+	// Majukan demo_today ke Hari-H tanggal produksi & acara (2026-11-14)
+	env.db.mu.Lock()
+	env.db.settings["demo_today"] = `"2026-11-14"`
+	env.db.mu.Unlock()
+
+	// 6b. Setelah tanggal jadwal produksi tiba, manager berhasil memulai status in_production (200)
 	wMgrInProd := performJSON(env.router, http.MethodPost, "/api/v1/orders/"+pubOrd.Data.ID+"/transition", map[string]any{
 		"to_status": orders.StatusInProduction,
 	}, map[string]string{

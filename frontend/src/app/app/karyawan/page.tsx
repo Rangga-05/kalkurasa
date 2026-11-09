@@ -599,11 +599,16 @@ export default function StaffDashboardPage() {
                     {tk.order_status === "confirmed" && canManage && (
                       <button
                         type="button"
-                        disabled={isBusy}
+                        disabled={isBusy || (!!tk.production_date && todayKey < tk.production_date)}
+                        title={
+                          tk.production_date && todayKey < tk.production_date
+                            ? `Jadwal produksi adalah tanggal ${formatDateShort(tk.production_date)}`
+                            : undefined
+                        }
                         onClick={() =>
                           handleOrderTransition(tk, "in_production")
                         }
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
                         <Play className="h-3.5 w-3.5" />
                         Mulai Produksi Pesanan
@@ -614,9 +619,14 @@ export default function StaffDashboardPage() {
                       tk.type === "produce" && (
                         <button
                           type="button"
-                          disabled={isBusy}
+                          disabled={isBusy || (!!tk.production_date && todayKey < tk.production_date)}
+                          title={
+                            tk.production_date && todayKey < tk.production_date
+                              ? `Jadwal produksi adalah tanggal ${formatDateShort(tk.production_date)}`
+                              : undefined
+                          }
                           onClick={() => handleOrderTransition(tk, "ready")}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <PackageCheck className="h-3.5 w-3.5" />
                           Tandai Pesanan Siap (Ready)
@@ -626,9 +636,14 @@ export default function StaffDashboardPage() {
                     {tk.order_status === "ready" && tk.type === "deliver" && (
                       <button
                         type="button"
-                        disabled={isBusy}
+                        disabled={isBusy || (!!tk.event_date && todayKey < tk.event_date)}
+                        title={
+                          tk.event_date && todayKey < tk.event_date
+                            ? `Pengantaran hanya dapat dimulai pada hari-H acara (${formatDateShort(tk.event_date)})`
+                            : undefined
+                        }
                         onClick={() => handleOrderTransition(tk, "delivering")}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50 cursor-pointer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
                         <Truck className="h-3.5 w-3.5" />
                         Mulai Pengantaran (Delivering)

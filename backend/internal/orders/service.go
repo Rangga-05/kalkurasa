@@ -705,6 +705,7 @@ type OrderDetail struct {
 	Notes                string            `json:"notes,omitempty"`
 	EventDate            string            `json:"event_date"`
 	ProductionDate       string            `json:"production_date"`
+	Today                string            `json:"today,omitempty"`
 	Status               string            `json:"status"`
 	Subtotal             *decimal.Decimal  `json:"subtotal,omitempty"`
 	TaxPct               *decimal.Decimal  `json:"tax_pct,omitempty"`
