@@ -215,9 +215,13 @@ export default function ProdukPage() {
     setCategory(prod.category);
     setPrice(String(toNumber(prod.price)));
     setPackagingCost(String(toNumber(prod.packaging_cost)));
-    setOverheadPerUnit(String(toNumber(prod.overhead_per_unit)));
-    setWastePct(String(toNumber(prod.waste_pct)));
-    setLeadTimeDays(String(prod.lead_time_days));
+    const ovh =
+      prod.overhead_per_unit !== undefined
+        ? prod.overhead_per_unit
+        : prod.overhead_cost;
+    setOverheadPerUnit(String(toNumber(ovh)));
+    setWastePct(String(toNumber(prod.waste_pct) || 0.05));
+    setLeadTimeDays(String(prod.lead_time_days || 2));
     setIsActive(prod.is_active);
     setCrudError(null);
     setCrudOpen(true);
@@ -412,8 +416,8 @@ export default function ProdukPage() {
                       </div>
                       <p className="mt-1 text-xs text-stone-500">
                         Lead Time Minimum:{" "}
-                        <strong>H-{prod.lead_time_days} hari</strong> · Waste
-                        Bahan: <strong>{formatPercent(prod.waste_pct)}</strong>
+                        <strong>H-{prod.lead_time_days || 2} hari</strong> · Waste
+                        Bahan: <strong>{formatPercent(prod.waste_pct || cost?.waste_pct || 0.05)}</strong>
                       </p>
                     </div>
 
@@ -481,7 +485,7 @@ export default function ProdukPage() {
                             Overhead
                           </span>
                           <span className="font-semibold text-stone-800">
-                            {formatRupiah(cost.overhead_per_unit)}
+                            {formatRupiah(cost.overhead_per_unit ?? cost.overhead_cost ?? prod.overhead_per_unit ?? prod.overhead_cost ?? 0)}
                           </span>
                         </div>
                       </div>

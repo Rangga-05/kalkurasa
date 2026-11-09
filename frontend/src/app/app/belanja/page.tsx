@@ -104,12 +104,7 @@ export default function BelanjaPage() {
       setSelectedIngredientId(item.ingredient_id);
       const recQty = toNumber(item.qty_buy_units);
       setQtyBuyUnits(recQty > 0 ? String(recQty) : "1");
-      if (!isStaff && item.estimated_cost !== undefined) {
-        const est = toNumber(item.estimated_cost);
-        setTotalCost(est > 0 ? String(Math.round(est)) : "");
-      } else {
-        setTotalCost("");
-      }
+      setTotalCost("");
     } else {
       const firstIng = ingredientsQuery.data?.[0];
       setSelectedIngredientId(firstIng?.id ?? "");
@@ -450,9 +445,6 @@ export default function BelanjaPage() {
                     Kekurangan (+Buffer)
                   </th>
                   <th className="px-3 py-3 text-right">Rekomendasi Beli</th>
-                  {!isStaff ? (
-                    <th className="px-3 py-3 text-right">Estimasi Biaya</th>
-                  ) : null}
                   <th className="px-4 py-3 text-right">Aksi</th>
                 </tr>
               </thead>
@@ -549,17 +541,6 @@ export default function BelanjaPage() {
                           <span className="text-stone-400">0 {item.buy_unit}</span>
                         )}
                       </td>
-
-                      {!isStaff ? (
-                        <td className="px-3 py-3 align-top text-right whitespace-nowrap">
-                          <div className="font-bold text-stone-900">
-                            {formatRupiah(item.estimated_cost)}
-                          </div>
-                          <div className="text-[11px] text-stone-500">
-                            @ {formatRupiah(item.buy_price)} / {item.buy_unit}
-                          </div>
-                        </td>
-                      ) : null}
 
                       <td className="px-4 py-3 align-top text-right whitespace-nowrap">
                         <Button

@@ -845,6 +845,7 @@ type ProductCostingDTO struct {
 	LaborMinutes        decimal.Decimal            `json:"labor_minutes"`
 	LaborCost           decimal.Decimal            `json:"labor_cost"`
 	OverheadCost        decimal.Decimal            `json:"overhead_cost"`
+	OverheadPerUnit     decimal.Decimal            `json:"overhead_per_unit"`
 	UnitCost            decimal.Decimal            `json:"unit_cost"`
 	PurchaseCostPerUnit decimal.Decimal            `json:"purchase_cost_per_unit"`
 	Margin              decimal.Decimal            `json:"margin"`
@@ -990,6 +991,7 @@ func GetProductsCosting(ctx context.Context, q db.DBTX) ([]ProductCostingDTO, er
 			LaborMinutes:        laborMin.Round(2),
 			LaborCost:           laborCost.Round(2),
 			OverheadCost:        pr.OverheadCost.Round(2),
+			OverheadPerUnit:     pr.OverheadCost.Round(2),
 			UnitCost:            unitCost.Round(2),
 			PurchaseCostPerUnit: purchaseCost.Round(2),
 			Margin:              margin.Round(4),
@@ -1218,6 +1220,7 @@ func (h *Handler) CashProjection(c *gin.Context) {
 type createCashEntryRequest struct {
 	EntryDate string           `json:"entry_date"`
 	Amount    *decimal.Decimal `json:"amount"`
+	Category  string           `json:"category"`
 	Note      string           `json:"note"`
 }
 
@@ -1245,6 +1248,14 @@ func (h *Handler) CreateCashEntry(c *gin.Context) {
 		v.Add("Nominal entri kas (amount) tidak boleh 0.")
 	}
 	note := v.OptStr("Catatan kas", req.Note, 300)
+	cat := strings.TrimSpace(req.Category)
+	if cat != "" {
+		if note == "" {
+			note = cat
+		} else if !strings.HasPrefix(note, "["+cat+"]") && !strings.HasPrefix(note, cat+":") {
+			note = "[" + cat + "] " + note
+		}
+	}
 	if !v.OK() {
 		v.Respond(c)
 		return

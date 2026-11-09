@@ -22,13 +22,16 @@ type Handler struct {
 
 // Product merepresentasikan baris tabel products.
 type Product struct {
-	ID            string          `json:"id"`
-	Name          string          `json:"name"`
-	Category      string          `json:"category"`
-	Price         decimal.Decimal `json:"price"`
-	PackagingCost decimal.Decimal `json:"packaging_cost"`
-	OverheadCost  decimal.Decimal `json:"overhead_cost"`
-	IsActive      bool            `json:"is_active"`
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Category        string          `json:"category"`
+	Price           decimal.Decimal `json:"price"`
+	PackagingCost   decimal.Decimal `json:"packaging_cost"`
+	OverheadCost    decimal.Decimal `json:"overhead_cost"`
+	OverheadPerUnit decimal.Decimal `json:"overhead_per_unit"`
+	WastePct        decimal.Decimal `json:"waste_pct"`
+	LeadTimeDays    int             `json:"lead_time_days"`
+	IsActive        bool            `json:"is_active"`
 }
 
 type productRequest struct {
@@ -61,13 +64,24 @@ func validateProductRequest(req productRequest) (Product, *httpx.Validation) {
 	if req.IsActive != nil {
 		active = *req.IsActive
 	}
+	leadDays := 2
+	if req.LeadTimeDays != nil && *req.LeadTimeDays >= 0 {
+		leadDays = *req.LeadTimeDays
+	}
+	waste := decimal.RequireFromString("0.05")
+	if req.WastePct != nil && !req.WastePct.IsNegative() {
+		waste = *req.WastePct
+	}
 	return Product{
-		Name:          name,
-		Category:      cat,
-		Price:         price,
-		PackagingCost: packaging,
-		OverheadCost:  overhead,
-		IsActive:      active,
+		Name:            name,
+		Category:        cat,
+		Price:           price,
+		PackagingCost:   packaging,
+		OverheadCost:    overhead,
+		OverheadPerUnit: overhead,
+		WastePct:        waste,
+		LeadTimeDays:    leadDays,
+		IsActive:        active,
 	}, v
 }
 
@@ -110,6 +124,9 @@ func (h *Handler) ListProducts(c *gin.Context) {
 			httpx.HandleError(c, err)
 			return
 		}
+		p.OverheadPerUnit = p.OverheadCost
+		p.WastePct = decimal.RequireFromString("0.05")
+		p.LeadTimeDays = 2
 		items = append(items, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -139,6 +156,9 @@ func (h *Handler) GetProduct(c *gin.Context) {
 		httpx.HandleError(c, err)
 		return
 	}
+	p.OverheadPerUnit = p.OverheadCost
+	p.WastePct = decimal.RequireFromString("0.05")
+	p.LeadTimeDays = 2
 
 	httpx.OK(c, p)
 }
@@ -171,6 +191,9 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		out.OverheadPerUnit = out.OverheadCost
+		out.WastePct = in.WastePct
+		out.LeadTimeDays = in.LeadTimeDays
 		return audit.Log(c.Request.Context(), tx, actor.ID, audit.ActionMaster, "products", out.ID, map[string]any{
 			"op":      "create",
 			"product": out,
@@ -217,6 +240,9 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		out.OverheadPerUnit = out.OverheadCost
+		out.WastePct = in.WastePct
+		out.LeadTimeDays = in.LeadTimeDays
 		return audit.Log(c.Request.Context(), tx, actor.ID, audit.ActionMaster, "products", out.ID, map[string]any{
 			"op":      "update",
 			"product": out,
