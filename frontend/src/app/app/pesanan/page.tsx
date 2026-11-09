@@ -39,6 +39,7 @@ import {
 } from "@/lib/types";
 import { exportOrdersToCSV } from "@/lib/export-csv";
 import { useToast } from "@/components/providers";
+import { Pagination } from "@/components/ui/pagination";
 
 const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "Semua Status" },
@@ -75,6 +76,8 @@ export default function OrdersListPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const ordersQuery = useQuery({
     queryKey: ["orders", statusFilter, dateFilter],
@@ -113,6 +116,12 @@ export default function OrdersListPage() {
       );
     });
   }, [orders, searchQuery]);
+
+  const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE) || 1;
+  const paginatedOrders = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredOrders.slice(start, start + PAGE_SIZE);
+  }, [filteredOrders, page, PAGE_SIZE]);
 
   // Modal buat pesanan manual
   const [showManualModal, setShowManualModal] = useState(false);
@@ -295,14 +304,20 @@ export default function OrdersListPage() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               placeholder="Cari kode pesanan (#DEMO...), nama pemesan, no. telepon, atau nama menu..."
               className="w-full rounded-xl border border-stone-200 bg-stone-50/70 py-2.5 pl-10 pr-10 text-xs font-medium text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
             {searchQuery && (
               <button
                 type="button"
-                onClick={() => setSearchQuery("")}
+                onClick={() => {
+                  setSearchQuery("");
+                  setPage(1);
+                }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-stone-400 hover:bg-stone-200 hover:text-stone-700"
                 title="Hapus pencarian"
               >
@@ -326,8 +341,11 @@ export default function OrdersListPage() {
                 <button
                   key={chip.label}
                   type="button"
-                  onClick={() => setSearchQuery(chip.query)}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                  onClick={() => {
+                    setSearchQuery(chip.query);
+                    setPage(1);
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
                     isActive
                       ? "bg-amber-600 text-white shadow-2xs"
                       : "bg-stone-100 text-stone-600 hover:bg-stone-200 hover:text-stone-900"
@@ -350,7 +368,10 @@ export default function OrdersListPage() {
             </label>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
               className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs font-medium text-stone-800 focus:border-amber-500 focus:bg-white focus:outline-none"
             >
               {STATUS_FILTER_OPTIONS.map((opt) => (
@@ -369,7 +390,10 @@ export default function OrdersListPage() {
             <input
               type="date"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                setPage(1);
+              }}
               className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs font-medium text-stone-800 focus:border-amber-500 focus:bg-white focus:outline-none"
             />
           </div>
@@ -381,8 +405,9 @@ export default function OrdersListPage() {
                 setStatusFilter("");
                 setDateFilter("");
                 setSearchQuery("");
+                setPage(1);
               }}
-              className="rounded-xl border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100"
+              className="rounded-xl border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 cursor-pointer"
             >
               Reset Semua Filter
             </button>
@@ -450,7 +475,7 @@ export default function OrdersListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 bg-white text-stone-800">
-                {filteredOrders.map((ord) => (
+                {paginatedOrders.map((ord) => (
                   <tr
                     key={ord.id}
                     className="transition hover:bg-stone-50/70"
@@ -521,6 +546,17 @@ export default function OrdersListPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="border-t border-stone-200 bg-stone-50/60 px-4 py-3">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={filteredOrders.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              itemName="pesanan"
+            />
           </div>
         </div>
       )}

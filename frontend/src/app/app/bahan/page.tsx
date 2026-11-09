@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/ui/pagination";
 import type { Ingredient, RoundingRule } from "@/lib/types";
 
 export default function BahanPage() {
@@ -44,6 +45,8 @@ export default function BahanPage() {
 
   const [search, setSearch] = useState("");
   const [onlyLowStock, setOnlyLowStock] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Modal CRUD Bahan
   const [crudOpen, setCrudOpen] = useState(false);
@@ -258,6 +261,12 @@ export default function BahanPage() {
     return true;
   });
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  const paginatedBahan = filtered.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -316,7 +325,10 @@ export default function BahanPage() {
               type="text"
               placeholder="Cari nama bahan baku..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="pl-9"
             />
           </div>
@@ -324,8 +336,11 @@ export default function BahanPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setOnlyLowStock((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              onClick={() => {
+                setOnlyLowStock((v) => !v);
+                setPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                 onlyLowStock
                   ? "border-rose-500 bg-rose-50 text-rose-800"
                   : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
@@ -373,7 +388,7 @@ export default function BahanPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-200 bg-white">
-                {filtered.map((ing) => (
+                {paginatedBahan.map((ing) => (
                   <tr
                     key={ing.id}
                     className={
@@ -493,6 +508,16 @@ export default function BahanPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="border-t border-stone-200 px-4 py-3 bg-stone-50/50">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              itemName="bahan baku"
+            />
           </div>
         </Card>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   PackagePlus,
   Printer,
   RefreshCw,
+  Search,
   Share2,
   ShoppingBag,
   ShoppingCart,
@@ -41,6 +42,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/ui/pagination";
 import type { ShoppingListItem } from "@/lib/types";
 
 export default function BelanjaPage() {
@@ -54,6 +56,12 @@ export default function BelanjaPage() {
 
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(defaultToStr);
+
+  // Pencarian, Filter & Paginasi
+  const [searchQuery, setSearchQuery] = useState("");
+  const [onlyNeedBuy, setOnlyNeedBuy] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   // Modal Catat Pembelian
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
@@ -146,12 +154,34 @@ export default function BelanjaPage() {
   };
 
   const data = shoppingQuery.data;
-  const items = data?.items ?? [];
+  const items = useMemo(() => data?.items ?? [], [data?.items]);
   const lowStockItems = data?.low_stock_items ?? [];
-  const needToBuyItems = items.filter((it) => toNumber(it.qty_buy_units) > 0);
+  const needToBuyItems = useMemo(
+    () => items.filter((it) => toNumber(it.qty_buy_units) > 0),
+    [items]
+  );
   const selectedIngObj = ingredientsQuery.data?.find(
     (i) => i.id === selectedIngredientId
   );
+
+  const filteredItems = useMemo(() => {
+    return items.filter((it) => {
+      if (onlyNeedBuy && toNumber(it.qty_buy_units) <= 0) return false;
+      if (
+        searchQuery.trim() &&
+        !it.ingredient_name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [items, onlyNeedBuy, searchQuery]);
+
+  const totalPages = Math.ceil(filteredItems.length / PAGE_SIZE) || 1;
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page, PAGE_SIZE]);
 
   const [copiedWa, setCopiedWa] = useState(false);
 
@@ -296,7 +326,10 @@ export default function BelanjaPage() {
                 id="filter-from"
                 type="date"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                onChange={(e) => {
+                  setFromDate(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full sm:w-44"
               />
             </div>
@@ -311,7 +344,10 @@ export default function BelanjaPage() {
                 id="filter-to"
                 type="date"
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => {
+                  setToDate(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full sm:w-44"
               />
             </div>
@@ -419,7 +455,7 @@ export default function BelanjaPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-stone-50 px-4 py-3">
+          <div className="flex flex-col gap-3 border-b border-stone-200 bg-stone-50/80 p-3.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-4 w-4 text-amber-800" />
               <h2 className="text-sm font-bold text-stone-900">
@@ -427,11 +463,93 @@ export default function BelanjaPage() {
                 {needToBuyItems.length} perlu dibeli)
               </h2>
             </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 sm:w-56">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                <Input
+                  type="text"
+                  placeholder="Cari bahan..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-8 pl-8 pr-7 text-xs bg-white"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setPage(1);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOnlyNeedBuy((v) => !v);
+                  setPage(1);
+                }}
+                className={`h-8 rounded-lg border px-2.5 text-xs font-semibold transition cursor-pointer ${
+                  onlyNeedBuy
+                    ? "border-amber-600 bg-amber-100 text-amber-900 font-bold"
+                    : "border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                }`}
+              >
+                Perlu Dibeli Saja ({needToBuyItems.length})
+              </button>
+
+              {(searchQuery || onlyNeedBuy) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setOnlyNeedBuy(false);
+                    setPage(1);
+                  }}
+                  className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50 cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Tampilan Mobile: Kartu Belanja Bebas Horisontal Scroll */}
-          <div className="space-y-3.5 p-3.5 sm:hidden">
-            {items.map((item) => {
+          {filteredItems.length === 0 ? (
+            <div className="p-8 text-center">
+              <Search className="mx-auto h-8 w-8 text-stone-400" />
+              <p className="mt-2 text-sm font-bold text-stone-800">
+                Tidak ada bahan yang cocok
+              </p>
+              <p className="mt-1 text-xs text-stone-500">
+                Coba ubah kata kunci pencarian atau matikan filter &ldquo;Perlu Dibeli Saja&rdquo;.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  setSearchQuery("");
+                  setOnlyNeedBuy(false);
+                  setPage(1);
+                }}
+              >
+                Tampilkan Semua Bahan
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Tampilan Mobile: Kartu Belanja Bebas Horisontal Scroll */}
+              <div className="space-y-3.5 p-3.5 sm:hidden">
+                {paginatedItems.map((item) => {
               const needBuy = toNumber(item.qty_buy_units) > 0;
               return (
                 <div
@@ -584,7 +702,7 @@ export default function BelanjaPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-200 bg-white">
-                {items.map((item) => {
+                {paginatedItems.map((item) => {
                   const needBuy = toNumber(item.qty_buy_units) > 0;
                   return (
                     <tr
@@ -694,8 +812,21 @@ export default function BelanjaPage() {
               </tbody>
             </table>
           </div>
-        </Card>
+
+          <div className="border-t border-stone-200 bg-stone-50/50 px-4 py-3">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={filteredItems.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              itemName="bahan"
+            />
+          </div>
+        </>
       )}
+    </Card>
+  )}
 
       {/* Modal Catat Pembelian Bahan */}
       {purchaseModalOpen ? (

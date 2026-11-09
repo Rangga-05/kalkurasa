@@ -44,6 +44,7 @@ import type {
 } from "@/lib/types";
 import { useToast } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/ui/pagination";
 import {
   Card,
   CardContent,
@@ -66,6 +67,8 @@ export default function StaffDashboardPage() {
   const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "">("");
   const [typeFilter, setTypeFilter] = useState<TaskType | "">("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   // State input actual_minutes per task ID
   const [minutesMap, setMinutesMap] = useState<Record<string, string>>({});
@@ -336,7 +339,10 @@ export default function StaffDashboardPage() {
             </button>
             <button
               type="button"
-              onClick={() => setDateFilter("")}
+              onClick={() => {
+                setDateFilter("");
+                setPage(1);
+              }}
               className={`rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
                 dateFilter === ""
                   ? "border-amber-500 bg-amber-50 text-amber-900"
@@ -354,7 +360,10 @@ export default function StaffDashboardPage() {
           </label>
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as TaskType | "")}
+            onChange={(e) => {
+              setTypeFilter(e.target.value as TaskType | "");
+              setPage(1);
+            }}
             className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/70 px-3 py-2 text-xs font-medium text-stone-800"
           >
             <option value="">Semua Jenis (Produksi, Antar, Belanja)</option>
@@ -370,7 +379,10 @@ export default function StaffDashboardPage() {
           </label>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as TaskStatus | "")}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as TaskStatus | "");
+              setPage(1);
+            }}
             className="mt-1 w-full rounded-xl border border-stone-200 bg-stone-50/70 px-3 py-2 text-xs font-medium text-stone-800"
           >
             <option value="">Semua Status</option>
@@ -414,19 +426,28 @@ export default function StaffDashboardPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {tasks.map((tk) => {
-            const Icon = getTaskIcon(tk.type);
-            const stMeta = TASK_STATUS_LABELS[tk.status] ?? {
-              label: tk.status,
-              tone: "slate",
-            };
-            const isBusy = busyTaskId === tk.id;
+          {(() => {
+            const totalPages = Math.ceil(tasks.length / PAGE_SIZE) || 1;
+            const paginatedTasks = tasks.slice(
+              (page - 1) * PAGE_SIZE,
+              page * PAGE_SIZE
+            );
 
             return (
-              <article
-                key={tk.id}
-                className="rounded-2xl border border-stone-200 bg-white p-5 shadow-xs"
-              >
+              <>
+                {paginatedTasks.map((tk) => {
+                  const Icon = getTaskIcon(tk.type);
+                  const stMeta = TASK_STATUS_LABELS[tk.status] ?? {
+                    label: tk.status,
+                    tone: "slate",
+                  };
+                  const isBusy = busyTaskId === tk.id;
+
+                  return (
+                    <article
+                      key={tk.id}
+                      className="rounded-2xl border border-stone-200 bg-white p-5 shadow-xs"
+                    >
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-100 pb-4">
                   <div className="flex items-start gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
@@ -654,8 +675,20 @@ export default function StaffDashboardPage() {
               </article>
             );
           })}
-        </div>
-      )}
+
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={tasks.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            itemName="tugas"
+          />
+        </>
+      );
+    })()}
+  </div>
+)}
 
       {/* ELEMEN 3 & 4: Jadwal Pengantaran Terurut & Peringatan Stok Menipis (Tanpa Harga) */}
       {dashboard ? (

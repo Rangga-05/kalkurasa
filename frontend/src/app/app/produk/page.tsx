@@ -82,6 +82,12 @@ export default function ProdukPage() {
   const [recipeModalLoading, setRecipeModalLoading] = useState(false);
   const [recipeModalError, setRecipeModalError] = useState<string | null>(null);
 
+  // Filter, Pencarian, & Paginasi
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 6;
+
   const productsQuery = useQuery({
     queryKey: ["products"],
     queryFn: ({ signal }) => getProducts(signal),
@@ -315,11 +321,33 @@ export default function ProdukPage() {
     }
   };
 
-  const products = productsQuery.data ?? [];
+  const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
   const costingMap = new Map<string, ProductCostingDTO>();
   for (const c of costingQuery.data ?? []) {
     costingMap.set(c.product_id, c);
   }
+
+  const filteredProducts = useMemo(() => {
+    return products.filter((prod) => {
+      if (categoryFilter !== "all") {
+        const normCat = normalizeProductCategoryValue(prod.category);
+        if (normCat !== categoryFilter) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = prod.name.toLowerCase().includes(q);
+        const matchCat = formatCategoryName(prod.category).toLowerCase().includes(q);
+        if (!matchName && !matchCat) return false;
+      }
+      return true;
+    });
+  }, [products, categoryFilter, searchQuery]);
+
+  const totalPages = Math.ceil(filteredProducts.length / PAGE_SIZE) || 1;
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredProducts.slice(start, start + PAGE_SIZE);
+  }, [filteredProducts, currentPage, PAGE_SIZE]);
 
   return (
     <div className="space-y-6">
@@ -372,6 +400,124 @@ export default function ProdukPage() {
         </div>
       </div>
 
+      {/* Toolbar Pencarian & Filter Kategori */}
+      {products.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-3.5 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+              <Input
+                type="text"
+                placeholder="Cari nama produk atau kategori..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-9 pr-9 text-xs sm:text-sm bg-stone-50/50 focus:bg-white"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+                  title="Hapus pencarian"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <Filter className="h-4 w-4 text-stone-500 shrink-0" />
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-xl border border-stone-200 bg-stone-50/80 px-3 py-2 text-xs font-semibold text-stone-800 focus:border-amber-500 focus:bg-white focus:outline-none"
+                >
+                  <option value="all">Semua Kategori ({products.length})</option>
+                  {PRODUCT_CATEGORY_OPTIONS.map((cat) => {
+                    const count = products.filter(
+                      (p) => normalizeProductCategoryValue(p.category) === cat.value
+                    ).length;
+                    return (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {(searchQuery || categoryFilter !== "all") && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setCategoryFilter("all");
+                    setCurrentPage(1);
+                  }}
+                  className="text-xs"
+                >
+                  Reset Filter
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setCategoryFilter("all");
+                setCurrentPage(1);
+              }}
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+                categoryFilter === "all"
+                  ? "bg-stone-900 text-white shadow-2xs"
+                  : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-100"
+              }`}
+            >
+              Semua ({products.length})
+            </button>
+            {PRODUCT_CATEGORY_OPTIONS.map((cat) => {
+              const count = products.filter(
+                (p) => normalizeProductCategoryValue(p.category) === cat.value
+              ).length;
+              if (count === 0) return null;
+              const isSelected = categoryFilter === cat.value;
+              return (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter(cat.value);
+                    setCurrentPage(1);
+                  }}
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+                    isSelected
+                      ? "bg-[#E05A47] text-white shadow-2xs"
+                      : "bg-white border border-stone-200 text-stone-700 hover:bg-stone-100"
+                  }`}
+                >
+                  {cat.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Daftar Produk & Costing */}
       {productsQuery.isLoading || costingQuery.isLoading ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -389,9 +535,34 @@ export default function ProdukPage() {
             Belum ada produk terdaftar.
           </p>
         </Card>
+      ) : filteredProducts.length === 0 ? (
+        <Card className="p-8 text-center">
+          <Search className="mx-auto h-10 w-10 text-stone-400" />
+          <p className="mt-2 text-sm font-bold text-stone-800">
+            Tidak ada produk yang cocok
+          </p>
+          <p className="mt-1 text-xs text-stone-500">
+            Tidak ditemukan produk dengan kata kunci &ldquo;{searchQuery}&rdquo;
+            {categoryFilter !== "all" ? ` pada kategori ini` : ""}.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={() => {
+              setSearchQuery("");
+              setCategoryFilter("all");
+              setCurrentPage(1);
+            }}
+          >
+            Reset Filter
+          </Button>
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          {products.map((prod) => {
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {paginatedProducts.map((prod) => {
             const cost = costingMap.get(prod.id);
             const marginNum = toNumber(cost?.margin);
             const minMarginNum = toNumber(cost?.min_margin);
@@ -562,6 +733,16 @@ export default function ProdukPage() {
               </Card>
             );
           })}
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredProducts.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            itemName="produk"
+          />
         </div>
       )}
 

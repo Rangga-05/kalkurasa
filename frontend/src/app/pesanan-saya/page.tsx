@@ -39,6 +39,7 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/ui/pagination";
 
 const ACTIVE_UNPAID_STATUSES = new Set([
   "pending_decision",
@@ -62,6 +63,8 @@ export default function MyOrdersPage() {
   const user = meQuery.data;
   const orders = useMemo(() => ordersQuery.data ?? [], [ordersQuery.data]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 5;
 
   const filteredOrders = useMemo(() => {
     const q = searchQuery.trim().toLowerCase().replace(/^#/, "");
@@ -80,6 +83,12 @@ export default function MyOrdersPage() {
       );
     });
   }, [orders, searchQuery]);
+
+  const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE) || 1;
+  const paginatedOrders = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredOrders.slice(start, start + PAGE_SIZE);
+  }, [filteredOrders, page, PAGE_SIZE]);
 
   const activeUnpaidCount = orders.filter(
     (o) =>
@@ -230,14 +239,20 @@ export default function MyOrdersPage() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Cari kode pesanan (#DEMO...) atau nama menu..."
                 className="w-full rounded-xl border border-stone-200 bg-white py-2.5 pl-10 pr-10 text-xs font-medium text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setPage(1);
+                  }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
                   title="Hapus pencarian"
                 >
@@ -257,14 +272,19 @@ export default function MyOrdersPage() {
                     variant="outline"
                     size="sm"
                     className="mt-3"
-                    onClick={() => setSearchQuery("")}
+                    onClick={() => {
+                      setSearchQuery("");
+                      setPage(1);
+                    }}
                   >
                     Hapus Pencarian
                   </Button>
                 </CardContent>
               </Card>
             ) : (
-              filteredOrders.map((order) => {
+              <>
+                <div className="space-y-4">
+                  {paginatedOrders.map((order) => {
               const statusMeta = getOrderStatusMeta(order.status);
               const totalNum = toNumber(order.total);
               const dpRequiredNum = toNumber(order.dp_required);
@@ -426,9 +446,21 @@ export default function MyOrdersPage() {
                   </CardContent>
                 </Card>
               );
-            }))}
+            })}
           </div>
-        )}
+
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={filteredOrders.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+            itemName="pesanan"
+          />
+        </>
+      )}
+    </div>
+  )}
       </main>
     </div>
   );

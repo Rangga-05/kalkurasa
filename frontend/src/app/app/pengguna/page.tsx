@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Loader2,
   Plus,
   RefreshCw,
+  Search,
   UserCheck,
   UserMinus,
   Users,
+  X,
 } from "lucide-react";
 import {
   createUser,
@@ -23,6 +25,7 @@ import { useInternalSession } from "@/components/internal/use-internal-session";
 import { ErrorState, TableSkeleton } from "@/components/ui/states";
 import { useToast } from "@/components/providers";
 import { Badge } from "@/components/ui/badge";
+import { Pagination } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,6 +45,12 @@ export default function UsersManagementPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Pencarian, Filter & Paginasi
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   // State form buat akun baru
   const [newName, setNewName] = useState("");
@@ -66,6 +75,25 @@ export default function UsersManagementPage() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      if (roleFilter && u.role !== roleFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = u.name.toLowerCase().includes(q);
+        const matchEmail = u.email.toLowerCase().includes(q);
+        if (!matchName && !matchEmail) return false;
+      }
+      return true;
+    });
+  }, [users, roleFilter, searchQuery]);
+
+  const totalPages = Math.ceil(filteredUsers.length / PAGE_SIZE) || 1;
+  const paginatedUsers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredUsers.slice(start, start + PAGE_SIZE);
+  }, [filteredUsers, page, PAGE_SIZE]);
 
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
@@ -277,27 +305,89 @@ export default function UsersManagementPage() {
 
       {/* Tabel Daftar Pengguna */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Users className="h-4 w-4 text-amber-700" />
             Daftar Akun Terdaftar ({users.length})
           </CardTitle>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 sm:w-52">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+              <Input
+                type="text"
+                placeholder="Cari nama atau email..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+                className="h-8 pl-8 pr-7 text-xs bg-stone-50/50"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setPage(1);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            <select
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 rounded-lg border border-stone-200 bg-stone-50/50 px-2.5 text-xs font-semibold text-stone-700 focus:outline-none"
+            >
+              <option value="">Semua Peran</option>
+              <option value="owner">Owner</option>
+              <option value="manager">Manager</option>
+              <option value="staff">Staff</option>
+              <option value="admin">Admin</option>
+            </select>
+
+            {(searchQuery || roleFilter) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setRoleFilter("");
+                  setPage(1);
+                }}
+                className="h-8 rounded-lg border border-stone-200 px-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-stone-200 text-stone-500">
-                  <th className="py-2.5 pr-3 font-semibold">Nama</th>
-                  <th className="px-3 py-2.5 font-semibold">Email</th>
-                  <th className="px-3 py-2.5 font-semibold">Peran</th>
-                  <th className="px-3 py-2.5 font-semibold">Status</th>
-                  <th className="px-3 py-2.5 font-semibold">Terdaftar</th>
-                  <th className="py-2.5 pl-3 text-right font-semibold">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {users.map((u) => {
+          {filteredUsers.length === 0 ? (
+            <div className="py-8 text-center text-xs text-stone-500">
+              Tidak ada akun yang cocok dengan filter pencarian.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200 text-stone-500">
+                    <th className="py-2.5 pr-3 font-semibold">Nama</th>
+                    <th className="px-3 py-2.5 font-semibold">Email</th>
+                    <th className="px-3 py-2.5 font-semibold">Peran</th>
+                    <th className="px-3 py-2.5 font-semibold">Status</th>
+                    <th className="px-3 py-2.5 font-semibold">Terdaftar</th>
+                    <th className="py-2.5 pl-3 text-right font-semibold">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {paginatedUsers.map((u) => {
                   const isSelf = currentUser?.id === u.id;
                   const isBusy = busyId === u.id;
                   return (
@@ -378,7 +468,17 @@ export default function UsersManagementPage() {
               </tbody>
             </table>
           </div>
-        </CardContent>
+        )}
+
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={filteredUsers.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          itemName="pengguna"
+        />
+      </CardContent>
       </Card>
     </div>
   );
