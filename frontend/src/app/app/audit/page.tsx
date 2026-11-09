@@ -68,6 +68,28 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "public", label: "Publik / Sistem Otomatis" },
 ];
 
+function formatDetailSummary(val: unknown): string {
+  if (val === null || val === undefined) return "-";
+  if (typeof val === "object") {
+    const record = val as Record<string, unknown>;
+    if (typeof record.name === "string" && record.name) {
+      return record.name;
+    }
+    if (typeof record.code === "string" && record.code) {
+      return `#${record.code}`;
+    }
+    if (typeof record.title === "string" && record.title) {
+      return record.title;
+    }
+    const str = JSON.stringify(val);
+    if (str.length > 36) {
+      return `${str.slice(0, 34)}…`;
+    }
+    return str;
+  }
+  return String(val);
+}
+
 export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
@@ -345,9 +367,9 @@ export default function AuditLogPage() {
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 overflow-hidden">
             {/* Tampilan Mobile: Feed Kartu Audit Bebas Geser Horisontal */}
-            <div className="space-y-3 sm:hidden">
+            <div className="space-y-3 sm:hidden w-full max-w-full overflow-hidden">
               {displayedItems.map((log) => {
                 const isExpanded = expandedId === log.id;
                 const overrideReason =
@@ -366,7 +388,7 @@ export default function AuditLogPage() {
                 return (
                   <div
                     key={`mobile-${log.id}`}
-                    className={`rounded-2xl border-2 border-[#12100E] p-3.5 text-xs transition-all shadow-[3px_3px_0px_#12100E] ${
+                    className={`overflow-hidden rounded-2xl border-2 border-[#12100E] p-3.5 text-xs transition-all shadow-[3px_3px_0px_#12100E] ${
                       log.action === "override" || log.action === "cancel"
                         ? "bg-rose-50/70"
                         : "bg-white"
@@ -392,12 +414,12 @@ export default function AuditLogPage() {
 
                     {/* Pelaku & Entitas */}
                     <div className="mt-2.5 flex items-start justify-between gap-2">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <span className="block text-[10px] font-bold uppercase text-stone-400">
                           Pelaku
                         </span>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span className="font-bold text-stone-900">
+                          <span className="font-bold text-stone-900 truncate">
                             {log.actor_name || "Publik / Sistem"}
                           </span>
                           {log.actor_role && (
@@ -408,7 +430,7 @@ export default function AuditLogPage() {
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <span className="block text-[10px] font-bold uppercase text-stone-400">
                           Entitas
                         </span>
@@ -430,7 +452,7 @@ export default function AuditLogPage() {
                     {overrideReason && (
                       <div className="mt-2.5 flex items-start gap-1.5 rounded-xl border border-rose-200 bg-rose-100/70 p-2.5 text-[11px] text-rose-950">
                         <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" />
-                        <div>
+                        <div className="break-words">
                           <strong>Alasan Override:</strong> {overrideReason}
                           {initialRec && (
                             <span className="ml-1 text-rose-800">
@@ -442,20 +464,22 @@ export default function AuditLogPage() {
                     )}
 
                     {/* Ringkasan Data Detail */}
-                    <div className="mt-2 rounded-xl bg-stone-50 p-2.5 font-mono text-[10px] text-stone-700">
-                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <div className="mt-2 overflow-hidden rounded-xl bg-stone-50 p-2.5 font-mono text-[10px] text-stone-700">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 overflow-hidden">
                         {Object.entries(log.detail ?? {})
-                          .slice(0, 3)
+                          .slice(0, 4)
                           .map(([k, v]) => (
-                            <span key={k}>
+                            <span key={k} className="inline-block max-w-full break-all whitespace-normal">
                               <strong className="text-stone-900">{k}:</strong>{" "}
-                              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                              <span className="text-stone-700">
+                                {formatDetailSummary(v)}
+                              </span>
                             </span>
                           ))}
                       </div>
 
                       {isExpanded && (
-                        <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-stone-200 bg-stone-900 p-2 text-[10px] text-amber-100">
+                        <pre className="mt-2.5 max-h-56 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-stone-200 bg-stone-900 p-2 text-[10px] text-amber-100">
                           {JSON.stringify(log.detail, null, 2)}
                         </pre>
                       )}
@@ -580,19 +604,17 @@ export default function AuditLogPage() {
                             {Object.entries(log.detail ?? {})
                               .slice(0, 4)
                               .map(([k, v]) => (
-                                <span key={k} className="mr-3 inline-block">
+                                <span key={k} className="mr-3 inline-block max-w-full break-all whitespace-normal">
                                   <strong className="text-stone-700">
                                     {k}:
                                   </strong>{" "}
-                                  {typeof v === "object"
-                                    ? JSON.stringify(v)
-                                    : String(v)}
+                                  <span>{formatDetailSummary(v)}</span>
                                 </span>
                               ))}
                           </div>
 
                           {isExpanded ? (
-                            <pre className="mt-2 max-h-56 overflow-auto rounded-xl border border-stone-200 bg-stone-900 p-3 font-mono text-[11px] text-amber-100">
+                            <pre className="mt-2 max-h-56 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-stone-200 bg-stone-900 p-3 font-mono text-[11px] text-amber-100">
                               {JSON.stringify(log.detail, null, 2)}
                             </pre>
                           ) : null}

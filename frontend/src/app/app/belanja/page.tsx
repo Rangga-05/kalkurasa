@@ -547,8 +547,8 @@ export default function BelanjaPage() {
             </div>
           ) : (
             <>
-              {/* Tampilan Mobile: Kartu Belanja Bebas Horisontal Scroll */}
-              <div className="space-y-3.5 p-3.5 sm:hidden">
+              {/* Tampilan Mobile & Tablet: Kartu Belanja Bebas Horisontal Scroll */}
+              <div className="space-y-3.5 p-3.5 md:hidden">
                 {paginatedItems.map((item) => {
               const needBuy = toNumber(item.qty_buy_units) > 0;
               return (
@@ -579,14 +579,14 @@ export default function BelanjaPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge
                         variant={item.rounding_rule === "pack" ? "amber" : "slate"}
-                        className="text-[10px]"
+                        className="text-[10px] whitespace-nowrap shrink-0"
                       >
                         {item.rounding_rule === "pack"
                           ? `Kemasan Utuh (1 ${item.buy_unit} = ${formatNumber(item.buy_unit_size)} ${item.use_unit})`
                           : `Curah / Loose (${item.use_unit})`}
                       </Badge>
                       {item.below_min_stock ? (
-                        <Badge variant="rose" className="text-[10px]">
+                        <Badge variant="rose" className="text-[10px] whitespace-nowrap shrink-0">
                           Di Bawah Stok Min ({formatNumber(item.min_stock)} {item.use_unit})
                         </Badge>
                       ) : null}
@@ -685,12 +685,12 @@ export default function BelanjaPage() {
             })}
           </div>
 
-          {/* Tampilan Tablet & Desktop: Tabel Rinci */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full min-w-[700px] text-left text-xs">
+          {/* Tampilan Desktop & Layar Lebar: Tabel Rinci */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full min-w-[860px] text-left text-xs">
               <thead className="border-b border-stone-200 bg-stone-100/80 text-[11px] font-semibold uppercase tracking-wider text-stone-600">
                 <tr>
-                  <th className="min-w-44 px-4 py-3">Bahan Baku</th>
+                  <th className="w-64 min-w-[220px] px-4 py-3">Bahan Baku</th>
                   <th className="px-3 py-3">Jadwal Beli</th>
                   <th className="px-3 py-3 text-right">Kebutuhan Resep</th>
                   <th className="px-3 py-3 text-right">Stok Saat Ini</th>
@@ -711,7 +711,7 @@ export default function BelanjaPage() {
                         needBuy ? "bg-amber-50/25 hover:bg-amber-50/50" : "hover:bg-stone-50"
                       }
                     >
-                      <td className="px-4 py-3 align-top">
+                      <td className="w-64 min-w-[220px] px-4 py-3 align-top">
                         <div className="font-semibold text-stone-900">
                           {item.ingredient_name}
                         </div>
@@ -720,14 +720,14 @@ export default function BelanjaPage() {
                             variant={
                               item.rounding_rule === "pack" ? "amber" : "slate"
                             }
-                            className="text-[10px]"
+                            className="text-[10px] whitespace-nowrap shrink-0"
                           >
                             {item.rounding_rule === "pack"
                               ? `Kemasan Utuh (1 ${item.buy_unit} = ${formatNumber(item.buy_unit_size)} ${item.use_unit})`
                               : `Curah / Loose (${item.use_unit})`}
                           </Badge>
                           {item.below_min_stock ? (
-                            <Badge variant="rose" className="text-[10px]">
+                            <Badge variant="rose" className="text-[10px] whitespace-nowrap shrink-0">
                               Di Bawah Stok Min ({formatNumber(item.min_stock)}{" "}
                               {item.use_unit})
                             </Badge>
