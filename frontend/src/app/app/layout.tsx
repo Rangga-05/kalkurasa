@@ -144,6 +144,7 @@ export default function InternalAppLayout({
   const meQuery = useQuery({
     queryKey: ["auth-me"],
     queryFn: ({ signal }) => getMe(signal),
+    staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
 
@@ -233,6 +234,7 @@ export default function InternalAppLayout({
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true}
                   className={cn(
                     "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                     active
@@ -327,6 +329,7 @@ export default function InternalAppLayout({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={true}
                     className={cn(
                       "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium",
                       active
