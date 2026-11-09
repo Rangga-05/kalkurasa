@@ -4,6 +4,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -57,6 +58,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
+  // Pastikan class dark sisa sesi lama dibersihkan sepenuhnya
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.remove("dark");
+    }
+    try {
+      window.localStorage.removeItem("kalkurasa-theme");
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const dismiss = useCallback((id: string) => {
@@ -102,33 +115,30 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <div
           aria-live="polite"
           aria-atomic="true"
-          className="pointer-events-none fixed right-3 bottom-3 z-50 flex w-full max-w-sm flex-col gap-2 px-3 sm:right-5 sm:bottom-5 sm:px-0"
+          className="pointer-events-none fixed right-3 bottom-3 z-50 flex w-full max-w-sm flex-col gap-2.5 px-3 sm:right-5 sm:bottom-5 sm:px-0"
         >
           {toasts.map((t) => (
             <div
               key={t.id}
               role="status"
               className={cn(
-                "pointer-events-auto flex items-start gap-3 rounded-xl border p-3.5 shadow-lg backdrop-blur-sm",
-                t.variant === "success" &&
-                  "border-emerald-200 bg-emerald-50/95 text-emerald-950",
-                t.variant === "error" &&
-                  "border-rose-200 bg-rose-50/95 text-rose-950",
-                t.variant === "info" &&
-                  "border-slate-200 bg-white/95 text-slate-900"
+                "pointer-events-auto flex items-start gap-3 rounded-2xl border-2 border-[#12100E] p-4 shadow-[4px_4px_0px_#12100E] transition-all",
+                t.variant === "success" && "bg-[#ECFCCB] text-[#12100E]",
+                t.variant === "error" && "bg-[#FFE4E6] text-[#9F1239]",
+                t.variant === "info" && "bg-[#FFFDF9] text-[#12100E]"
               )}
             >
               {t.variant === "success" ? (
-                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#15803D]" />
               ) : t.variant === "error" ? (
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#BE123C]" />
               ) : (
-                <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#C2410C]" />
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{t.title}</p>
+                <p className="text-sm font-extrabold">{t.title}</p>
                 {t.description ? (
-                  <p className="mt-0.5 text-xs leading-relaxed opacity-90">
+                  <p className="mt-0.5 text-xs font-medium leading-relaxed opacity-90">
                     {t.description}
                   </p>
                 ) : null}
@@ -136,7 +146,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
-                className="rounded-md p-1 opacity-70 hover:bg-black/5 hover:opacity-100"
+                className="rounded-lg p-1.5 opacity-75 transition-opacity hover:bg-black/5 hover:opacity-100"
                 aria-label="Tutup notifikasi"
               >
                 <X className="h-4 w-4" />
@@ -148,4 +158,3 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   );
 }
-

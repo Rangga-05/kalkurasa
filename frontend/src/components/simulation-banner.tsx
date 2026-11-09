@@ -11,7 +11,7 @@ export function SimulationBanner() {
         <FlaskConical className="h-3.5 w-3.5 shrink-0 text-amber-700" />
         <span className="font-semibold">Data simulasi</span>
         <span className="hidden text-amber-800/80 sm:inline">
-          — Lingkungan demonstrasi sistem manajemen pesanan &amp; kapasitas UMKM
+          · Lingkungan demonstrasi sistem manajemen pesanan &amp; kapasitas UMKM
           kuliner (GTNIC 2026).
         </span>
       </div>

@@ -302,7 +302,7 @@ export default function TrackOrderDetailPage({
                   <div className="flex items-center gap-2 text-amber-900">
                     <AlertTriangle className="h-5 w-5 shrink-0 text-amber-700" />
                     <CardTitle className="text-base sm:text-lg">
-                      Tawaran Balik dari Kalkurasa — Menunggu Keputusan Anda
+                      Tawaran Balik dari Kalkurasa : Menunggu Keputusan Anda
                     </CardTitle>
                   </div>
                   <CardDescription className="text-amber-900/80">

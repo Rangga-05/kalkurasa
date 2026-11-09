@@ -70,7 +70,7 @@ const INTERNAL_NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/app/pesanan",
-    label: "Pesanan",
+    label: "Pesanan Dapur",
     icon: ClipboardList,
     roles: ["owner", "manager", "staff", "admin"],
   },
@@ -94,7 +94,7 @@ const INTERNAL_NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/app/kas",
-    label: "Proyeksi Kas",
+    label: "Proyeksi Kas 14 Hari",
     icon: Wallet,
     roles: ["owner", "manager"],
   },
@@ -173,6 +173,15 @@ export default function InternalAppLayout({
     setMobileMenuOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
+
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
@@ -192,23 +201,27 @@ export default function InternalAppLayout({
     : [];
 
   return (
-    <div className="flex flex-1 bg-stone-100/70 print:bg-white print:block">
-      {/* Sidebar Desktop */}
-      <aside className="sticky top-0 hidden h-screen max-h-screen w-64 shrink-0 flex-col border-r border-stone-200 bg-white lg:flex print:hidden">
-        <div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-5 py-4">
+    <div className="flex flex-1 bg-[var(--bg-canvas)] print:block print:bg-white">
+      {/* Sidebar Desktop Cast-Iron Espresso / Surface */}
+      <aside className="sticky top-0 hidden h-screen max-h-screen w-68 shrink-0 flex-col border-r border-[var(--border-warm)] bg-[var(--bg-surface)] lg:flex print:hidden">
+        <div className="flex shrink-0 items-center justify-between border-b-2 border-[#12100E] px-5 py-4">
           <Link
             href={user ? getDashboardPathForRole(user.role) : "/app"}
-            className="flex items-center gap-2.5 text-stone-900"
+            className="flex min-w-0 items-center gap-3 text-[#12100E]"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-700 text-white">
-              <ChefHat className="h-4 w-4" />
-            </div>
-            <div>
-              <span className="block text-base font-bold tracking-tight">
+            <img
+              src="/assets/illustrations/logo-mark.svg"
+              alt="Logo Kalkurasa"
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0 rounded-full border-2 border-[#12100E] bg-[#FFEDD5] shadow-[2px_2px_0px_#12100E]"
+            />
+            <div className="min-w-0">
+              <span className="font-display block truncate text-base font-extrabold tracking-tight uppercase">
                 Kalkurasa
               </span>
-              <span className="block text-[11px] text-stone-500">
-                Portal Operasional
+              <span className="block truncate text-[11px] font-bold text-[#5C5046]">
+                Kendali Operasional Dapur
               </span>
             </div>
           </Link>
@@ -216,12 +229,12 @@ export default function InternalAppLayout({
 
         <nav
           aria-label="Menu navigasi internal"
-          className="flex-1 space-y-1 overflow-y-auto px-3 py-4"
+          className="flex-1 space-y-1 overflow-y-auto px-3.5 py-4"
         >
           {meQuery.isLoading ? (
             <div className="space-y-2 px-2">
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-9 w-full" />
+                <Skeleton key={i} className="h-10 w-full rounded-xl" />
               ))}
             </div>
           ) : (
@@ -236,13 +249,13 @@ export default function InternalAppLayout({
                   href={item.href}
                   prefetch={true}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    "btn-tactile flex min-h-[40px] items-center gap-2.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all",
                     active
-                      ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
-                      : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+                      ? "bg-[#C2410C] text-white shadow-xs"
+                      : "text-[var(--ink-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--ink-primary)]"
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="truncate">{item.label}</span>
                 </Link>
               );
@@ -250,28 +263,30 @@ export default function InternalAppLayout({
           )}
         </nav>
 
-        <div className="shrink-0 border-t border-stone-200 bg-white p-4 space-y-3">
+        <div className="shrink-0 space-y-3 border-t border-[var(--border-warm)] bg-[var(--bg-surface)] p-4">
           {user ? (
-            <div className="rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200/80">
-              <p className="truncate text-sm font-semibold text-stone-900">
-                {user.name}
+            <div className="rounded-2xl border border-[var(--border-warm)] bg-[var(--bg-subtle)]/80 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-bold text-[var(--ink-primary)]">
+                  {user.name}
+                </p>
+                <Badge variant="default">{ROLE_LABELS[user.role]}</Badge>
+              </div>
+              <p className="mt-0.5 truncate font-mono text-xs text-[var(--ink-muted)]">
+                {user.email}
               </p>
-              <p className="truncate text-xs text-stone-500">{user.email}</p>
-              <Badge variant="amber" className="mt-1.5">
-                {ROLE_LABELS[user.role]}
-              </Badge>
             </div>
           ) : (
-            <Skeleton className="h-16 w-full rounded-xl" />
+            <Skeleton className="h-16 w-full rounded-2xl" />
           )}
 
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <Link
               href="/"
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+              className="btn-tactile inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--ink-primary)] hover:border-[#C2410C]"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Lihat Halaman Publik
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              Lihat Katalog Publik
             </Link>
             <Button
               type="button"
@@ -279,10 +294,10 @@ export default function InternalAppLayout({
               size="sm"
               disabled={logoutMutation.isPending}
               onClick={() => logoutMutation.mutate()}
-              className="w-full gap-1.5 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+              className="w-full gap-1.5 border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/50"
             >
-              <LogOut className="h-3.5 w-3.5" />
-              {logoutMutation.isPending ? "Keluar..." : "Keluar"}
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              {logoutMutation.isPending ? "Keluar..." : "Keluar Sesi"}
             </Button>
           </div>
         </div>
@@ -290,36 +305,48 @@ export default function InternalAppLayout({
 
       {/* Konten Utama + Header Mobile */}
       <div className="flex min-w-0 flex-1 flex-col print:block print:w-full">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-stone-200 bg-white/95 px-4 py-3 backdrop-blur-sm lg:hidden print:hidden">
-          <div className="flex items-center gap-2">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-[var(--border-warm)] bg-[var(--bg-surface)]/95 px-4 py-3 backdrop-blur-md lg:hidden print:hidden">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
-              className="rounded-lg border border-stone-200 p-2 text-stone-700 hover:bg-stone-100"
-              aria-label="Buka menu navigasi"
+              aria-expanded={mobileMenuOpen}
+              aria-controls="internal-mobile-drawer"
+              aria-label={
+                mobileMenuOpen
+                  ? "Tutup menu navigasi internal"
+                  : "Buka menu navigasi internal"
+              }
+              className="btn-tactile inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-bold text-[var(--ink-primary)]"
             >
               {mobileMenuOpen ? (
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" aria-hidden="true" />
               ) : (
-                <Menu className="h-5 w-5" />
+                <Menu className="h-4 w-4" aria-hidden="true" />
               )}
+              <span>Menu</span>
             </button>
-            <span className="text-base font-bold text-stone-900">
+            <span className="font-display text-base font-bold text-[var(--ink-primary)]">
               Kalkurasa
             </span>
           </div>
 
-          {user ? (
-            <Badge variant="amber" className="text-[11px]">
-              {ROLE_LABELS[user.role]}
-            </Badge>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {user ? (
+              <Badge variant="default" className="text-[11px]">
+                {ROLE_LABELS[user.role]}
+              </Badge>
+            ) : null}
+          </div>
         </header>
 
         {/* Drawer Navigasi Mobile */}
         {mobileMenuOpen ? (
-          <div className="border-b border-stone-200 bg-white px-4 py-4 shadow-md lg:hidden print:hidden">
-            <nav className="space-y-1">
+          <div
+            id="internal-mobile-drawer"
+            className="border-b border-[var(--border-warm)] bg-[var(--bg-surface)] px-4 py-4 shadow-xl lg:hidden print:hidden"
+          >
+            <nav aria-label="Menu internal mobile" className="space-y-1.5">
               {filteredNav.map((item) => {
                 const Icon = item.icon;
                 const active =
@@ -331,30 +358,30 @@ export default function InternalAppLayout({
                     href={item.href}
                     prefetch={true}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium",
+                      "flex min-h-[44px] items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-semibold",
                       active
-                        ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
-                        : "text-stone-700 hover:bg-stone-100"
+                        ? "bg-[#C2410C] text-white"
+                        : "text-[var(--ink-primary)] hover:bg-[var(--bg-subtle)]"
                     )}
                   >
-                    <Icon className="h-4 w-4 shrink-0" />
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span>{item.label}</span>
                   </Link>
                 );
               })}
             </nav>
 
-            <div className="mt-4 flex flex-col gap-2 border-t border-stone-200 pt-3">
+            <div className="mt-4 flex flex-col gap-2.5 border-t border-[var(--border-warm)] pt-3.5">
               {user ? (
-                <p className="text-xs text-stone-600">
+                <p className="text-xs text-[var(--ink-secondary)]">
                   Masuk sebagai <strong>{user.name}</strong> ({user.email})
                 </p>
               ) : null}
-              <div className="flex gap-2">
-                <Link href="/" className="flex-1">
-                  <Button variant="outline" size="sm" className="w-full gap-1">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    Halaman Publik
+              <div className="grid grid-cols-2 gap-2.5">
+                <Link href="/">
+                  <Button variant="outline" size="sm" className="w-full gap-1.5">
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    Katalog Publik
                   </Button>
                 </Link>
                 <Button
@@ -363,9 +390,9 @@ export default function InternalAppLayout({
                   size="sm"
                   disabled={logoutMutation.isPending}
                   onClick={() => logoutMutation.mutate()}
-                  className="flex-1 gap-1 text-rose-700"
+                  className="w-full gap-1.5 border-rose-300 text-rose-700"
                 >
-                  <LogOut className="h-3.5 w-3.5" />
+                  <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                   Keluar
                 </Button>
               </div>
@@ -373,14 +400,14 @@ export default function InternalAppLayout({
           </div>
         ) : null}
 
-        <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8 print:p-0 print:max-w-none print:w-full">
+        <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8 print:max-w-none print:w-full print:p-0">
           {meQuery.isLoading || (meQuery.isError && isAuthError) ? (
             <div className="space-y-4">
               <Skeleton className="h-8 w-64" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Skeleton className="h-36 w-full rounded-xl" />
-                <Skeleton className="h-36 w-full rounded-xl" />
-                <Skeleton className="h-36 w-full rounded-xl" />
+                <Skeleton className="h-36 w-full rounded-2xl" />
+                <Skeleton className="h-36 w-full rounded-2xl" />
+                <Skeleton className="h-36 w-full rounded-2xl" />
               </div>
             </div>
           ) : meQuery.isError ? (
@@ -416,4 +443,3 @@ export default function InternalAppLayout({
     </div>
   );
 }
-

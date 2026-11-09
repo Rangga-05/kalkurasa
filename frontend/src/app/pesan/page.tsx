@@ -49,6 +49,7 @@ import {
   toNumber,
 } from "@/lib/format";
 import { PublicNavbar } from "@/components/public-navbar";
+import { getProductVisualMeta } from "@/lib/product-visuals";
 import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -545,7 +546,7 @@ function OrderFormContent() {
                     <strong>Langkah berikutnya:</strong> Anda{" "}
                     <u>belum perlu mentransfer DP sekarang</u>. Begitu tim kami
                     menyetujui jadwalnya, status pesanan akan berubah menjadi{" "}
-                    <strong>Disetujui — Menunggu DP</strong> (atau kami akan
+                    <strong>Disetujui : Menunggu DP</strong> (atau kami akan
                     mengirimkan saran tanggal alternatif jika jadwal penuh).
                   </p>
                 </div>
@@ -798,6 +799,12 @@ function OrderFormContent() {
                   const selectedPid = watchedItems?.[index]?.product_id ?? "";
                   const selectedQty = Number(watchedItems?.[index]?.qty ?? 0);
                   const prodInfo = productMap.get(selectedPid);
+                  const prodVisual = prodInfo
+                    ? getProductVisualMeta({
+                        name: prodInfo.name,
+                        category: prodInfo.category,
+                      })
+                    : null;
                   const lineSubtotal =
                     prodInfo && selectedQty > 0
                       ? prodInfo.price * selectedQty
@@ -806,8 +813,36 @@ function OrderFormContent() {
                   return (
                     <div
                       key={field.id}
-                      className="rounded-xl border border-stone-200 bg-stone-50/60 p-3.5"
+                      style={{
+                        backgroundColor: prodVisual
+                          ? prodVisual.stageBg
+                          : undefined,
+                      }}
+                      className="rounded-3xl border-2 border-[#12100E] bg-[var(--bg-subtle)] p-4 text-[#12100E] shadow-[4px_4px_0px_#12100E]"
                     >
+                      {prodInfo && prodVisual ? (
+                        <div className="mb-3 flex items-center gap-3.5 rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] p-2.5 shadow-[3px_3px_0px_#12100E]">
+                          <img
+                            src={prodVisual.illustration}
+                            alt={prodInfo.name}
+                            width={84}
+                            height={64}
+                            className="h-14 w-20 shrink-0 rounded-xl border border-[#12100E] object-cover"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-display truncate text-sm font-extrabold text-[#12100E]">
+                              {prodInfo.name}
+                            </p>
+                            <p className="font-mono-num text-xs font-bold text-[#3D352E]">
+                              🔥 Oven {prodVisual.ovenHoursPerUnit}j/unit · ⏱️ Tim{" "}
+                              {prodVisual.laborMinsPerUnit}m/unit
+                            </p>
+                          </div>
+                          <Badge variant="emerald">
+                            {formatCategoryName(prodInfo.category)}
+                          </Badge>
+                        </div>
+                      ) : null}
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
                         <div className="space-y-1.5 sm:col-span-7">
                           <Label htmlFor={`item-product-${index}`}>
@@ -816,9 +851,9 @@ function OrderFormContent() {
                           <select
                             id={`item-product-${index}`}
                             {...form.register(`items.${index}.product_id`)}
-                            className="flex h-10 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus-visible:border-amber-700 focus-visible:ring-2 focus-visible:ring-amber-600/20 focus-visible:outline-none"
+                            className="flex min-h-[44px] sm:min-h-[40px] w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--ink-primary)] focus-visible:border-[#C2410C] focus-visible:ring-2 focus-visible:ring-[#C2410C]/20 focus-visible:outline-none"
                           >
-                            <option value="">— Pilih produk —</option>
+                            <option value="">Pilih produk menu...</option>
                             {(productsQuery.data ?? []).map((p) => (
                               <option key={p.id} value={p.id}>
                                 {p.name} ({formatRupiah(p.price)} / unit ·{" "}

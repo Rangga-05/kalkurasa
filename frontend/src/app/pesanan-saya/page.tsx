@@ -150,7 +150,7 @@ export default function MyOrdersPage() {
               Setiap pelanggan dapat memiliki maksimal{" "}
               <strong>2 pesanan aktif yang belum melunasi DP</strong> (status{" "}
               <em>Menunggu Konfirmasi</em>, <em>Ada Tawaran Balik</em>, atau{" "}
-              <em>Disetujui — Menunggu DP</em>). Setelah DP terverifikasi, Anda
+              <em>Disetujui : Menunggu DP</em>). Setelah DP terverifikasi, Anda
               dapat membuat pesanan baru kembali.
             </div>
           </div>
@@ -419,7 +419,7 @@ export default function MyOrdersPage() {
                         Pesanan Anda sedang ditinjau oleh Manajer/Pemilik usaha
                         (belum perlu membayar DP sekarang). Anda akan melihat
                         status berubah menjadi{" "}
-                        <strong>Disetujui — Menunggu DP</strong> atau{" "}
+                        <strong>Disetujui : Menunggu DP</strong> atau{" "}
                         <strong>Ada Tawaran Balik</strong> setelah ditinjau.
                       </CardDescription>
                     ) : null}

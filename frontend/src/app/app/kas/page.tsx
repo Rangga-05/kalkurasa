@@ -186,12 +186,12 @@ export default function KasPage() {
               <div className="mt-2">
                 <Badge variant={data.passed ? "emerald" : "rose"}>
                   {data.passed
-                    ? "LOLOS — Di Atas Penyangga"
-                    : "RAWAN — Di Bawah Penyangga"}
+                    ? "Lolos : Di Atas Penyangga"
+                    : "Rawan : Di Bawah Penyangga"}
                 </Badge>
               </div>
               <p className="mt-2 text-xs text-stone-600">
-                Rentang {formatDateShort(data.from)} – {formatDateShort(data.to)}{" "}
+                Rentang {formatDateShort(data.from)} s.d. {formatDateShort(data.to)}{" "}
                 ({data.horizon_days} hari)
               </p>
             </Card>

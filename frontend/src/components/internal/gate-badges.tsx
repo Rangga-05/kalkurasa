@@ -43,7 +43,7 @@ export function GateBadges({
       className={
         compact
           ? "grid grid-cols-2 gap-2 sm:grid-cols-4"
-          : "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4"
+          : "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
       }
     >
       {gates.map((g) => {
@@ -55,10 +55,10 @@ export function GateBadges({
         return (
           <div
             key={g.gate}
-            className={`rounded-xl border p-3 transition ${
+            className={`rounded-2xl border p-3.5 transition-all ${
               passed
-                ? "border-emerald-200 bg-emerald-50/70 text-emerald-950"
-                : "border-rose-200 bg-rose-50/80 text-rose-950"
+                ? "border-emerald-300 bg-emerald-50/80 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100"
+                : "border-rose-300 bg-rose-50/85 text-rose-950 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-100"
             }`}
           >
             <div className="flex items-center justify-between gap-1.5">
@@ -66,29 +66,29 @@ export function GateBadges({
                 {meta.name}
               </span>
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${
                   passed
-                    ? "bg-emerald-100 text-emerald-800"
-                    : "bg-rose-100 text-rose-800"
+                    ? "bg-emerald-200/80 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-200"
+                    : "bg-rose-200/80 text-rose-900 dark:bg-rose-900 dark:text-rose-200"
                 }`}
               >
                 {passed ? (
                   <>
-                    <CheckCircle2 className="h-3 w-3" />
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                     Lolos
                   </>
                 ) : (
                   <>
-                    <XCircle className="h-3 w-3" />
+                    <XCircle className="h-3 w-3" aria-hidden="true" />
                     Gagal
                   </>
                 )}
               </span>
             </div>
-            <p className="mt-1.5 text-sm font-bold">
+            <p className="mt-1.5 font-mono text-base font-bold">
               {formatGateMetric(g.gate, g.value)}
             </p>
-            <p className="mt-0.5 text-[11px] opacity-80">
+            <p className="mt-0.5 font-mono text-[11px] opacity-85">
               Batas {gateComparator(g.gate)}{" "}
               {formatGateMetric(g.gate, g.threshold)}
             </p>
@@ -98,4 +98,3 @@ export function GateBadges({
     </div>
   );
 }
-

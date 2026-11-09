@@ -1,5 +1,5 @@
 import * as React from "react";
-import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
+import { AlertCircle, ChefHat, RefreshCw } from "lucide-react";
 import { Button } from "./button";
 import { Skeleton } from "./skeleton";
 import { cn } from "@/lib/utils";
@@ -20,20 +20,22 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-xl border border-dashed border-stone-300 bg-stone-50/60 p-8 text-center",
+        "flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--border-strong)] bg-[var(--bg-subtle)]/60 p-8 text-center sm:p-10",
         className
       )}
     >
-      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-stone-200/70 text-stone-600">
-        <Inbox className="h-5 w-5" />
+      <div className="mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-warm)] bg-[var(--bg-surface)] text-[#C2410C] shadow-xs">
+        <ChefHat className="h-6 w-6" aria-hidden="true" />
       </div>
-      <h3 className="text-sm font-semibold text-stone-900">{title}</h3>
+      <h3 className="font-display text-base font-bold text-[var(--ink-primary)]">
+        {title}
+      </h3>
       {description ? (
-        <p className="mt-1 max-w-md text-xs leading-relaxed text-stone-500">
+        <p className="mt-1.5 max-w-md text-xs leading-relaxed text-[var(--ink-secondary)] sm:text-sm">
           {description}
         </p>
       ) : null}
-      {action ? <div className="mt-4">{action}</div> : null}
+      {action ? <div className="mt-5">{action}</div> : null}
     </div>
   );
 }
@@ -46,7 +48,7 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = "Gagal Memuat Data",
+  title = "Koneksi Dapur Sedang Terkendala",
   message,
   onRetry,
   className,
@@ -55,15 +57,15 @@ export function ErrorState({
     <div
       role="alert"
       className={cn(
-        "flex flex-col items-center justify-center rounded-xl border border-rose-200 bg-rose-50/70 p-6 text-center text-rose-950",
+        "flex flex-col items-center justify-center rounded-2xl border border-rose-300 bg-rose-50/90 p-6 text-center text-rose-950 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-100 sm:p-8",
         className
       )}
     >
-      <div className="mb-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-rose-100 text-rose-700">
-        <AlertCircle className="h-5 w-5" />
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300">
+        <AlertCircle className="h-5 w-5" aria-hidden="true" />
       </div>
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="mt-1 max-w-md text-xs leading-relaxed text-rose-800">
+      <h3 className="font-display text-base font-bold">{title}</h3>
+      <p className="mt-1.5 max-w-md text-xs leading-relaxed text-rose-900 dark:text-rose-200 sm:text-sm">
         {message}
       </p>
       {onRetry ? (
@@ -72,10 +74,10 @@ export function ErrorState({
           variant="outline"
           size="sm"
           onClick={onRetry}
-          className="mt-4 border-rose-300 bg-white text-rose-900 hover:bg-rose-50"
+          className="mt-4 border-rose-300 bg-white text-rose-900 hover:bg-rose-50 dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Coba Lagi
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          Muat Ulang Data
         </Button>
       ) : null}
     </div>
@@ -90,11 +92,15 @@ export function TableSkeleton({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-3", className)}>
+    <div
+      role="status"
+      aria-label="Sedang memuat daftar data..."
+      className={cn("space-y-3", className)}
+    >
       {Array.from({ length: rows }).map((_, idx) => (
         <div
           key={idx}
-          className="flex items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-4"
+          className="flex items-center justify-between gap-4 rounded-2xl border border-[var(--border-warm)] bg-[var(--bg-surface)] p-4"
         >
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-2/5" />
@@ -103,7 +109,7 @@ export function TableSkeleton({
           <Skeleton className="h-8 w-24" />
         </div>
       ))}
+      <span className="sr-only">Memuat data dapur dan pesanan...</span>
     </div>
   );
 }
-

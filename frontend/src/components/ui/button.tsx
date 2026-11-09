@@ -3,28 +3,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600/40 focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
+  "twist-btn inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-extrabold tracking-wide uppercase transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C2410C] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer",
   {
     variants: {
       variant: {
         default:
-          "bg-amber-700 text-white shadow-xs hover:bg-amber-800 active:bg-amber-900",
+          "bg-[#C2410C] text-white hover:bg-[#9A3412] active:bg-[#7C2D12]",
         secondary:
-          "bg-stone-100 text-stone-900 hover:bg-stone-200 active:bg-stone-300",
+          "bg-[#D9F99D] text-[#12100E] hover:bg-[#FDE047]",
         outline:
-          "border border-stone-300 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100",
+          "bg-[var(--bg-surface)] text-[var(--ink-primary)] hover:bg-[#FFEDD5] hover:text-[#12100E]",
         destructive:
-          "bg-rose-600 text-white shadow-xs hover:bg-rose-700 active:bg-rose-800",
+          "bg-[#BE123C] text-white hover:bg-[#9F1239]",
         success:
-          "bg-emerald-600 text-white shadow-xs hover:bg-emerald-700 active:bg-emerald-800",
-        ghost: "text-stone-700 hover:bg-stone-100 hover:text-stone-900",
-        link: "text-amber-700 underline-offset-4 hover:underline",
+          "bg-[#15803D] text-white hover:bg-[#166534]",
+        ghost:
+          "border-transparent shadow-none text-[var(--ink-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--ink-primary)]",
+        link: "border-transparent shadow-none text-[#C2410C] dark:text-orange-400 underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-11 rounded-lg px-6 text-base",
-        icon: "h-9 w-9",
+        default: "min-h-[44px] sm:min-h-[42px] px-5 py-2",
+        sm: "min-h-[38px] px-3.5 py-1.5 text-xs",
+        lg: "min-h-[50px] px-7 py-3 text-sm",
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {
@@ -52,4 +53,3 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 export { buttonVariants };
-

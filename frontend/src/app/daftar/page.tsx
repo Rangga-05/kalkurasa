@@ -10,7 +10,7 @@ import { z } from "zod";
 import {
   AlertCircle,
   ArrowLeft,
-  ChefHat,
+  CalendarCheck,
   Loader2,
   ShieldCheck,
   UserPlus,
@@ -26,7 +26,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -79,7 +78,7 @@ function RegisterFormContent() {
       queryClient.setQueryData(["auth-me"], res.user);
       toast.success(
         `Selamat bergabung, ${res.user.name}!`,
-        "Akun pelanggan Anda berhasil dibuat dan langsung masuk."
+        "Akun pelanggan Anda berhasil dibuat dan langsung aktif."
       );
       const safeTarget =
         nextPath &&
@@ -116,36 +115,58 @@ function RegisterFormContent() {
     : "/login";
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-5">
-      <Card className="border-stone-200/90 shadow-sm">
-        <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-700 text-white shadow-xs">
-            <ChefHat className="h-6 w-6" />
-          </div>
-          <CardTitle className="text-xl sm:text-2xl">
-            Daftar Akun Pelanggan
-          </CardTitle>
+    <div className="mx-auto w-full max-w-lg space-y-5">
+      <Card className="border-[var(--border-strong)] shadow-sm">
+        <CardHeader className="space-y-2 border-b border-[var(--border-warm)] pb-5 text-center">
+          <img
+            src="/assets/illustrations/logo-mark.svg"
+            alt=""
+            width={48}
+            height={48}
+            className="mx-auto h-12 w-12 rounded-2xl shadow-xs"
+          />
+          <h1 className="font-display text-xl font-bold text-[var(--ink-primary)] sm:text-2xl">
+            Daftar Akun Pelanggan Pre-Order
+          </h1>
           <CardDescription>
-            Buat akun untuk memesan produk pre-order Kalkurasa, menyimpan data
-            kontak otomatis, dan memantau seluruh pesanan Anda di satu tempat.
+            Buat akun untuk merancang pesanan sajian, mengunci slot kapasitas
+            dapur, dan memantau progres produksi secara langsung.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-            <span>
-              Untuk menjaga kepastian slot kapasitas dapur bagi semua pelanggan,
-              pembuatan pesanan pre-order memerlukan akun yang terverifikasi.
-            </span>
+        <CardContent className="space-y-4 pt-5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <div className="flex items-start gap-2 rounded-xl border border-[var(--border-warm)] bg-[var(--bg-subtle)]/70 p-3 text-xs text-[var(--ink-secondary)]">
+              <ShieldCheck
+                className="mt-0.5 h-4 w-4 shrink-0 text-[#15803D]"
+                aria-hidden="true"
+              />
+              <span>
+                Mencegah pesanan fiktif yang menahan kapasitas oven bagi
+                pelanggan lain.
+              </span>
+            </div>
+            <div className="flex items-start gap-2 rounded-xl border border-[var(--border-warm)] bg-[var(--bg-subtle)]/70 p-3 text-xs text-[var(--ink-secondary)]">
+              <CalendarCheck
+                className="mt-0.5 h-4 w-4 shrink-0 text-[#C2410C]"
+                aria-hidden="true"
+              />
+              <span>
+                Tanggapi tawaran balik jadwal &amp; unduh bukti pesanan kapan
+                saja.
+              </span>
+            </div>
           </div>
 
           {serverError ? (
             <div
               role="alert"
-              className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800"
+              className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs font-semibold text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+              <AlertCircle
+                className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"
+                aria-hidden="true"
+              />
               <span>{serverError}</span>
             </div>
           ) : null}
@@ -161,11 +182,11 @@ function RegisterFormContent() {
                 id="name"
                 type="text"
                 autoComplete="name"
-                placeholder="Mis. Dewi Lestari"
+                placeholder="Nama lengkap Anda atau instansi"
                 {...form.register("name")}
               />
               {form.formState.errors.name ? (
-                <p className="text-xs font-medium text-rose-600">
+                <p className="text-xs font-semibold text-rose-600">
                   {form.formState.errors.name.message}
                 </p>
               ) : null}
@@ -177,11 +198,11 @@ function RegisterFormContent() {
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="nama@email.com"
+                placeholder="email@domain.com"
                 {...form.register("email")}
               />
               {form.formState.errors.email ? (
-                <p className="text-xs font-medium text-rose-600">
+                <p className="text-xs font-semibold text-rose-600">
                   {form.formState.errors.email.message}
                 </p>
               ) : null}
@@ -193,11 +214,11 @@ function RegisterFormContent() {
                 id="contact"
                 type="tel"
                 autoComplete="tel"
-                placeholder="Mis. 081234567890"
+                placeholder="Contoh: 081234567890"
                 {...form.register("contact")}
               />
               {form.formState.errors.contact ? (
-                <p className="text-xs font-medium text-rose-600">
+                <p className="text-xs font-semibold text-rose-600">
                   {form.formState.errors.contact.message}
                 </p>
               ) : null}
@@ -213,7 +234,7 @@ function RegisterFormContent() {
                 {...form.register("password")}
               />
               {form.formState.errors.password ? (
-                <p className="text-xs font-medium text-rose-600">
+                <p className="text-xs font-semibold text-rose-600">
                   {form.formState.errors.password.message}
                 </p>
               ) : null}
@@ -227,23 +248,26 @@ function RegisterFormContent() {
             >
               {registerMutation.isPending ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
                   Mendaftarkan Akun...
                 </>
               ) : (
                 <>
-                  <UserPlus className="h-4 w-4" />
-                  Daftar & Masuk Sekarang
+                  <UserPlus className="h-4 w-4" aria-hidden="true" />
+                  Daftar &amp; Masuk Sekarang
                 </>
               )}
             </Button>
           </form>
 
-          <div className="border-t border-stone-200 pt-3 text-center text-xs text-stone-600">
-            Sudah memiliki akun pelanggan?{" "}
+          <div className="border-t border-[var(--border-warm)] pt-3.5 text-center text-xs text-[var(--ink-secondary)]">
+            Sudah memiliki akun pelanggan atau akun tim internal?{" "}
             <Link
               href={loginHref}
-              className="font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-950"
+              className="font-bold text-[#C2410C] underline underline-offset-4 hover:text-[#9A3412] dark:text-orange-400"
             >
               Masuk di sini
             </Link>
@@ -254,9 +278,9 @@ function RegisterFormContent() {
       <div className="text-center">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 hover:text-stone-900"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink-secondary)] hover:text-[#C2410C]"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
           Kembali ke Halaman Katalog Pelanggan
         </Link>
       </div>
@@ -271,8 +295,8 @@ export default function RegisterPage() {
       <main className="flex flex-1 flex-col justify-center px-4 py-8 sm:px-6">
         <Suspense
           fallback={
-            <div className="mx-auto w-full max-w-md">
-              <Skeleton className="h-96 w-full rounded-xl" />
+            <div className="mx-auto w-full max-w-lg">
+              <Skeleton className="h-96 w-full rounded-2xl" />
             </div>
           }
         >
@@ -282,4 +306,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

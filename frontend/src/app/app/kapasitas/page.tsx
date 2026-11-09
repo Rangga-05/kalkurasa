@@ -175,7 +175,7 @@ export default function CapacityPage() {
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
           {/* Kalender Bulanan */}
-          <div className="xl:col-span-2">
+          <div className="min-w-0 xl:col-span-2">
             <CapacityCalendar
               days={days}
               selectedDate={selectedDate}
@@ -184,7 +184,7 @@ export default function CapacityPage() {
           </div>
 
           {/* Panel Detail Hari yang Dipilih */}
-          <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-xs">
+          <div className="min-w-0 rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-5 shadow-[5px_5px_0px_#12100E]">
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div>
                 <p className="text-xs font-bold tracking-wider text-stone-400 uppercase">

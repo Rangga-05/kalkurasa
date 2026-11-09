@@ -231,7 +231,7 @@ export default function StaffDashboardPage() {
             Tugas Hari Ini (Produksi, Belanja &amp; Pengantaran)
           </h1>
           <p className="mt-1 text-sm text-stone-600">
-            Tanggal Operasional: <strong>{formatDateLong(todayKey)}</strong> —
+            Tanggal Operasional: <strong>{formatDateLong(todayKey)}</strong> ·
             Perbarui status tugas dan catat durasi menit aktual produksi secara
             inline.
           </p>

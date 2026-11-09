@@ -1,22 +1,220 @@
 @import "tailwindcss";
 
+:root {
+  --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif-twist: "Fraunces", Georgia, Cambria, serif;
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg-canvas: #fff9f0;
+  --bg-surface: #fffdf9;
+  --bg-subtle: #f7efe2;
+  --bg-elevated: #ffffff;
+  --border-warm: #12100e;
+  --border-strong: #12100e;
+  --ink-border: #12100e;
+  --ink-shadow: #12100e;
+  --ink-primary: #12100e;
+  --ink-secondary: #3d352e;
+  --ink-muted: #5c5046;
+  --accent-primary: #c2410c;
+  --accent-hover: #9a3412;
+  --accent-soft: #ffedd5;
+  --accent-lime: #d9f99d;
+  --accent-gold: #fde047;
+  --emerald-brand: #15803d;
+  --espresso-950: #14281d;
+  --espresso-900: #1d3829;
+}
+
 @layer base {
   body {
-    background-color: var(--color-stone-50);
-    color: var(--color-stone-900);
+    background-color: var(--bg-canvas);
+    color: var(--ink-primary);
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  summary,
+  label[for],
+  select:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--accent-primary);
+    outline-offset: 2px;
   }
 }
 
-@media print {
-  @page {
-    margin: 10mm 12mm;
-    size: auto;
-  }
-  body {
-    background-color: #ffffff !important;
-    color: #1c1917 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.03em;
 }
 
+.font-twist {
+  font-family: var(--font-serif-twist), Georgia, serif;
+  font-style: italic;
+}
+
+.font-mono-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Slight Twist Inspired Tactile Cards & Buttons */
+.twist-card {
+  border: 2px solid var(--ink-border);
+  box-shadow: 5px 5px 0px var(--ink-shadow);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms ease;
+}
+
+.twist-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0px var(--ink-shadow);
+}
+
+.twist-panel {
+  border: 2px solid var(--ink-border);
+  box-shadow: 6px 6px 0px var(--ink-shadow);
+}
+
+.twist-btn {
+  border: 2px solid var(--ink-border);
+  box-shadow: 4px 4px 0px var(--ink-shadow);
+  transition:
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 150ms ease;
+}
+
+.twist-btn:hover:not(:disabled) {
+  transform: translate(-1.5px, -1.5px);
+  box-shadow: 5.5px 5.5px 0px var(--ink-shadow);
+}
+
+.twist-btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--ink-shadow);
+}
+
+.twist-pill {
+  border: 2px solid var(--ink-border);
+  box-shadow: 2.5px 2.5px 0px var(--ink-shadow);
+}
+
+.twist-sticker {
+  border: 2px solid #12100e;
+  box-shadow: 3px 3px 0px #12100e;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.twist-sticker:hover {
+  transform: rotate(0deg) scale(1.04);
+}
+
+.card-interactive {
+  border: 2px solid var(--ink-border);
+  box-shadow: 4px 4px 0px var(--ink-shadow);
+  transition:
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card-interactive:hover {
+  transform: translate(-1.5px, -1.5px);
+  box-shadow: 6px 6px 0px var(--ink-shadow);
+}
+
+.btn-tactile {
+  transition:
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 160ms ease;
+}
+
+.btn-tactile:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+}
+
+.btn-tactile:active:not(:disabled) {
+  transform: translate(1.5px, 1.5px);
+}
+
+.photo-frame {
+  overflow: hidden;
+}
+
+.photo-frame img {
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.photo-frame:hover img {
+  transform: scale(1.045) rotate(-0.8deg);
+}
+
+.link-draw {
+  position: relative;
+}
+
+.link-draw::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 2px;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.link-draw:hover::after,
+.link-draw:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+
+.ticket-divider {
+  position: relative;
+  border-top: 2px dashed var(--ink-border);
+}
+
+/* Dot pattern texture for Slight Twist color-blocked sections */
+.bg-halftone-dots {
+  background-image: radial-gradient(rgba(18, 16, 14, 0.11) 1.25px, transparent 1.25px);
+  background-size: 18px 18px;
+}
+
+.bg-halftone-light {
+  background-image: radial-gradient(rgba(255, 253, 249, 0.12) 1.25px, transparent 1.25px);
+  background-size: 20px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .twist-card:hover,
+  .card-interactive:hover,
+  .twist-btn:hover:not(:disabled),
+  .btn-tactile:hover:not(:disabled),
+  .photo-frame:hover img {
+    transform: none !important;
+  }
+}

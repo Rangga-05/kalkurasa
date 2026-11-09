@@ -3,17 +3,17 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+  "inline-flex items-center gap-1.5 rounded-full border-2 border-[#12100E] px-3 py-0.5 text-xs font-extrabold tracking-tight shadow-[2px_2px_0px_#12100E] transition-colors",
   {
     variants: {
       variant: {
-        default: "border-amber-200 bg-amber-50 text-amber-900",
-        emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
-        amber: "border-amber-200 bg-amber-50 text-amber-800",
-        sky: "border-sky-200 bg-sky-50 text-sky-800",
-        indigo: "border-indigo-200 bg-indigo-50 text-indigo-800",
-        rose: "border-rose-200 bg-rose-50 text-rose-800",
-        slate: "border-stone-200 bg-stone-100 text-stone-700",
+        default: "bg-[#FFEDD5] text-[#12100E]",
+        emerald: "bg-[#D9F99D] text-[#12100E]",
+        amber: "bg-[#FDE047] text-[#12100E]",
+        sky: "bg-[#E0F2FE] text-[#12100E]",
+        indigo: "bg-[#F3E8FF] text-[#12100E]",
+        rose: "bg-[#FFE4E6] text-[#9F1239]",
+        slate: "bg-[var(--bg-subtle)] text-[var(--ink-primary)]",
       },
     },
     defaultVariants: {
@@ -31,4 +31,3 @@ export function Badge({ className, variant, ...props }: BadgeProps) {
     <span className={cn(badgeVariants({ variant }), className)} {...props} />
   );
 }
-

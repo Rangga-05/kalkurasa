@@ -30,7 +30,7 @@ export function buildWhatsAppShoppingText({
 
   const lines: string[] = [];
 
-  lines.push(`📋 *DAFTAR BELANJA BAHAN BAKU — KALKURASA CATERING*`);
+  lines.push(`*DAFTAR BELANJA BAHAN BAKU : KALKURASA CATERING*`);
   lines.push(`📅 *Periode Acara:* ${formatDateShort(fromDate)} s.d. ${formatDateShort(toDate)}`);
   lines.push(`📦 *Pesanan Terkait:* ${data.order_count} pesanan aktif`);
   lines.push(`⏰ *Dicatat Pada:* ${nowStr}`);

@@ -169,7 +169,7 @@ export const ORDER_STATUS_META: Record<OrderStatus, OrderStatusMeta> = {
     tone: "amber",
   },
   accepted: {
-    label: "Disetujui — Menunggu DP",
+    label: "Disetujui : Menunggu DP",
     description:
       "Slot kapasitas telah direservasi sementara. Segera selesaikan pembayaran DP sebelum tenggat berakhir.",
     tone: "sky",

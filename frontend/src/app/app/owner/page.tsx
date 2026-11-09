@@ -443,10 +443,10 @@ export default function OwnerDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* ELEMEN 4 & 5: Margin Realisasi per Pesanan & Kalender Kapasitas Ringkas */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+      {/* ELEMEN 4 & 5: Margin Realisasi per Pesanan & Kalender Kapasitas Bulan Ini */}
+      <div className="grid grid-cols-1 gap-6">
         {/* ELEMEN 4: Margin Realisasi per Pesanan */}
-        <Card className="xl:col-span-7">
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle className="flex items-center gap-2">
@@ -547,7 +547,7 @@ export default function OwnerDashboardPage() {
         </Card>
 
         {/* ELEMEN 5: Kalender Kapasitas Ringkas */}
-        <div className="space-y-3 xl:col-span-5">
+        <div className="min-w-0 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
               <CalendarRange className="h-4 w-4 text-amber-700" />

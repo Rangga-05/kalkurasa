@@ -9,7 +9,7 @@ export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
       <label
         ref={ref}
         className={cn(
-          "text-sm font-medium text-stone-800 peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+          "text-sm font-semibold text-[var(--ink-primary)] peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
           className
         )}
         {...props}
@@ -18,4 +18,3 @@ export const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
   }
 );
 Label.displayName = "Label";
-

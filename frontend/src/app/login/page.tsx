@@ -10,10 +10,11 @@ import { z } from "zod";
 import {
   AlertCircle,
   ArrowLeft,
-  ChefHat,
+  CheckCircle2,
   KeyRound,
   Loader2,
   LogIn,
+  ShieldCheck,
   UserCheck,
 } from "lucide-react";
 import { login, getErrorMessage } from "@/lib/api";
@@ -24,12 +25,11 @@ import { useToast } from "@/components/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -44,16 +44,48 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-const DEMO_ACCOUNTS: { email: string; role: UserRole; name: string }[] = [
+const DEMO_ACCOUNTS: {
+  email: string;
+  role: UserRole;
+  name: string;
+  scope: string;
+  badge: "default" | "emerald" | "amber" | "sky" | "slate";
+}[] = [
   {
     email: "customer@demo.test",
     role: "customer",
-    name: "Dewi Lestari (Pelanggan)",
+    name: "Dewi Lestari",
+    scope: "Buat pesanan pre-order, pantau kode unik, & tanggapi tawaran balik",
+    badge: "default",
   },
-  { email: "owner@demo.test", role: "owner", name: "Bu Sari (Pemilik)" },
-  { email: "manager@demo.test", role: "manager", name: "Rina (Manajer)" },
-  { email: "staff@demo.test", role: "staff", name: "Budi (Karyawan)" },
-  { email: "admin@demo.test", role: "admin", name: "Admin Sistem" },
+  {
+    email: "owner@demo.test",
+    role: "owner",
+    name: "Bu Sari (Pemilik)",
+    scope: "Kendali penuh 7 KPI, antrian keputusan besar, kas 14 hari, & override",
+    badge: "amber",
+  },
+  {
+    email: "manager@demo.test",
+    role: "manager",
+    name: "Rina (Manajer)",
+    scope: "Evaluasi 4 gerbang, kalender kapasitas oven, daftar belanja, & stok",
+    badge: "emerald",
+  },
+  {
+    email: "staff@demo.test",
+    role: "staff",
+    name: "Budi (Kru Produksi)",
+    scope: "Lembar tugas belanja, produksi, & antar (tanpa akses harga/kas)",
+    badge: "sky",
+  },
+  {
+    email: "admin@demo.test",
+    role: "admin",
+    name: "Admin Sistem",
+    scope: "Kelola akun pengguna, master resep, log audit, & reset data simulasi",
+    badge: "slate",
+  },
 ];
 
 function LoginFormContent() {
@@ -63,6 +95,7 @@ function LoginFormContent() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [serverError, setServerError] = useState<string>("");
+  const [selectedDemoEmail, setSelectedDemoEmail] = useState<string>("");
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -105,137 +138,208 @@ function LoginFormContent() {
     : "/daftar";
 
   return (
-    <div className="mx-auto w-full max-w-md space-y-5">
-      <Card className="border-stone-200/90 shadow-sm">
-        <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-700 text-white shadow-xs">
-            <ChefHat className="h-6 w-6" />
-          </div>
-          <CardTitle className="text-xl sm:text-2xl">
-            Masuk ke Akun Kalkurasa
-          </CardTitle>
-          <CardDescription>
-            Halaman masuk terpadu untuk Pelanggan Pre-Order maupun Tim Internal
-            (Pemilik, Manajer, Karyawan, dan Admin).
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="space-y-4">
-          {serverError ? (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800"
-            >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
-              <span>{serverError}</span>
-            </div>
-          ) : null}
-
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            noValidate
-            className="space-y-4"
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Alamat Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="nama@demo.test"
-                {...form.register("email")}
+    <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+        {/* Kolom Kiri: Form Masuk (5 Kolom) */}
+        <Card className="border-[var(--border-strong)] shadow-sm lg:col-span-5">
+          <CardHeader className="space-y-2 border-b border-[var(--border-warm)] pb-5">
+            <div className="flex items-center gap-3">
+              <img
+                src="/assets/illustrations/logo-mark.svg"
+                alt=""
+                width={44}
+                height={44}
+                className="h-11 w-11 rounded-xl shadow-xs"
               />
-              {form.formState.errors.email ? (
-                <p className="text-xs font-medium text-rose-600">
-                  {form.formState.errors.email.message}
+              <div>
+                <h1 className="font-display text-xl font-bold text-[var(--ink-primary)] sm:text-2xl">
+                  Masuk ke Kalkurasa
+                </h1>
+                <p className="text-xs font-medium text-[var(--ink-muted)]">
+                  Portal Pelanggan Pre-Order &amp; Tim Operasional Dapur
                 </p>
-              ) : null}
+              </div>
             </div>
+          </CardHeader>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Kata Sandi</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Masukkan kata sandi"
-                {...form.register("password")}
+          <CardContent className="space-y-4 pt-5">
+            {serverError ? (
+              <div
+                role="alert"
+                className="flex items-start gap-2.5 rounded-xl border border-rose-300 bg-rose-50 p-3.5 text-xs font-semibold text-rose-900 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200"
+              >
+                <AlertCircle
+                  className="mt-0.5 h-4 w-4 shrink-0 text-rose-600"
+                  aria-hidden="true"
+                />
+                <span>{serverError}</span>
+              </div>
+            ) : null}
+
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              noValidate
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Alamat Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="nama@demo.test"
+                  {...form.register("email")}
+                />
+                {form.formState.errors.email ? (
+                  <p className="text-xs font-semibold text-rose-600">
+                    {form.formState.errors.email.message}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Kata Sandi</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Masukkan kata sandi akun"
+                  {...form.register("password")}
+                />
+                {form.formState.errors.password ? (
+                  <p className="text-xs font-semibold text-rose-600">
+                    {form.formState.errors.password.message}
+                  </p>
+                ) : null}
+              </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                disabled={loginMutation.isPending}
+                className="w-full gap-2"
+              >
+                {loginMutation.isPending ? (
+                  <>
+                    <Loader2
+                      className="h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                    Memverifikasi Sesi...
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-4 w-4" aria-hidden="true" />
+                    Masuk Sekarang
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="rounded-xl border border-[var(--border-warm)] bg-[var(--bg-subtle)]/70 p-3.5 text-center text-xs text-[var(--ink-secondary)]">
+              Pelanggan baru ingin memesan sajian?{" "}
+              <Link
+                href={registerHref}
+                className="font-bold text-[#C2410C] underline underline-offset-4 hover:text-[#9A3412] dark:text-orange-400"
+              >
+                Daftar Akun Pelanggan
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Kolom Kanan: Kartu Pemilih Peran Simulasi Interaktif (7 Kolom) */}
+        <div className="space-y-4 rounded-2xl border border-[var(--border-warm)] bg-[var(--bg-surface)] p-5 shadow-2xs sm:p-6 lg:col-span-7">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-warm)] pb-3.5">
+            <div className="flex items-center gap-2">
+              <KeyRound
+                className="h-4 w-4 text-[#C2410C]"
+                aria-hidden="true"
               />
-              {form.formState.errors.password ? (
-                <p className="text-xs font-medium text-rose-600">
-                  {form.formState.errors.password.message}
-                </p>
-              ) : null}
+              <h2 className="font-display text-base font-bold text-[var(--ink-primary)] sm:text-lg">
+                Pilih Cepat Akun Peran (Simulasi Pengujian)
+              </h2>
             </div>
-
-            <Button
-              type="submit"
-              size="lg"
-              disabled={loginMutation.isPending}
-              className="w-full gap-2"
-            >
-              {loginMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Memverifikasi Akun...
-                </>
-              ) : (
-                <>
-                  <LogIn className="h-4 w-4" />
-                  Masuk Sekarang
-                </>
-              )}
-            </Button>
-          </form>
-
-          <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-center text-xs text-stone-700">
-            Belum punya akun pelanggan untuk memesan?{" "}
-            <Link
-              href={registerHref}
-              className="font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-950"
-            >
-              Daftar Akun Pelanggan
-            </Link>
+            <Badge variant="slate">5 Peran RBAC</Badge>
           </div>
 
-          {/* Pilihan Cepat Akun Demo */}
-          <div className="border-t border-stone-200 pt-4">
-            <div className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-stone-600">
-              <KeyRound className="h-3.5 w-3.5 text-amber-700" />
-              <span>Isi Cepat Email Akun Demo (Simulasi):</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {DEMO_ACCOUNTS.map((acc) => (
+          <p className="text-xs leading-relaxed text-[var(--ink-secondary)]">
+            Klik salah satu kartu peran di bawah ini untuk mengisi kolom email
+            secara otomatis, lalu masukkan kata sandi demo yang dikonfigurasi
+            pada <code className="font-mono font-semibold">SEED_DEMO_PASSWORD</code>.
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {DEMO_ACCOUNTS.map((acc) => {
+              const isSelected = selectedDemoEmail === acc.email;
+              return (
                 <button
                   key={acc.email}
                   type="button"
                   onClick={() => {
+                    setSelectedDemoEmail(acc.email);
                     form.setValue("email", acc.email, { shouldValidate: true });
                     setServerError("");
+                    const pwEl = document.getElementById("password");
+                    pwEl?.focus();
                   }}
-                  className="flex flex-col items-start rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-left text-xs transition-colors hover:border-amber-300 hover:bg-amber-50/60 cursor-pointer"
+                  className={`card-interactive flex flex-col items-start justify-between rounded-xl border p-3.5 text-left transition-all ${
+                    isSelected
+                      ? "border-[#C2410C] bg-[var(--accent-soft)] ring-2 ring-[#C2410C]/20"
+                      : "border-[var(--border-warm)] bg-[var(--bg-canvas)] hover:border-[#C2410C]"
+                  }`}
                 >
-                  <span className="flex items-center gap-1 font-semibold text-stone-800">
-                    <UserCheck className="h-3 w-3 text-amber-700" />
-                    {acc.name}
-                  </span>
-                  <span className="mt-0.5 font-mono text-[11px] text-stone-500">
+                  <div className="w-full space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant={acc.badge}>{ROLE_LABELS[acc.role]}</Badge>
+                      {isSelected ? (
+                        <CheckCircle2
+                          className="h-4 w-4 text-[#C2410C]"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <UserCheck
+                          className="h-3.5 w-3.5 text-[var(--ink-muted)]"
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                    <p className="text-sm font-bold text-[var(--ink-primary)]">
+                      {acc.name}
+                    </p>
+                    <p className="text-[11px] leading-relaxed text-[var(--ink-secondary)]">
+                      {acc.scope}
+                    </p>
+                  </div>
+                  <span className="mt-2.5 inline-block rounded-md bg-[var(--bg-surface)] px-2 py-0.5 font-mono text-[11px] font-semibold text-[#C2410C] dark:text-orange-400">
                     {acc.email}
                   </span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="flex items-start gap-2.5 rounded-xl border border-[var(--border-warm)] bg-[var(--bg-subtle)]/70 p-3 text-xs text-[var(--ink-secondary)]">
+            <ShieldCheck
+              className="mt-0.5 h-4 w-4 shrink-0 text-[#15803D]"
+              aria-hidden="true"
+            />
+            <span>
+              <strong>Proteksi Hak Akses (RBAC):</strong> Karyawan produksi
+              tidak pernah menerima data harga jual, margin G2, maupun saldo kas
+              di respons API maupun layar kerja.
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div className="text-center">
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600 hover:text-stone-900"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ink-secondary)] hover:text-[#C2410C]"
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Kembali ke Halaman Katalog Pelanggan
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          Kembali ke Halaman Katalog &amp; Simulasi Dapur
         </Link>
       </div>
     </div>
@@ -249,8 +353,8 @@ export default function LoginPage() {
       <main className="flex flex-1 flex-col justify-center px-4 py-8 sm:px-6">
         <Suspense
           fallback={
-            <div className="mx-auto w-full max-w-md">
-              <Skeleton className="h-96 w-full rounded-xl" />
+            <div className="mx-auto w-full max-w-5xl">
+              <Skeleton className="h-96 w-full rounded-2xl" />
             </div>
           }
         >
@@ -260,4 +364,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

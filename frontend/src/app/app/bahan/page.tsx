@@ -754,10 +754,10 @@ export default function BahanPage() {
                     className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
                   >
                     <option value="loose">
-                      Loose (Curah — boleh pecahan satuan beli)
+                      Loose (Curah : boleh pecahan satuan beli)
                     </option>
                     <option value="pack">
-                      Pack (Kemasan Utuh — dibulatkan ke atas)
+                      Pack (Kemasan Utuh : dibulatkan ke atas)
                     </option>
                   </select>
                 </div>
