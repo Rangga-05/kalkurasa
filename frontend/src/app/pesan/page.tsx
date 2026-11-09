@@ -225,15 +225,51 @@ function OrderFormContent() {
     name: "items",
   });
 
-  // Saat daftar produk selesai dimuat dan belum ada product_id terpilih, isi dengan produk pertama
+  // Saat daftar produk selesai dimuat atau parameter ?product= berubah, pilih produk yang sesuai
   useEffect(() => {
     const products = productsQuery.data;
     if (!products || products.length === 0) return;
+
+    const findMatchedProduct = (rawParam: string) => {
+      const q = rawParam.trim();
+      if (!q) return null;
+      const qLower = q.toLowerCase();
+      return (
+        products.find((p) => p.id === q) ??
+        products.find((p) => p.category.toLowerCase() === qLower) ??
+        products.find((p) => p.name.toLowerCase().includes(qLower)) ??
+        products.find(
+          (p) =>
+            getProductVisualMeta({ name: p.name, category: p.category })
+              .illustration.toLowerCase()
+              .includes(qLower.replace(/_/g, "-"))
+        ) ??
+        null
+      );
+    };
+
     const currentItems = form.getValues("items");
-    if (currentItems.length > 0 && !currentItems[0].product_id) {
-      const match =
-        products.find((p) => p.id === preselectedProductId) ?? products[0];
-      form.setValue("items.0.product_id", match.id, { shouldValidate: true });
+    const explicitMatch = preselectedProductId
+      ? findMatchedProduct(preselectedProductId)
+      : null;
+
+    if (explicitMatch) {
+      if (currentItems.length === 0 || currentItems[0].product_id !== explicitMatch.id) {
+        form.setValue("items.0.product_id", explicitMatch.id, {
+          shouldValidate: true,
+        });
+      }
+      return;
+    }
+
+    if (
+      currentItems.length > 0 &&
+      (!currentItems[0].product_id ||
+        !products.some((p) => p.id === currentItems[0].product_id))
+    ) {
+      form.setValue("items.0.product_id", products[0].id, {
+        shouldValidate: true,
+      });
     }
   }, [productsQuery.data, preselectedProductId, form]);
 

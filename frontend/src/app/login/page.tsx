@@ -265,8 +265,7 @@ function LoginFormContent() {
 
           <p className="text-xs leading-relaxed text-[var(--ink-secondary)]">
             Klik salah satu kartu peran di bawah ini untuk mengisi kolom email
-            secara otomatis, lalu masukkan kata sandi demo yang dikonfigurasi
-            pada <code className="font-mono font-semibold">SEED_DEMO_PASSWORD</code>.
+            dan kata sandi demo (<code className="font-mono font-bold text-[#12100E]">demo12345</code>) secara otomatis.
           </p>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -279,9 +278,10 @@ function LoginFormContent() {
                   onClick={() => {
                     setSelectedDemoEmail(acc.email);
                     form.setValue("email", acc.email, { shouldValidate: true });
+                    form.setValue("password", "demo12345", {
+                      shouldValidate: true,
+                    });
                     setServerError("");
-                    const pwEl = document.getElementById("password");
-                    pwEl?.focus();
                   }}
                   className={`card-interactive flex flex-col items-start justify-between rounded-xl border p-3.5 text-left transition-all ${
                     isSelected

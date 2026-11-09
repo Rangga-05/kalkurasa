@@ -334,7 +334,13 @@ export default function KatalogHomePage() {
               {/* Primary CTA Row */}
               <div className="mt-7 flex flex-wrap items-center gap-3.5">
                 <Link
-                  href="/pesan"
+                  href={`/pesan?product=${encodeURIComponent(
+                    activeProducts.find(
+                      (p) =>
+                        getProductVisualMeta(p).flavorNumber ===
+                        activeShowcase.meta.flavorNumber
+                    )?.id ?? activeShowcase.key
+                  )}`}
                   className="twist-btn inline-flex min-h-13 items-center gap-2.5 rounded-full bg-[#C2410C] px-7 py-3.5 text-sm font-extrabold tracking-wide text-white uppercase"
                 >
                   <ShoppingBag className="h-4 w-4" />
@@ -778,7 +784,7 @@ export default function KatalogHomePage() {
                         </div>
 
                         <Link
-                          href="/pesan"
+                          href={`/pesan?product=${encodeURIComponent(product.id)}`}
                           className="twist-btn inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#C2410C] px-5 py-2.5 text-xs font-extrabold tracking-wider text-white uppercase"
                         >
                           <span>Pesan</span>
