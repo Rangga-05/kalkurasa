@@ -4,9 +4,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   ArrowRight,
-  BarChart3,
   Boxes,
   CalendarRange,
   CheckCircle2,
@@ -16,6 +14,7 @@ import {
   RefreshCw,
   Scale,
   ShoppingCart,
+  SlidersHorizontal,
   Truck,
   UtensilsCrossed,
 } from "lucide-react";
@@ -47,10 +46,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+type ManagerTab = "schedule" | "decisions_stock" | "calendar" | "simulation";
+
 export default function ManagerDashboardPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ManagerTab>("schedule");
 
   const dashboardQuery = useQuery({
     queryKey: ["manager-dashboard"],
@@ -91,16 +93,10 @@ export default function ManagerDashboardPage() {
   if (loading && !data) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-stone-900">
-            Dashboard Manajer Operasional
-          </h1>
-          <p className="text-sm text-stone-500">
-            Memuat kalender kapasitas, KPI operasional, jadwal produksi, stok,
-            dan pantauan DP...
-          </p>
-        </div>
-        <TableSkeleton rows={6} />
+        <h1 className="font-display text-2xl font-extrabold text-[#12100E]">
+          Dashboard Manajer Operasional
+        </h1>
+        <TableSkeleton rows={5} />
       </div>
     );
   }
@@ -132,35 +128,31 @@ export default function ManagerDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header Dashboard */}
+      {/* Header Ringkas */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="amber">Manajer Operasional</Badge>
-            <span className="text-xs font-medium text-stone-500">
-              Tanggal Operasional: {formatDateLong(data.today)}
+            <Badge variant="emerald">Manajer Operasional</Badge>
+            <span className="text-xs font-bold text-[#5C5046]">
+              {formatDateLong(data.today)}
             </span>
           </div>
-          <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-stone-900">
-            Dashboard Operasional Dapur &amp; Kapasitas
+          <h1 className="font-display mt-1 text-2xl font-extrabold tracking-tight text-[#12100E] sm:text-3xl">
+            Kendali Produksi &amp; Kapasitas Harian
           </h1>
-          <p className="mt-0.5 text-sm text-stone-600">
-            Kendalikan beban kapasitas bulanan, ketepatan jadwal produksi,
-            peringatan stok bahan, dan tenggat pembayaran DP.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/app/pesanan">
             <Button size="sm">
               <Plus className="h-3.5 w-3.5" />
-              Catat Pesanan Manual
+              Catat Pesanan
             </Button>
           </Link>
           <Link href="/app/belanja">
             <Button variant="outline" size="sm">
               <ShoppingCart className="h-3.5 w-3.5" />
-              Daftar Belanja ({shopList?.items.length ?? 0})
+              Belanja ({shopList?.items.length ?? 0})
             </Button>
           </Link>
           <Button
@@ -177,414 +169,418 @@ export default function ManagerDashboardPage() {
         </div>
       </div>
 
-      {/* Peringatan & Penyesuaian Rekalibrasi Beban Kerja (Skenario S6) */}
-      {data.kpi?.calibration && (
-        <WorkloadRecalibrationCard
-          calibration={data.kpi.calibration}
-          onSuccess={() => void loadDashboard()}
-          userRole="manager"
-        />
+      {/* 4 KPI Operasional Ringkas */}
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[4px_4px_0px_#12100E]">
+          <div className="flex items-center justify-between text-xs font-extrabold text-[#5C5046] uppercase">
+            <span>Ketepatan Jadwal</span>
+            <Clock className="h-4 w-4 text-[#15803D]" />
+          </div>
+          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            {formatPercent(kpi.on_time_rate)}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-[#5C5046]">
+            {kpi.on_time_orders}/{kpi.completed_orders} pesanan tepat waktu
+          </p>
+        </div>
+
+        <div className="rounded-3xl border-2 border-[#12100E] bg-[#FFFDF9] p-4 shadow-[4px_4px_0px_#12100E]">
+          <div className="flex items-center justify-between text-xs font-extrabold text-[#5C5046] uppercase">
+            <span>Utilisasi Rata-rata</span>
+            <CalendarRange className="h-4 w-4 text-[#C2410C]" />
+          </div>
+          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            {formatPercent(kpi.avg_utilization)}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-[#5C5046]">
+            Puncak {formatPercent(kpi.peak_utilization)}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border-2 border-[#12100E] bg-[#FEF9C3] p-4 shadow-[4px_4px_0px_#12100E]">
+          <div className="flex items-center justify-between text-xs font-extrabold text-[#12100E] uppercase">
+            <span>Perlu Keputusan</span>
+            <Scale className="h-4 w-4 text-[#C2410C]" />
+          </div>
+          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            {queue.length} Pesanan
+          </p>
+          <p className="mt-1 text-xs font-bold text-[#3D352E]">
+            {dpAlerts.length} menunggu verifikasi DP
+          </p>
+        </div>
+
+        <div
+          className={`rounded-3xl border-2 border-[#12100E] p-4 shadow-[4px_4px_0px_#12100E] ${
+            lowStocks.length > 0 ? "bg-[#FFE4E6]" : "bg-[#ECFCCB]"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs font-extrabold text-[#12100E] uppercase">
+            <span>Stok &amp; Buffer Kas</span>
+            <CheckCircle2 className="h-4 w-4 text-[#15803D]" />
+          </div>
+          <p className="font-mono-num mt-2 text-2xl font-extrabold text-[#12100E]">
+            {lowStocks.length === 0 ? "Stok Aman" : `${lowStocks.length} Bahan Tipis`}
+          </p>
+          <p className="mt-1 text-xs font-bold text-[#3D352E]">
+            G3 Kas: {cashStatus.passed ? "Lolos Buffer" : "Perlu Perhatian"}
+          </p>
+        </div>
+      </div>
+
+      {/* Tab Navigasi Fokus Operasional */}
+      <div
+        role="tablist"
+        aria-label="Fokus tampilan Dashboard Manajer"
+        className="flex flex-wrap items-center gap-2 rounded-3xl border-2 border-[#12100E] bg-[#F7EFE2] p-2 shadow-[4px_4px_0px_#12100E]"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "schedule"}
+          onClick={() => setActiveTab("schedule")}
+          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+            activeTab === "schedule"
+              ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
+              : "text-[#12100E] hover:bg-[#FFFDF9]"
+          }`}
+        >
+          <UtensilsCrossed className="h-3.5 w-3.5" />
+          <span>1. Jadwal Produksi &amp; DP ({prodSchedule.length})</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "decisions_stock"}
+          onClick={() => setActiveTab("decisions_stock")}
+          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+            activeTab === "decisions_stock"
+              ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
+              : "text-[#12100E] hover:bg-[#FFFDF9]"
+          }`}
+        >
+          <Scale className="h-3.5 w-3.5" />
+          <span>2. Keputusan ({queue.length}) &amp; Stok ({lowStocks.length})</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "calendar"}
+          onClick={() => setActiveTab("calendar")}
+          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+            activeTab === "calendar"
+              ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
+              : "text-[#12100E] hover:bg-[#FFFDF9]"
+          }`}
+        >
+          <CalendarRange className="h-3.5 w-3.5" />
+          <span>3. Kalender Kapasitas</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "simulation"}
+          onClick={() => setActiveTab("simulation")}
+          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-extrabold uppercase transition-all ${
+            activeTab === "simulation"
+              ? "border-2 border-[#12100E] bg-[#12100E] text-[#D9F99D]"
+              : "text-[#12100E] hover:bg-[#FFFDF9]"
+          }`}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          <span>4. Simulasi &amp; Kalibrasi</span>
+        </button>
+      </div>
+
+      {/* TAB 1: JADWAL PRODUKSI & MENUNGGU DP */}
+      {activeTab === "schedule" && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <Card className="min-w-0 lg:col-span-7">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <UtensilsCrossed className="h-4 w-4 text-[#C2410C]" />
+                  Jadwal Produksi &amp; Pengantaran ({prodSchedule.length})
+                </CardTitle>
+                <CardDescription>
+                  Pesanan terkonfirmasi (DP lunas) dan siap diproduksi/diantar.
+                </CardDescription>
+              </div>
+              <Link
+                href="/app/karyawan"
+                className="inline-flex items-center gap-1 text-xs font-extrabold text-[#C2410C] hover:underline"
+              >
+                Papan Tugas Dapur
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {prodSchedule.length === 0 ? (
+                <p className="py-8 text-center text-xs text-[#5C5046]">
+                  Belum ada jadwal produksi aktif pada rentang hari ini.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {prodSchedule.slice(0, 6).map((ord) => (
+                    <div
+                      key={ord.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#12100E] bg-[#FFF9F0] p-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/app/pesanan/${ord.id}`}
+                            className="font-mono-num text-sm font-extrabold text-[#C2410C] hover:underline"
+                          >
+                            #{ord.code}
+                          </Link>
+                          <OrderStatusBadge status={ord.status} />
+                          <Badge variant="slate">
+                            <Truck className="mr-1 h-3 w-3" />
+                            {ord.delivery_type === "delivery"
+                              ? "Diantar"
+                              : "Ambil Sendiri"}
+                          </Badge>
+                        </div>
+                        <p className="font-bold text-[#12100E]">
+                          {ord.customer_name} · Produksi{" "}
+                          {formatDateShort(ord.production_date)}
+                        </p>
+                        <p className="font-medium text-[#5C5046]">
+                          {ord.items
+                            .map((it) => `${it.product_name} × ${it.qty}`)
+                            .join(", ")}
+                        </p>
+                      </div>
+                      <Link href={`/app/pesanan/${ord.id}`}>
+                        <Button variant="outline" size="sm">
+                          Kelola
+                        </Button>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="min-w-0 lg:col-span-5">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-[#C2410C]" />
+                  Menunggu Pembayaran DP ({dpAlerts.length})
+                </CardTitle>
+                <CardDescription>
+                  Reservasi kapasitas sementara sampai tenggat DP.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {dpAlerts.length === 0 ? (
+                <p className="py-8 text-center text-xs text-[#5C5046]">
+                  Tidak ada pesanan yang menunggu pembayaran DP.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {dpAlerts.map((dp) => {
+                    const shortfall = Math.max(
+                      0,
+                      toNumber(dp.dp_required) - toNumber(dp.paid)
+                    );
+                    return (
+                      <div
+                        key={dp.order_id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#12100E] bg-[#FEF9C3] p-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/app/pesanan/${dp.order_id}`}
+                              className="font-mono-num text-sm font-extrabold text-[#12100E] hover:underline"
+                            >
+                              #{dp.code}
+                            </Link>
+                            <span className="font-bold text-[#12100E]">
+                              {dp.customer_name}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-[#3D352E]">
+                            Kurang DP:{" "}
+                            <strong className="text-[#BE123C]">
+                              {formatRupiah(shortfall)}
+                            </strong>
+                          </p>
+                          {dp.dp_deadline ? (
+                            <p className="text-[11px] font-bold text-[#5C5046]">
+                              Tenggat: {formatDateTimeWIB(dp.dp_deadline)}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Link href={`/app/pesanan/${dp.order_id}`}>
+                          <Button size="sm">Catat DP</Button>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* ELEMEN 1: Ringkasan KPI (Ketepatan Waktu & Utilisasi) */}
-      <section aria-label="Ringkasan KPI Operasional" className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
-            <BarChart3 className="h-4 w-4 text-amber-700" />
-            1. Ringkasan KPI Operasional (Ketepatan Waktu &amp; Utilisasi)
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-500">
-              <span>Ketepatan Waktu Selesai</span>
-              <Clock className="h-4 w-4 text-emerald-600" />
+      {/* TAB 2: KEPUTUSAN OPERASIONAL & STOK MINIMUM */}
+      {activeTab === "decisions_stock" && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="min-w-0 space-y-3 lg:col-span-7">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg font-extrabold text-[#12100E]">
+                Antrian Keputusan Operasional ({queue.length})
+              </h2>
+              <Link
+                href="/app/keputusan"
+                className="inline-flex items-center gap-1 text-xs font-extrabold text-[#C2410C] hover:underline"
+              >
+                Semua Antrian
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
-            <p className="mt-2 text-2xl font-bold text-stone-900">
-              {formatPercent(kpi.on_time_rate)}
-            </p>
-            <p className="mt-1 text-xs text-stone-500">
-              {kpi.on_time_orders} dari {kpi.completed_orders} pesanan selesai
-              tepat jadwal
-            </p>
-          </div>
 
-          <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-500">
-              <span>Utilisasi Rata-rata Dapur</span>
-              <CalendarRange className="h-4 w-4 text-amber-600" />
-            </div>
-            <p className="mt-2 text-2xl font-bold text-stone-900">
-              {formatPercent(kpi.avg_utilization)}
-            </p>
-            <p className="mt-1 text-xs text-stone-500">
-              {kpi.active_production_days} hari produksi · Puncak{" "}
-              {formatPercent(kpi.peak_utilization)}
-              {kpi.peak_utilization_date
-                ? ` (${formatDateShort(kpi.peak_utilization_date)})`
-                : ""}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-500">
-              <span>Tingkat Pembatalan / DP Lewat</span>
-              <AlertTriangle className="h-4 w-4 text-rose-600" />
-            </div>
-            <p className="mt-2 text-2xl font-bold text-stone-900">
-              {formatPercent(kpi.cancellation_rate)}
-            </p>
-            <p className="mt-1 text-xs text-stone-500">
-              {kpi.cancelled_or_expired_orders} batal/kedaluwarsa dari{" "}
-              {kpi.accepted_orders_total} pesanan diterima
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-500">
-              <span>Status Penyangga Kas (G3)</span>
-              <CheckCircle2
-                className={`h-4 w-4 ${
-                  cashStatus.passed ? "text-emerald-600" : "text-rose-600"
-                }`}
-              />
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <Badge variant={cashStatus.passed ? "emerald" : "rose"}>
-                {cashStatus.passed ? "Lolos Buffer" : "Perlu Perhatian DP"}
-              </Badge>
-            </div>
-            <p className="mt-1.5 text-xs text-stone-500">
-              {cashStatus.days_below_buffer.length} hari rawan dalam 14 hari ke
-              depan
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ELEMEN 2: Kalender Kapasitas Bulanan */}
-      <section aria-label="Kalender Kapasitas Bulanan" className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
-              <CalendarRange className="h-4 w-4 text-amber-700" />
-              2. Kalender Kapasitas Bulanan
-            </h2>
-            <p className="text-xs text-stone-500">
-              Klik tanggal untuk meninjau status utilisasi harian atau buka
-              halaman kapasitas penuh.
-            </p>
-          </div>
-          <Link
-            href={
-              selectedDate
-                ? `/app/kapasitas?date=${encodeURIComponent(selectedDate)}`
-                : "/app/kapasitas"
-            }
-            className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-950"
-          >
-            Buka Rincian Kapasitas Harian
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-
-        <CapacityCalendar
-          days={calendar}
-          selectedDate={selectedDate}
-          onSelectDate={(dt) => setSelectedDate(dt)}
-        />
-
-        {selectedCapDay ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="font-bold text-stone-900">
-                Tanggal Terpilih: {formatDateLong(selectedCapDay.date)}
-              </span>
-              <span className="text-stone-600">
-                Utilisasi:{" "}
-                <strong>{formatPercent(selectedCapDay.utilization)}</strong>
-              </span>
-              {selectedCapDay.bottleneck ? (
-                <Badge variant="amber">
-                  Penghambat: {selectedCapDay.bottleneck}
-                </Badge>
-              ) : null}
-            </div>
-            <Link
-              href={`/app/kapasitas?date=${encodeURIComponent(selectedCapDay.date)}`}
-              className="font-semibold text-amber-800 hover:underline"
-            >
-              Lihat Beban Oven &amp; Tenaga Kerja →
-            </Link>
-          </div>
-        ) : null}
-      </section>
-
-      {/* ELEMEN 3 & 4: Jadwal Produksi/Pengantaran & Peringatan Stok */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* ELEMEN 3: Jadwal Produksi & Pengantaran */}
-        <Card className="lg:col-span-7">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <UtensilsCrossed className="h-4 w-4 text-amber-700" />
-                3. Jadwal Produksi &amp; Pengantaran ({prodSchedule.length})
-              </CardTitle>
-              <CardDescription>
-                Pesanan terkonfirmasi (DP lunas), sedang diproduksi, atau siap
-                diantar/diambil pada horizon 14 hari.
-              </CardDescription>
-            </div>
-            <Link
-              href="/app/karyawan"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-950"
-            >
-              Papan Tugas Dapur
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {prodSchedule.length === 0 ? (
-              <p className="py-8 text-center text-xs text-stone-500">
-                Belum ada jadwal produksi aktif pada rentang hari ini.
-              </p>
+            {queue.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center text-xs text-[#5C5046]">
+                  Tidak ada pesanan yang menunggu keputusan saat ini.
+                </CardContent>
+              </Card>
             ) : (
-              <div className="space-y-2.5">
-                {prodSchedule.slice(0, 6).map((ord) => (
-                  <div
-                    key={ord.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50/60 p-3 text-xs"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/app/pesanan/${ord.id}`}
-                          className="font-mono text-sm font-bold text-amber-800 hover:underline"
-                        >
-                          #{ord.code}
-                        </Link>
-                        <OrderStatusBadge status={ord.status} />
-                        <Badge variant="slate">
-                          <Truck className="mr-1 h-3 w-3" />
-                          {ord.delivery_type === "delivery"
-                            ? "Diantar"
-                            : "Ambil Sendiri"}
-                        </Badge>
-                      </div>
-                      <p className="font-semibold text-stone-800">
-                        {ord.customer_name} · Produksi:{" "}
-                        {formatDateShort(ord.production_date)} · Acara:{" "}
-                        {formatDateShort(ord.event_date)}
-                      </p>
-                      <p className="text-stone-600">
-                        {ord.items
-                          .map((it) => `${it.product_name} × ${it.qty}`)
-                          .join(", ")}
-                      </p>
-                    </div>
-                    <Link href={`/app/pesanan/${ord.id}`}>
-                      <Button variant="outline" size="sm">
-                        Kelola
-                      </Button>
-                    </Link>
-                  </div>
+              <div className="space-y-4">
+                {queue.slice(0, 3).map((item) => (
+                  <DecisionCard
+                    key={item.id}
+                    item={item}
+                    onDecided={handleDecided}
+                  />
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* ELEMEN 4: Peringatan Stok & Ringkasan Belanja */}
-        <Card className="lg:col-span-5">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Boxes className="h-4 w-4 text-amber-700" />
-                4. Peringatan Stok Minimum ({lowStocks.length})
-              </CardTitle>
-              <CardDescription>
-                Bahan baku yang berada di bawah ambang stok minimum dan daftar
-                belanja aktif.
-              </CardDescription>
-            </div>
-            <Link
-              href="/app/belanja"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-950"
-            >
-              Catat Belanja
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-2.5 text-xs text-amber-950">
-              <span>
-                Kebutuhan Belanja Pesanan Aktif:{" "}
-                <strong>{shopList?.items.length ?? 0} bahan</strong>
-              </span>
-              <span className="font-bold">
-                Est: {formatRupiah(shopList?.total_estimated)}
-              </span>
-            </div>
-
-            {lowStocks.length === 0 ? (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 text-center text-xs text-emerald-800">
-                Seluruh stok bahan baku berada di atas batas minimum.
+          <Card className="min-w-0 lg:col-span-5">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Boxes className="h-4 w-4 text-[#C2410C]" />
+                  Peringatan Stok Minimum ({lowStocks.length})
+                </CardTitle>
+                <CardDescription>
+                  Kebutuhan belanja aktif: {shopList?.items.length ?? 0} bahan (
+                  {formatRupiah(shopList?.total_estimated)})
+                </CardDescription>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {lowStocks.slice(0, 6).map((item) => (
+              <Link
+                href="/app/belanja"
+                className="inline-flex items-center gap-1 text-xs font-extrabold text-[#C2410C] hover:underline"
+              >
+                Daftar Belanja
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {lowStocks.length === 0 ? (
+                <div className="rounded-2xl border-2 border-[#12100E] bg-[#ECFCCB] p-4 text-center text-xs font-bold text-[#12100E]">
+                  Seluruh stok bahan baku berada di atas batas minimum.
+                </div>
+              ) : (
+                lowStocks.slice(0, 6).map((item) => (
                   <div
                     key={item.ingredient_id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2 text-xs"
+                    className="flex items-center justify-between gap-2 rounded-2xl border-2 border-[#12100E] bg-[#FFE4E6] px-3.5 py-2.5 text-xs"
                   >
                     <div>
-                      <p className="font-semibold text-stone-900">
+                      <p className="font-extrabold text-[#12100E]">
                         {item.ingredient_name}
                       </p>
-                      <p className="text-[11px] text-stone-600">
-                        Stok saat ini:{" "}
-                        <strong className="text-rose-700">
-                          {formatNumber(item.stock)} {item.use_unit}
-                        </strong>{" "}
-                        (Min: {formatNumber(item.min_stock)} {item.use_unit})
+                      <p className="text-[11px] font-semibold text-[#5C5046]">
+                        Stok: {formatNumber(item.stock)} {item.use_unit} (Min:{" "}
+                        {formatNumber(item.min_stock)})
                       </p>
                     </div>
                     <Badge variant="rose">
-                      Kurang {formatNumber(item.deficit)} {item.use_unit}
+                      -{formatNumber(item.deficit)} {item.use_unit}
                     </Badge>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* ELEMEN 5: Pesanan yang Belum di-DP & Antrian Keputusan */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <Card className="lg:col-span-6">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-amber-700" />
-                5. Pesanan Menunggu Pembayaran DP ({dpAlerts.length})
-              </CardTitle>
-              <CardDescription>
-                Pesanan berstatus Disetujui yang mereservasi kapasitas sementara
-                sampai tenggat DP.
-              </CardDescription>
-            </div>
+      {/* TAB 3: KALENDER KAPASITAS BULANAN */}
+      {activeTab === "calendar" && (
+        <section aria-label="Kalender Kapasitas Bulanan" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-extrabold text-[#12100E]">
+              Kalender Kapasitas Bulanan
+            </h2>
             <Link
-              href="/app/pesanan?status=accepted"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-950"
+              href={
+                selectedDate
+                  ? `/app/kapasitas?date=${encodeURIComponent(selectedDate)}`
+                  : "/app/kapasitas"
+              }
+              className="inline-flex items-center gap-1 text-xs font-extrabold text-[#C2410C] hover:underline"
             >
-              Semua Menunggu DP
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {dpAlerts.length === 0 ? (
-              <p className="py-8 text-center text-xs text-stone-500">
-                Tidak ada pesanan yang sedang menunggu pembayaran DP.
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {dpAlerts.map((dp) => {
-                  const shortfall = Math.max(
-                    0,
-                    toNumber(dp.dp_required) - toNumber(dp.paid)
-                  );
-                  return (
-                    <div
-                      key={dp.order_id}
-                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50/50 p-3 text-xs"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/app/pesanan/${dp.order_id}`}
-                            className="font-mono text-sm font-bold text-amber-800 hover:underline"
-                          >
-                            #{dp.code}
-                          </Link>
-                          <span className="font-semibold text-stone-800">
-                            {dp.customer_name}
-                          </span>
-                          <Badge variant="sky">
-                            Acara: {formatDateShort(dp.event_date)}
-                          </Badge>
-                        </div>
-                        <p className="text-stone-700">
-                          Wajib DP:{" "}
-                          <strong>{formatRupiah(dp.dp_required)}</strong> ·
-                          Sudah Masuk: {formatRupiah(dp.paid)} · Kurang:{" "}
-                          <strong className="text-rose-700">
-                            {formatRupiah(shortfall)}
-                          </strong>
-                        </p>
-                        {dp.dp_deadline ? (
-                          <p className="text-[11px] font-medium text-amber-900">
-                            Tenggat DP: {formatDateTimeWIB(dp.dp_deadline)}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Link href={`/app/pesanan/${dp.order_id}`}>
-                        <Button size="sm">Catat Pembayaran</Button>
-                      </Link>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Antrian Keputusan Manajer (Pesanan di Bawah Ambang) */}
-        <div className="space-y-3 lg:col-span-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="flex items-center gap-2 text-base font-bold text-stone-900">
-                <Scale className="h-4 w-4 text-amber-700" />
-                Antrian Keputusan Operasional ({queue.length})
-              </h2>
-              <p className="text-xs text-stone-500">
-                Manajer dapat memutuskan pesanan di bawah ambang pesanan besar.
-              </p>
-            </div>
-            <Link
-              href="/app/keputusan"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-950"
-            >
-              Semua Antrian
+              Rincian Kapasitas Harian
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          {queue.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-xs text-stone-500">
-                Tidak ada pesanan yang menunggu keputusan saat ini.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {queue.slice(0, 2).map((item) => (
-                <DecisionCard
-                  key={item.id}
-                  item={item}
-                  onDecided={handleDecided}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+          <CapacityCalendar
+            days={calendar}
+            selectedDate={selectedDate}
+            onSelectDate={(dt) => setSelectedDate(dt)}
+          />
 
-      {/* ELEMEN 5: Simulasi Dampak Bisnis 30 Hari */}
-      <section aria-label="Simulasi Dampak Bisnis 30 Hari">
-        <BusinessImpactSimulation />
-      </section>
+          {selectedCapDay ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#12100E] bg-[#FFFDF9] px-4 py-3 text-xs shadow-[4px_4px_0px_#12100E]">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-extrabold text-[#12100E]">
+                  {formatDateLong(selectedCapDay.date)}
+                </span>
+                <span className="font-semibold text-[#5C5046]">
+                  Utilisasi:{" "}
+                  <strong>{formatPercent(selectedCapDay.utilization)}</strong>
+                </span>
+              </div>
+              <Link
+                href={`/app/kapasitas?date=${encodeURIComponent(selectedCapDay.date)}`}
+                className="font-extrabold text-[#C2410C] hover:underline"
+              >
+                Lihat Beban Oven &amp; Tim →
+              </Link>
+            </div>
+          ) : null}
+        </section>
+      )}
+
+      {/* TAB 4: SIMULASI & KALIBRASI */}
+      {activeTab === "simulation" && (
+        <div className="space-y-6">
+          {data.kpi?.calibration ? (
+            <WorkloadRecalibrationCard
+              calibration={data.kpi.calibration}
+              onSuccess={() => void loadDashboard()}
+              userRole="manager"
+            />
+          ) : null}
+          <BusinessImpactSimulation />
+        </div>
+      )}
     </div>
   );
 }
