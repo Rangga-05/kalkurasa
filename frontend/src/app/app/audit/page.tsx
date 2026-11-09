@@ -346,8 +346,139 @@ export default function AuditLogPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            {/* Tampilan Mobile: Feed Kartu Audit Bebas Geser Horisontal */}
+            <div className="space-y-3 sm:hidden">
+              {displayedItems.map((log) => {
+                const isExpanded = expandedId === log.id;
+                const overrideReason =
+                  typeof log.detail?.override_reason === "string"
+                    ? log.detail.override_reason
+                    : null;
+                const initialRec =
+                  typeof log.detail?.initial_recommendation === "string"
+                    ? log.detail.initial_recommendation
+                    : null;
+                const orderLink =
+                  log.entity === "orders" && log.entity_id
+                    ? `/app/pesanan/${log.entity_id}`
+                    : null;
+
+                return (
+                  <div
+                    key={`mobile-${log.id}`}
+                    className={`rounded-2xl border-2 border-[#12100E] p-3.5 text-xs transition-all shadow-[3px_3px_0px_#12100E] ${
+                      log.action === "override" || log.action === "cancel"
+                        ? "bg-rose-50/70"
+                        : "bg-white"
+                    }`}
+                  >
+                    {/* Header Kartu: Waktu & Aksi */}
+                    <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-2">
+                      <span className="font-mono text-[11px] font-medium text-stone-500">
+                        {formatDateTimeWIB(log.created_at)}
+                      </span>
+                      <Badge
+                        variant={
+                          log.action === "override" || log.action === "cancel"
+                            ? "rose"
+                            : log.action === "decision" || log.action === "payment"
+                              ? "emerald"
+                              : "amber"
+                        }
+                      >
+                        {AUDIT_ACTION_LABELS[log.action] ?? log.action}
+                      </Badge>
+                    </div>
+
+                    {/* Pelaku & Entitas */}
+                    <div className="mt-2.5 flex items-start justify-between gap-2">
+                      <div>
+                        <span className="block text-[10px] font-bold uppercase text-stone-400">
+                          Pelaku
+                        </span>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <span className="font-bold text-stone-900">
+                            {log.actor_name || "Publik / Sistem"}
+                          </span>
+                          {log.actor_role && (
+                            <Badge variant="slate" className="text-[9px]">
+                              {ROLE_LABELS[log.actor_role as UserRole] ?? log.actor_role}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="block text-[10px] font-bold uppercase text-stone-400">
+                          Entitas
+                        </span>
+                        <span className="font-bold text-stone-800">
+                          {AUDIT_ENTITY_LABELS[log.entity] ?? log.entity}
+                        </span>
+                        {orderLink ? (
+                          <Link
+                            href={orderLink}
+                            className="block font-mono text-[10px] font-semibold text-amber-800 hover:underline"
+                          >
+                            Buka Pesanan →
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Alasan Override */}
+                    {overrideReason && (
+                      <div className="mt-2.5 flex items-start gap-1.5 rounded-xl border border-rose-200 bg-rose-100/70 p-2.5 text-[11px] text-rose-950">
+                        <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-600" />
+                        <div>
+                          <strong>Alasan Override:</strong> {overrideReason}
+                          {initialRec && (
+                            <span className="ml-1 text-rose-800">
+                              (Rekomendasi: {initialRec})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ringkasan Data Detail */}
+                    <div className="mt-2 rounded-xl bg-stone-50 p-2.5 font-mono text-[10px] text-stone-700">
+                      <div className="flex flex-wrap gap-x-3 gap-y-1">
+                        {Object.entries(log.detail ?? {})
+                          .slice(0, 3)
+                          .map(([k, v]) => (
+                            <span key={k}>
+                              <strong className="text-stone-900">{k}:</strong>{" "}
+                              {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                            </span>
+                          ))}
+                      </div>
+
+                      {isExpanded && (
+                        <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-stone-200 bg-stone-900 p-2 text-[10px] text-amber-100">
+                          {JSON.stringify(log.detail, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+
+                    {/* Tombol Toggle JSON */}
+                    <div className="mt-2.5 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                        className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-bold text-stone-700 hover:bg-stone-100 cursor-pointer shadow-2xs"
+                      >
+                        {isExpanded ? "Tutup Rincian" : "Lihat Detail JSON"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tampilan Desktop & Tablet: Tabel Rinci 7 Kolom */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full min-w-[750px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-200 text-stone-500">
                     <th className="py-2.5 pr-3 font-semibold">Waktu (WIB)</th>
