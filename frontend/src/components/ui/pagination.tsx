@@ -12,6 +12,8 @@ export interface PaginationProps {
   onPageChange: (page: number) => void;
   itemName?: string;
   className?: string;
+  scrollTargetId?: string;
+  scrollOnChange?: boolean;
 }
 
 export function Pagination({
@@ -22,10 +24,40 @@ export function Pagination({
   onPageChange,
   itemName = "data",
   className = "",
+  scrollTargetId,
+  scrollOnChange = true,
 }: PaginationProps) {
   if (totalItems <= 0 || totalPages <= 1) {
     return null;
   }
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    onPageChange(newPage);
+
+    if (scrollOnChange && typeof window !== "undefined") {
+      // Jika diberikan target ID elemen tertentu, scroll ke elemen tersebut
+      if (scrollTargetId) {
+        const targetEl = document.getElementById(scrollTargetId);
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+      }
+
+      // Scroll halus ke puncak halaman / viewport
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      document.documentElement.scrollTo?.({ top: 0, behavior: "smooth" });
+      document.body.scrollTo?.({ top: 0, behavior: "smooth" });
+
+      const mainEl =
+        document.querySelector("main") ||
+        document.getElementById("main-content");
+      if (mainEl && mainEl.scrollTop > 0) {
+        mainEl.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  };
 
   const startItem = (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
@@ -81,7 +113,7 @@ export function Pagination({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => onPageChange(currentPage - 1)}
+          onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           className="h-8 gap-1 px-2.5 text-xs font-semibold cursor-pointer disabled:cursor-not-allowed"
           aria-label="Halaman sebelumnya"
@@ -108,7 +140,7 @@ export function Pagination({
               <button
                 type="button"
                 key={p}
-                onClick={() => onPageChange(Number(p))}
+                onClick={() => handlePageChange(Number(p))}
                 className={`h-8 min-w-[32px] rounded-lg px-2 text-xs font-bold transition-all cursor-pointer ${
                   isCurrent
                     ? "bg-[#E05A47] text-white shadow-2xs"
@@ -131,7 +163,7 @@ export function Pagination({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => onPageChange(currentPage + 1)}
+          onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           className="h-8 gap-1 px-2.5 text-xs font-semibold cursor-pointer disabled:cursor-not-allowed"
           aria-label="Halaman selanjutnya"

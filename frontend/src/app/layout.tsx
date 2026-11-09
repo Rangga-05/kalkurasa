@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { ScrollToTopOnNavigate } from "@/components/scroll-to-top";
 
 export const metadata: Metadata = {
   title: "Kalkurasa : Dapur Pre-Order & Kalkulasi Rasa Presisi",
@@ -35,6 +36,7 @@ export default function RootLayout({
           Lewati ke konten utama
         </a>
         <Providers>
+          <ScrollToTopOnNavigate />
           <div id="main-content" className="flex flex-1 flex-col">
             {children}
           </div>

@@ -22,6 +22,7 @@ import type { AuditLogItem, UserRole } from "@/lib/types";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/ui/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import {
   Card,
   CardContent,
@@ -486,34 +487,14 @@ export default function AuditLogPage() {
             </div>
 
             {/* Kontrol Paginasi */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 pt-3 text-xs text-stone-600">
-              <div>
-                Menampilkan halaman <strong>{page}</strong> dari{" "}
-                <strong>{totalPages}</strong> (Total{" "}
-                <strong>{totalFiltered}</strong> catatan audit)
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                  Sebelumnya
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages || loading}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Berikutnya
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={totalFiltered}
+              pageSize={limit}
+              onPageChange={setPage}
+              itemName="catatan audit"
+            />
           </CardContent>
         </Card>
       )}
