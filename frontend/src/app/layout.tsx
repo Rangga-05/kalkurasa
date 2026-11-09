@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   title: "Kalkurasa : Dapur Pre-Order & Kalkulasi Rasa Presisi",
   description:
     "Platform kuliner pre-order dengan evaluasi kapasitas oven, margin resep, dan ketahanan kas 4-Gerbang.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
