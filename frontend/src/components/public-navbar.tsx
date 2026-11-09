@@ -13,7 +13,6 @@ import {
   Menu,
   Search,
   ShoppingBag,
-  SlidersHorizontal,
   UserPlus,
   X,
 } from "lucide-react";
@@ -117,11 +116,10 @@ export function PublicNavbar() {
               Menu
             </Link>
             <Link
-              href="/#simulasi-gerbang"
+              href="/#dapur-kami"
               className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold whitespace-nowrap text-[#12100E] uppercase transition-all hover:bg-[#FDE047]"
             >
-              <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[#C2410C]" />
-              <span>4-Gate Mixer</span>
+              <span>Cerita Dapur</span>
             </Link>
             <Link
               href="/lacak"
@@ -249,11 +247,11 @@ export function PublicNavbar() {
               <ArrowUpRight className="h-4 w-4 shrink-0" />
             </Link>
             <Link
-              href="/#simulasi-gerbang"
+              href="/#dapur-kami"
               className="flex min-h-11 items-center justify-between rounded-2xl border-2 border-[#12100E] bg-[#FEF9C3] px-4 py-2.5 text-xs font-extrabold text-[#12100E] uppercase"
             >
-              <span>03 · Simulator 4-Gate Mixer</span>
-              <SlidersHorizontal className="h-4 w-4 shrink-0" />
+              <span>03 · Cerita Dapur Kalkurasa</span>
+              <ArrowUpRight className="h-4 w-4 shrink-0" />
             </Link>
             <Link
               href="/lacak"
