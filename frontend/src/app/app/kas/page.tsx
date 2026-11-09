@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/ui/pagination";
 
 export default function KasPage() {
   const { user } = useInternalSession();
@@ -50,6 +51,15 @@ export default function KasPage() {
   const [entryCategory, setEntryCategory] = useState("modal_tambahan");
   const [entryNote, setEntryNote] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Pagination & Filter Tabel Rincian Arus Kas Harian
+  const [tablePage, setTablePage] = useState(1);
+  const [tableStatusFilter, setTableStatusFilter] = useState<"all" | "danger" | "safe">("all");
+  const TABLE_PAGE_SIZE = 10;
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [horizonDays]);
 
   const cashQuery = useQuery({
     queryKey: ["cash-projection", horizonDays],
@@ -94,6 +104,23 @@ export default function KasPage() {
   };
 
   const data = cashQuery.data;
+
+  const filteredDays = useMemo(() => {
+    if (!data?.days) return [];
+    if (tableStatusFilter === "danger") {
+      return data.days.filter((d) => d.below_buffer);
+    }
+    if (tableStatusFilter === "safe") {
+      return data.days.filter((d) => !d.below_buffer);
+    }
+    return data.days;
+  }, [data?.days, tableStatusFilter]);
+
+  const totalTablePages = Math.ceil(filteredDays.length / TABLE_PAGE_SIZE);
+  const paginatedDays = useMemo(() => {
+    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
+    return filteredDays.slice(start, start + TABLE_PAGE_SIZE);
+  }, [filteredDays, tablePage]);
 
   return (
     <div className="space-y-6">
@@ -313,7 +340,7 @@ export default function KasPage() {
           {/* Grafik Recharts & Rincian Harian (Khusus Owner) */}
           {isOwner && data.days ? (
             <>
-              <Card className="min-w-0 overflow-hidden p-3.5 space-y-4 sm:p-5">
+              <Card className="min-w-0 overflow-hidden p-3.5 space-y-4 sm:p-5 rounded-2xl border-2 border-[#12100E] shadow-[3px_3px_0px_#12100E] bg-white">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="text-base font-bold text-stone-900">
@@ -338,7 +365,7 @@ export default function KasPage() {
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 {/* Form Entri Kas Manual */}
-                <Card className="p-5 lg:col-span-1">
+                <Card className="p-5 lg:col-span-1 rounded-2xl border-2 border-[#12100E] shadow-[3px_3px_0px_#12100E] bg-white">
                   <div className="flex items-center gap-2 border-b border-stone-200 pb-3">
                     <PlusCircle className="h-4 w-4 text-amber-700" />
                     <h2 className="text-sm font-bold text-stone-900">
@@ -534,95 +561,285 @@ export default function KasPage() {
                   ) : null}
                 </Card>
 
-                {/* Tabel Rincian Saldo Harian */}
-                <Card className="overflow-hidden lg:col-span-2">
-                  <div className="border-b border-stone-200 bg-stone-50 px-4 py-3">
-                    <h2 className="text-sm font-bold text-stone-900">
-                      Tabel Rincian Proyeksi Arus Kas Harian
-                    </h2>
+                {/* Tabel Rincian Saldo Harian (Dual Layout: Mobile Cards & Desktop Table) */}
+                <Card
+                  id="tabel-proyeksi-kas"
+                  className="overflow-hidden lg:col-span-2 rounded-2xl border-2 border-[#12100E] shadow-[3px_3px_0px_#12100E] bg-white"
+                >
+                  {/* Header dengan Filter Status */}
+                  <div className="border-b-2 border-[#12100E] bg-[#FFFDF9] p-4 sm:p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h2 className="font-display text-base font-extrabold text-[#12100E]">
+                            Tabel Rincian Proyeksi Arus Kas Harian
+                          </h2>
+                          <Badge variant="slate" className="text-[10px]">
+                            {filteredDays.length} Hari
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-[#5C5046]">
+                          Simulasi saldo penutupan harian terhadap batas aman penyangga kas ({formatRupiah(data.cash_buffer)}).
+                        </p>
+                      </div>
+
+                      {/* Filter Status: Semua / Rawan / Aman */}
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTableStatusFilter("all");
+                            setTablePage(1);
+                          }}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                            tableStatusFilter === "all"
+                              ? "bg-[#12100E] text-[#FFFDF9] shadow-xs"
+                              : "border border-stone-200 bg-white text-stone-700 hover:bg-stone-100"
+                          }`}
+                        >
+                          Semua ({data.days.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTableStatusFilter("danger");
+                            setTablePage(1);
+                          }}
+                          className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                            tableStatusFilter === "danger"
+                              ? "bg-rose-600 text-white shadow-xs"
+                              : "border border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
+                          }`}
+                        >
+                          Rawan ({data.days_below_buffer.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTableStatusFilter("safe");
+                            setTablePage(1);
+                          }}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                            tableStatusFilter === "safe"
+                              ? "bg-emerald-700 text-white shadow-xs"
+                              : "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                          }`}
+                        >
+                          Aman ({data.days.length - data.days_below_buffer.length})
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="max-h-[540px] overflow-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="sticky top-0 border-b border-stone-200 bg-stone-100 text-[11px] font-semibold uppercase tracking-wider text-stone-600">
-                        <tr>
-                          <th className="px-4 py-2.5">Tanggal</th>
-                          <th className="px-3 py-2.5 text-right">Kas Masuk</th>
-                          <th className="px-3 py-2.5 text-right">
-                            Belanja & Keluar
-                          </th>
-                          <th className="px-3 py-2.5 text-right">
-                            Biaya Tetap
-                          </th>
-                          <th className="px-4 py-2.5 text-right">
-                            Saldo Akhir
-                          </th>
-                          <th className="px-3 py-2.5 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-stone-200 bg-white">
-                        {data.days.map((d) => {
-                          const isLowest = d.date === data.lowest_date;
-                          return (
-                            <tr
-                              key={d.date}
-                              className={
-                                d.below_buffer
-                                  ? "bg-rose-50/40"
-                                  : isLowest
-                                    ? "bg-amber-50/40"
-                                    : "hover:bg-stone-50"
-                              }
-                            >
-                              <td className="px-4 py-2.5 font-medium text-stone-900 whitespace-nowrap">
-                                {formatDateShort(d.date)}
-                                {isLowest ? (
-                                  <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
-                                    Terendah
+
+                  {/* Tampilan Mobile & Layar Sempit (< 768px): Feed Kartu Harian */}
+                  <div className="space-y-3 p-3.5 md:hidden">
+                    {paginatedDays.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-xs text-stone-500">
+                        Tidak ada data proyeksi arus kas untuk filter ini.
+                      </div>
+                    ) : (
+                      paginatedDays.map((d) => {
+                        const isLowest = d.date === data.lowest_date;
+                        const isDanger = d.below_buffer;
+                        return (
+                          <div
+                            key={`mobile-day-${d.date}`}
+                            className={`overflow-hidden rounded-2xl border-2 border-[#12100E] p-3.5 text-xs transition-all shadow-[2px_2px_0px_#12100E] ${
+                              isDanger
+                                ? "bg-rose-50/70 border-l-[6px] border-l-rose-600"
+                                : isLowest
+                                ? "bg-amber-50/70 border-l-[6px] border-l-amber-600"
+                                : "bg-white"
+                            }`}
+                          >
+                            {/* Header Kartu: Tanggal & Badge Status */}
+                            <div className="flex items-center justify-between gap-2 border-b border-[#12100E]/10 pb-2.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-extrabold text-[#12100E] text-sm">
+                                  {formatDateShort(d.date)}
+                                </span>
+                                <span className="text-[11px] text-stone-500 font-medium">
+                                  ({d.date})
+                                </span>
+                                {isLowest && (
+                                  <span className="rounded-md border border-amber-600 bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-900">
+                                    Titik Terendah
                                   </span>
-                                ) : null}
-                              </td>
-                              <td className="px-3 py-2.5 text-right font-medium text-emerald-700 whitespace-nowrap">
-                                {toNumber(d.inflow) > 0
-                                  ? `+${formatRupiah(d.inflow)}`
-                                  : "-"}
-                              </td>
-                              <td className="px-3 py-2.5 text-right font-medium text-rose-700 whitespace-nowrap">
-                                {toNumber(d.outflow) > 0
-                                  ? `-${formatRupiah(d.outflow)}`
-                                  : "-"}
-                              </td>
-                              <td className="px-3 py-2.5 text-right text-stone-600 whitespace-nowrap">
-                                -{formatRupiah(d.fixed_cost)}
-                              </td>
-                              <td
-                                className={`px-4 py-2.5 text-right font-bold whitespace-nowrap ${
-                                  d.below_buffer
-                                    ? "text-rose-700"
-                                    : "text-stone-900"
+                                )}
+                              </div>
+
+                              <Badge
+                                variant={isDanger ? "rose" : "emerald"}
+                                className="text-[10px] whitespace-nowrap shrink-0 max-w-max"
+                              >
+                                {isDanger ? "Rawan (< Penyangga)" : "Aman"}
+                              </Badge>
+                            </div>
+
+                            {/* Saldo Akhir */}
+                            <div className="mt-2.5 flex items-baseline justify-between rounded-xl bg-stone-50/80 p-2.5 border border-stone-200/70">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                                Saldo Akhir Hari
+                              </span>
+                              <span
+                                className={`font-mono text-sm font-extrabold ${
+                                  isDanger ? "text-rose-700" : "text-[#12100E]"
                                 }`}
                               >
                                 {formatRupiah(d.closing)}
-                              </td>
-                              <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                                {d.below_buffer ? (
-                                  <Badge variant="rose" className="text-[10px]">
-                                    Rawan
-                                  </Badge>
-                                ) : (
-                                  <Badge
-                                    variant="emerald"
-                                    className="text-[10px]"
-                                  >
-                                    Aman
-                                  </Badge>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                              </span>
+                            </div>
+
+                            {/* Rincian Arus Kas (3 Metrik) */}
+                            <div className="mt-2 grid grid-cols-3 gap-1.5 text-[11px]">
+                              <div className="rounded-lg bg-emerald-50/70 p-2 border border-emerald-100">
+                                <span className="block text-[9px] font-bold uppercase text-emerald-800">
+                                  Kas Masuk
+                                </span>
+                                <span className="font-mono text-[11px] font-bold text-emerald-900">
+                                  {toNumber(d.inflow) > 0
+                                    ? `+${formatRupiah(d.inflow)}`
+                                    : "-"}
+                                </span>
+                              </div>
+
+                              <div className="rounded-lg bg-rose-50/70 p-2 border border-rose-100">
+                                <span className="block text-[9px] font-bold uppercase text-rose-800">
+                                  Belanja/Keluar
+                                </span>
+                                <span className="font-mono text-[11px] font-bold text-rose-900">
+                                  {toNumber(d.outflow) > 0
+                                    ? `-${formatRupiah(d.outflow)}`
+                                    : "-"}
+                                </span>
+                              </div>
+
+                              <div className="rounded-lg bg-stone-100/70 p-2 border border-stone-200">
+                                <span className="block text-[9px] font-bold uppercase text-stone-600">
+                                  Biaya Tetap
+                                </span>
+                                <span className="font-mono text-[11px] font-bold text-stone-800">
+                                  -{formatRupiah(d.fixed_cost)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Tampilan Desktop & Layar Lebar (>= 768px): Tabel Rinci */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full min-w-[680px] text-left text-xs">
+                      <thead className="sticky top-0 border-b-2 border-[#12100E]/10 bg-stone-100/90 text-[11px] font-extrabold uppercase tracking-wider text-stone-600 backdrop-blur-xs">
+                        <tr>
+                          <th className="px-4 py-3">Tanggal Proyeksi</th>
+                          <th className="px-3 py-3 text-right">Kas Masuk</th>
+                          <th className="px-3 py-3 text-right">Belanja & Keluar</th>
+                          <th className="px-3 py-3 text-right">Biaya Tetap</th>
+                          <th className="px-4 py-3 text-right">Saldo Akhir</th>
+                          <th className="px-4 py-3 text-center">Status Buffer</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-200 bg-white">
+                        {paginatedDays.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="px-4 py-8 text-center text-xs text-stone-500"
+                            >
+                              Tidak ada data proyeksi arus kas untuk filter ini.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedDays.map((d) => {
+                            const isLowest = d.date === data.lowest_date;
+                            const isDanger = d.below_buffer;
+                            return (
+                              <tr
+                                key={`desktop-day-${d.date}`}
+                                className={`transition-colors ${
+                                  isDanger
+                                    ? "bg-rose-50/50 hover:bg-rose-50/80 border-l-4 border-l-rose-500"
+                                    : isLowest
+                                    ? "bg-amber-50/50 hover:bg-amber-50/80 border-l-4 border-l-amber-500"
+                                    : "hover:bg-stone-50"
+                                }`}
+                              >
+                                <td className="px-4 py-3 font-semibold text-stone-900 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5">
+                                    <span>{formatDateShort(d.date)}</span>
+                                    <span className="text-[10px] text-stone-400 font-normal">
+                                      ({d.date})
+                                    </span>
+                                    {isLowest && (
+                                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-900 border border-amber-300">
+                                        Titik Terendah
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3 text-right font-mono font-medium text-emerald-700 whitespace-nowrap">
+                                  {toNumber(d.inflow) > 0
+                                    ? `+${formatRupiah(d.inflow)}`
+                                    : "-"}
+                                </td>
+                                <td className="px-3 py-3 text-right font-mono font-medium text-rose-700 whitespace-nowrap">
+                                  {toNumber(d.outflow) > 0
+                                    ? `-${formatRupiah(d.outflow)}`
+                                    : "-"}
+                                </td>
+                                <td className="px-3 py-3 text-right font-mono text-stone-600 whitespace-nowrap">
+                                  -{formatRupiah(d.fixed_cost)}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-right font-mono font-bold whitespace-nowrap text-sm ${
+                                    isDanger ? "text-rose-700" : "text-stone-900"
+                                  }`}
+                                >
+                                  {formatRupiah(d.closing)}
+                                </td>
+                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                  {isDanger ? (
+                                    <Badge
+                                      variant="rose"
+                                      className="text-[10px] whitespace-nowrap shrink-0 max-w-max"
+                                    >
+                                      Rawan Penyangga
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="emerald"
+                                      className="text-[10px] whitespace-nowrap shrink-0 max-w-max"
+                                    >
+                                      Aman
+                                    </Badge>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Kontrol Pagination */}
+                  {filteredDays.length > TABLE_PAGE_SIZE && (
+                    <div className="border-t border-stone-200 bg-stone-50/50 p-3.5 sm:p-4">
+                      <Pagination
+                        currentPage={tablePage}
+                        totalPages={totalTablePages}
+                        totalItems={filteredDays.length}
+                        pageSize={TABLE_PAGE_SIZE}
+                        onPageChange={setTablePage}
+                        itemName="hari"
+                        scrollTargetId="tabel-proyeksi-kas"
+                        scrollOnChange={true}
+                      />
+                    </div>
+                  )}
                 </Card>
               </div>
             </>
