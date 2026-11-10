@@ -193,11 +193,30 @@
   </div>
 
   <div id="title">
-    <div>
+    <div style="max-width:820px; margin:0 auto; padding:0 24px;">
       <h1>KALKURASA</h1>
       <p>Video Demo · Sisi Pelanggan (Dewi Lestari)</p>
+
+      <!-- Peringatan jika dibuka via file:// -->
+      <div id="fileNotice" style="display:none; margin:28px auto 0; padding:20px 24px; background:#FEF3C7; border:3px solid #12100E; border-radius:20px; box-shadow:5px 5px 0 #12100E; text-align:left; color:#12100E;">
+        <div style="font-size:18px; font-weight:800; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:22px;">⚠️</span> Demo Otomatis Membutuhkan Web Server (Bukan file://)
+        </div>
+        <p style="font-size:15px; margin:0 0 16px; line-height:1.55; color:#78350F; font-weight:600;">
+          Browser memblokir kontrol otomatis iframe pada URL lokal <code>file:///</code> demi alasan keamanan (Same-Origin Policy). Silakan buka melalui server resmi atau localhost:
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <a href="https://kalkurasa-rouge.vercel.app/demo/index.html" style="display:inline-flex; align-items:center; gap:8px; background:#C2410C; color:#fff; font-weight:800; font-size:15px; padding:12px 24px; border-radius:999px; border:2.5px solid #12100E; text-decoration:none; box-shadow:3px 3px 0 #12100E;">
+            🌐 Buka Demo di Vercel (Produksi) →
+          </a>
+          <a href="http://localhost:3000/demo/index.html" style="display:inline-flex; align-items:center; gap:8px; background:#fff; color:#12100E; font-weight:800; font-size:15px; padding:12px 24px; border-radius:999px; border:2.5px solid #12100E; text-decoration:none; box-shadow:3px 3px 0 #12100E;">
+            💻 Buka Localhost:3000 →
+          </a>
+        </div>
+      </div>
+
       <button id="startBtn">▶ Mulai Demo (Spasi)</button>
-      <small>Mulai dari Beranda (Homepage) · Login · Pemesanan Otomatis · Audio VO Suara Asli</small>
+      <small id="startDesc">Mulai dari Beranda (Homepage) · Login · Pemesanan Otomatis · Audio VO Suara Asli</small>
     </div>
   </div>
   <div id="count"></div>
@@ -404,8 +423,8 @@ async function scenario(id){
   await waitFor(()=>doc().querySelector("select[name^='items']")); A();
   await sleep(1200);
 
-  // BAB 4. Langkah 1: Pilih Menu & Jumlah Porsi (Aman kapasitas: 35 porsi)
-  await say("Langkah pertama: Dewi memilih menu Nasi Box Ayam Spesial sebanyak 35 porsi.", 4500); A();
+  // BAB 4. Langkah 1: Pilih Menu & Jumlah Porsi (Porsi 20 aman kapasitas & lolos otomatis)
+  await say("Langkah pertama: Dewi memilih menu Nasi Box Ayam Spesial sebanyak 20 porsi untuk rapat kantor.", 4500); A();
   const sel = doc().querySelector("select[name='items.0.product_id']");
   if(sel){
     const opt = [...sel.options].find(o=>/nasi/i.test(o.textContent)) || sel.options[1] || sel.options[0];
@@ -413,44 +432,71 @@ async function scenario(id){
   }
   const qtyInput = doc().querySelector("input[name='items.0.qty']");
   if(qtyInput){
-    await type(qtyInput, "35", 90); A();
+    await type(qtyInput, "20", 90); A();
   }
   await sleep(900);
 
-  // BAB 5. Langkah 2: Cek Ketersediaan Tanggal Real-time (Beban Dapur)
-  await say("Langkah kedua: kalender ketersediaan langsung menghitung beban oven dan tenaga kerja dapur secara real-time.", 5000); A();
+  // BAB 5. Langkah 2: Cek Ketersediaan Tanggal Real-time (Pasti Pilih Slot Kosong & Hijau)
+  await say("Langkah kedua: kalender ketersediaan langsung menghitung kapasitas dapur. Dewi memilih tanggal yang masih kosong dan aman.", 5000); A();
   
   // Scroll agar pemilih tanggal terlihat penuh
   const step2Heading = byText("h3, h2, div", "Pilih Tanggal Acara") || doc().querySelector("[role=radiogroup]");
   if(step2Heading) await inView(step2Heading);
 
   // Tunggu hingga tombol tanggal selesai dimuat dari backend (bukan lagi skeleton)
-  const radios = await waitFor(()=>{
+  await waitFor(()=>{
     const all = [...doc().querySelectorAll("button[role=radio]")];
-    if(!all.length) return null;
-    const active = all.filter(b=>!b.disabled);
-    return active.length ? active : all;
+    return all.length ? all : null;
   }, 35000); A();
 
-  let activeRadios = radios.filter(b=>!b.disabled);
-  // Bila jendela 14 hari pertama penuh, klik tombol Berikutnya
-  if(!activeRadios.length){
+  // Helper cerdas: mencari tombol yang benar-benar 'Tersedia' (hijau) dengan beban terendah (slot paling kosong)
+  function findBestGreenRadio(){
+    const all = [...doc().querySelectorAll("button[role=radio]")];
+    const candidates = [];
+    for(const btn of all){
+      if(btn.disabled) continue;
+      const text = (btn.innerText || btn.textContent || "");
+      if(text.includes("Penuh") || text.includes("< Lead Time")) continue;
+      
+      const match = text.match(/Beban[^\d]*(\d+)%/i);
+      const pct = match ? parseInt(match[1], 10) : 50;
+      const isGreen = text.includes("Tersedia") || Boolean(btn.querySelector(".bg-emerald-500"));
+      candidates.push({ btn, pct, isGreen });
+    }
+    if(!candidates.length) return null;
+    candidates.sort((a,b)=>{
+      if(a.isGreen && !b.isGreen) return -1;
+      if(!a.isGreen && b.isGreen) return 1;
+      return a.pct - b.pct;
+    });
+    return candidates[0].btn;
+  }
+
+  let targetRadio = findBestGreenRadio();
+  const targetPctMatch = targetRadio ? (targetRadio.innerText || "").match(/Beban[^\d]*(\d+)%/i) : null;
+  const targetPct = targetPctMatch ? parseInt(targetPctMatch[1], 10) : 100;
+
+  // Jika pada 14 hari pertama tanggalnya padat (> 60%), klik 'Berikutnya' untuk memilih slot yang 100% kosong
+  if(!targetRadio || targetPct > 60){
     const nextBtn = byText("button", "Berikutnya") || doc().querySelector("button[aria-label*='berikutnya']");
     if(nextBtn){
       await click(nextBtn); A();
-      await sleep(1400);
-      activeRadios = await waitFor(()=>{
+      await sleep(1500);
+      await waitFor(()=>{
         const all = [...doc().querySelectorAll("button[role=radio]")];
-        const act = all.filter(b=>!b.disabled);
-        return act.length ? act : (all.length?all:null);
-      }, 20000); A();
+        return all.length ? all : null;
+      }, 25000); A();
+      targetRadio = findBestGreenRadio() || [...doc().querySelectorAll("button[role=radio]:not([disabled])")][0];
     }
   }
 
-  // Pilih tanggal hijau yang tersedia (misal tanggal ke-2 atau ke-3 yang aktif)
-  const targetRadio = (activeRadios && activeRadios.length) ? activeRadios[Math.min(2, activeRadios.length - 1)] : radios[0];
+  if(!targetRadio){
+    targetRadio = [...doc().querySelectorAll("button[role=radio]")].find(b=>!b.disabled) || doc().querySelector("button[role=radio]");
+  }
+
+  // Klik tanggal yang paling kosong dan dijamin lolos
   await click(targetRadio); A();
-  await sleep(1100);
+  await sleep(1200);
 
   // BAB 6. Langkah 3 & 4: Data Pemesan & Catatan Acara
   await say("Data pemesan otomatis terisi, dan Dewi menambahkan catatan jam pengantaran untuk kantor.", 4500); A();
@@ -486,9 +532,21 @@ async function scenario(id){
 }
 
 /* ============ KONTROL ============ */
+if(location.protocol==="file:"){
+  const fn = $("#fileNotice");
+  if(fn) fn.style.display="block";
+  const startBtn = $("#startBtn");
+  if(startBtn){
+    startBtn.textContent = "🌐 Buka Demo di Vercel (Produksi) →";
+    startBtn.onclick = () => {
+      window.open("https://kalkurasa-rouge.vercel.app/demo/index.html", "_blank");
+    };
+  }
+}
+
 async function start(){
   if(location.protocol==="file:"){
-    alert("Buka lewat https://kalkurasa-rouge.vercel.app/demo/index.html (atau localhost). File lokal (file://) tidak bisa memuat & mengontrol website.");
+    window.open("https://kalkurasa-rouge.vercel.app/demo/index.html", "_blank");
     return;
   }
   run++; const id=run;
