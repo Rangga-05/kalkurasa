@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KALKURASA - Video Demo (Dewi)</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#12100E; --cream:#FFF9F0; --gold:#FDE047; --accent:#C2410C; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; background:#1d1a17; overflow:hidden; font-family:"Plus Jakarta Sans",system-ui,sans-serif; }
+
+  #stage { position:absolute; left:50%; top:50%; width:1920px; height:1080px; overflow:hidden;
+    transform-origin:center center; background:var(--cream); }
+
+  /* ---------- Adegan Dewi ---------- */
+  #scene { position:absolute; inset:0; width:100%; height:100%; display:block; transition:filter .8s ease; }
+  #scene.dim { filter:brightness(.55) blur(2px); }
+  /* animasi karakter (ilustrasi vektor) */
+  #scene .breathe { animation:breathe 3.6s ease-in-out infinite; }
+  #scene #head { transform-origin:480px 640px; animation:headsway 6s ease-in-out infinite; }
+  #scene .blink { transform-origin:482px 458px; animation:blink 4.4s infinite; }
+  #scene .tap1, #scene .tap2 { transform-box:fill-box; transform-origin:center; }
+  #scene.typing .tap1 { animation:tap .28s ease-in-out infinite; }
+  #scene.typing .tap2 { animation:tap .4s ease-in-out infinite .1s; }
+  #scene .steam { animation:steam 3s ease-in-out infinite; }
+  #scene .sway { transform-origin:1690px 700px; animation:sway 5s ease-in-out infinite; }
+  @keyframes breathe { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  @keyframes headsway { 0%,100%{transform:rotate(-1.6deg)} 50%{transform:rotate(1.8deg)} }
+  @keyframes blink { 0%,92%,100%{transform:scaleY(1)} 95%{transform:scaleY(.08)} }
+  @keyframes tap { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+  @keyframes steam { 0%,100%{transform:translateY(0);opacity:.45} 50%{transform:translateY(-12px);opacity:.15} }
+  @keyframes sway { 0%,100%{transform:rotate(-2deg)} 50%{transform:rotate(2deg)} }
+  #lower { position:absolute; right:90px; top:90px; background:#FFFDF9; border:4px solid var(--ink); border-radius:22px;
+    box-shadow:8px 8px 0 var(--ink); padding:16px 30px; transform:translateX(160%); transition:transform .7s cubic-bezier(.16,1,.3,1); }
+  #lower.show { transform:none; }
+  #lower b { display:block; font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:44px; }
+  #lower span { font-weight:700; font-size:24px; color:#5C5046; }
+
+  /* ---------- Jendela laptop (popup) ---------- */
+  #popup { position:absolute; left:0; top:0; width:1500px; height:900px; transform-origin:0 0; opacity:0; pointer-events:none;
+    border:5px solid var(--ink); border-radius:22px; background:#fff; overflow:hidden; box-shadow:14px 14px 0 var(--ink);
+    transition:transform .9s cubic-bezier(.65,0,.35,1), opacity .4s; }
+  #popup.open { opacity:1; }
+  #chrome { height:48px; background:#F7EFE2; border-bottom:4px solid var(--ink); display:flex; align-items:center; gap:10px; padding:0 18px; }
+  #chrome i { width:14px; height:14px; border-radius:50%; border:2px solid var(--ink); display:block; }
+  #chrome i:nth-child(1){background:#fb7185} #chrome i:nth-child(2){background:#FDE047} #chrome i:nth-child(3){background:#84cc16}
+  #url { margin-left:14px; flex:1; max-width:720px; height:30px; background:#fff; border:2px solid var(--ink); border-radius:999px;
+    font:700 15px/26px "Plus Jakarta Sans"; padding:0 16px; color:#3d352e; white-space:nowrap; overflow:hidden; }
+  #frame { display:block; width:1492px; height:840px; border:0; background:#fff; }
+
+  /* ---------- Kursor ---------- */
+  #cursor { position:absolute; left:0; top:0; width:34px; height:34px; z-index:20; pointer-events:none; opacity:0;
+    transition:transform .85s cubic-bezier(.45,0,.2,1), opacity .3s; filter:drop-shadow(2px 3px 0 rgba(0,0,0,.35)); }
+  #ripple { position:absolute; width:60px; height:60px; margin:-30px 0 0 -30px; border:5px solid var(--accent); border-radius:50%;
+    z-index:19; pointer-events:none; opacity:0; }
+  #ripple.go { animation:rip .55s ease-out; }
+  @keyframes rip { 0%{opacity:1;transform:scale(.3)} 100%{opacity:0;transform:scale(1.5)} }
+
+  /* ---------- Teks bantuan VO ---------- */
+  #vo { position:absolute; left:50%; bottom:22px; transform:translateX(-50%); max-width:1500px; text-align:center;
+    background:rgba(18,16,14,.88); color:#FFFDF9; font-weight:700; font-size:26px; line-height:1.4; padding:12px 28px; border-radius:16px;
+    opacity:0; transition:opacity .3s; z-index:30; }
+  #vo.show { opacity:1; }
+  body.novo #vo { display:none; }
+
+  /* ---------- Judul bab ---------- */
+  #title { position:absolute; inset:0; display:grid; place-items:center; background:var(--cream); z-index:40; text-align:center; transition:opacity .6s; }
+  #title.hide { opacity:0; pointer-events:none; }
+  #title h1 { font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:96px; letter-spacing:-2px; }
+  #title p { font-weight:700; font-size:30px; color:#5C5046; margin-top:10px; }
+  #title button { margin-top:36px; font:800 26px "Plus Jakarta Sans"; padding:14px 40px; border:4px solid var(--ink); border-radius:999px;
+    background:var(--gold); box-shadow:6px 6px 0 var(--ink); cursor:pointer; }
+  #title small { display:block; margin-top:22px; font-weight:600; font-size:18px; color:#7a6c60; }
+
+  #count { position:absolute; inset:0; display:none; place-items:center; z-index:50; font:800 320px "Bricolage Grotesque"; color:var(--ink); background:rgba(255,249,240,.85); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <svg id="scene" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" aria-label="Ilustrasi Dewi di depan laptop">
+    <defs>
+      <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="14" cy="14" r="1.6" fill="#12100E" opacity=".11"/></pattern>
+    </defs>
+    <rect width="1920" height="1080" fill="#FFF9F0"/>
+    <rect width="1920" height="1080" fill="url(#dots)"/>
+    <g stroke="#12100E" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+      <!-- jendela -->
+      <rect x="1380" y="110" width="360" height="310" rx="18" fill="#DDF1F7"/>
+      <path d="M1560 110V420M1380 265H1740" fill="none"/>
+      <path d="M1400 400L1470 330M1560 400L1640 320" stroke="#fff" stroke-width="10" opacity=".7" fill="none"/>
+      <!-- jam dinding -->
+      <circle cx="1060" cy="170" r="62" fill="#FFFDF9"/>
+      <path d="M1060 170V132M1060 170L1086 184" fill="none"/>
+
+      <!-- kursi -->
+      <rect x="300" y="480" width="360" height="380" rx="64" fill="#7A4B35"/>
+
+      <!-- karakter -->
+      <g id="char" class="breathe">
+        <!-- lengan -->
+        <path d="M625 655Q705 745 775 738" fill="none" stroke="#12100E" stroke-width="84"/>
+        <path d="M625 655Q705 745 775 738" fill="none" stroke="#FFF3DC" stroke-width="68"/>
+        <!-- badan -->
+        <path d="M300 860V700Q300 600 400 582H560Q660 600 660 700V860Z" fill="#FFF3DC"/>
+        <path d="M440 585Q480 628 520 585" fill="none"/>
+        <circle cx="480" cy="690" r="7" fill="#12100E" stroke="none"/><circle cx="480" cy="740" r="7" fill="#12100E" stroke="none"/>
+        <!-- kepala -->
+        <g id="head">
+          <circle cx="480" cy="440" r="132" fill="#D2693A"/>
+          <path d="M350 450Q326 600 368 656Q480 700 592 656Q634 600 610 450Z" fill="#D2693A"/>
+          <path d="M392 640Q480 676 568 640" fill="none" stroke="#B4532A" stroke-width="5"/>
+          <ellipse cx="480" cy="456" rx="86" ry="98" fill="#E9B48C"/>
+          <path d="M392 422Q480 336 568 422Q540 380 480 374Q420 380 392 422Z" fill="#D2693A"/>
+          <path d="M424 426Q444 415 464 424M500 424Q520 415 540 426" fill="none"/>
+          <g class="blink" stroke="none">
+            <ellipse cx="446" cy="458" rx="9" ry="12" fill="#12100E"/>
+            <ellipse cx="518" cy="458" rx="9" ry="12" fill="#12100E"/>
+            <circle cx="449" cy="453" r="3" fill="#fff"/><circle cx="521" cy="453" r="3" fill="#fff"/>
+          </g>
+          <path d="M482 468Q476 486 488 487" fill="none" stroke-width="4"/>
+          <path d="M448 506Q482 534 516 506" fill="none"/>
+          <ellipse cx="418" cy="494" rx="16" ry="10" fill="#F08A6B" opacity=".55" stroke="none"/>
+          <ellipse cx="548" cy="494" rx="16" ry="10" fill="#F08A6B" opacity=".55" stroke="none"/>
+        </g>
+      </g>
+
+      <!-- meja -->
+      <rect x="-10" y="760" width="1940" height="340" fill="#E6BE86"/>
+      <rect x="-10" y="760" width="1940" height="42" fill="#C99A5E"/>
+      <path d="M0 880H1920M0 960H1920" stroke="#C99A5E" stroke-width="4" opacity=".6" fill="none"/>
+
+      <!-- laptop -->
+      <rect x="740" y="290" width="640" height="410" rx="24" fill="#2A2522"/>
+      <rect x="760" y="320" width="600" height="360" rx="8" fill="#F7EFE2" stroke-width="0"/>
+      <text x="1060" y="512" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="800" font-size="46" fill="#12100E" stroke="none">KALKURASA</text>
+      <circle cx="1060" cy="304" r="5" fill="#6b625a" stroke="none"/>
+      <path d="M690 700H1430L1402 772H718Z" fill="#D6CEC4"/>
+      <rect x="990" y="702" width="140" height="12" rx="6" fill="#B5ACA0" stroke-width="3"/>
+
+      <!-- tangan mengetik -->
+      <g id="hands">
+        <ellipse class="tap1" cx="802" cy="744" rx="34" ry="21" fill="#E9B48C"/>
+        <ellipse class="tap2" cx="866" cy="752" rx="30" ry="19" fill="#E9B48C"/>
+      </g>
+
+      <!-- mug + uap -->
+      <rect x="1500" y="680" width="94" height="86" rx="16" fill="#FFFDF9"/>
+      <path d="M1594 700Q1630 704 1626 730Q1622 752 1594 752" fill="none"/>
+      <g class="steam" fill="none" stroke="#12100E" stroke-width="5" opacity=".45">
+        <path d="M1530 660Q1516 640 1532 622Q1546 604 1530 586"/>
+        <path d="M1564 660Q1550 640 1566 622Q1580 604 1564 586"/>
+      </g>
+
+      <!-- tanaman -->
+      <g class="sway">
+        <path d="M1680 700Q1650 640 1620 610Q1680 620 1692 692Z" fill="#84CC16"/>
+        <path d="M1696 700Q1708 630 1752 590Q1752 660 1710 700Z" fill="#65A30D"/>
+        <path d="M1690 700Q1690 620 1690 560Q1722 620 1700 700Z" fill="#84CC16"/>
+      </g>
+      <path d="M1640 700H1760L1744 772H1656Z" fill="#C2410C"/>
+    </g>
+  </svg>
+  <div id="lower"><b>Dewi Lestari</b><span>Pemesan acara kantor</span></div>
+
+  <div id="popup">
+    <div id="chrome"><i></i><i></i><i></i><div id="url">kalkurasa.app/login</div></div>
+    <iframe id="frame" title="KALKURASA"></iframe>
+  </div>
+
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2l7.5 19 2.7-7.8L21 10.5z" fill="#12100E" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  <div id="vo"></div>
+
+  <div id="title">
+    <div>
+      <h1>KALKURASA</h1>
+      <p>Video Demo · Sisi Pelanggan (Dewi Lestari)</p>
+      <button id="startBtn">▶ Mulai (Spasi)</button>
+      <small>Pastikan frontend &amp; backend sudah berjalan. H = sembunyikan teks VO · R = ulang</small>
+    </div>
+  </div>
+  <div id="count"></div>
+</div>
+
+<script>
+/* ============ KONFIGURASI ============ */
+// Posisi layar laptop pada gambar Dewi (koordinat panggung 1920x1080). Ubah via ?sx=&sy=&sw=&sh=
+const q = new URLSearchParams(location.search);
+const SCREEN = { x:+(q.get("sx")||760), y:+(q.get("sy")||320), w:+(q.get("sw")||600), h:+(q.get("sh")||360) };
+const FINAL = { x:210, y:90 };            // posisi popup saat membesar
+const POPUP_W = 1500, CHROME_H = 48+4;    // lebar popup & tinggi chrome (px)
+const CUSTOMER = { email:"customer@demo.test", password:"demo12345", name:"Dewi Lestari", contact:"081234567890" };
+
+/* ============ UTIL ============ */
+const $ = (s)=>document.querySelector(s);
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+const stage=$("#stage"), popup=$("#popup"), frame=$("#frame"), cursor=$("#cursor"), ripple=$("#ripple");
+let run = 0;
+const alive = (id)=>{ if(id!==run) throw new Error("cancel"); };
+
+function fit(){ const s=Math.min(innerWidth/1920, innerHeight/1080); stage.style.transform=`translate(-50%,-50%) scale(${s})`; }
+addEventListener("resize",fit); fit();
+
+const doc = ()=>frame.contentDocument;
+const win = ()=>frame.contentWindow;
+
+async function waitFor(fn, timeout=20000){
+  const t0=Date.now();
+  while(Date.now()-t0<timeout){ try{ const v=fn(); if(v) return v; }catch(e){} await sleep(150); }
+  throw new Error("Timeout menunggu elemen/kondisi");
+}
+const byText = (sel,text)=>[...doc().querySelectorAll(sel)].find(e=>e.textContent.replace(/\s+/g," ").includes(text));
+
+// Posisi elemen di dalam iframe -> koordinat panggung
+function stagePos(el){
+  const r = el.getBoundingClientRect();
+  return { x: FINAL.x + 5 + r.left + r.width/2, y: FINAL.y + 5 + CHROME_H + r.top + r.height/2 };
+}
+async function inView(el){
+  const r=el.getBoundingClientRect(), h=win().innerHeight;
+  if(r.top<60 || r.bottom>h-60){ el.scrollIntoView({behavior:"smooth",block:"center"}); await sleep(900); }
+}
+async function moveTo(el){
+  await inView(el);
+  const p=stagePos(el);
+  cursor.style.opacity=1;
+  cursor.style.transform=`translate(${p.x-6}px,${p.y-4}px)`;
+  await sleep(950);
+  return p;
+}
+async function click(el){
+  const p=await moveTo(el);
+  ripple.style.left=p.x+"px"; ripple.style.top=p.y+"px";
+  ripple.classList.remove("go"); void ripple.offsetWidth; ripple.classList.add("go");
+  await sleep(180);
+  el.click();
+  await sleep(500);
+}
+function setNative(el, value){
+  const proto = el.tagName==="SELECT"?win().HTMLSelectElement.prototype : el.tagName==="TEXTAREA"?win().HTMLTextAreaElement.prototype : win().HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto,"value").set.call(el,value);
+}
+async function type(el, text, delay=70){
+  await moveTo(el); el.focus();
+  $("#scene").classList.add("typing");
+  setNative(el,""); el.dispatchEvent(new (win().Event)("input",{bubbles:true}));
+  for(const ch of text){ setNative(el, el.value+ch); el.dispatchEvent(new (win().Event)("input",{bubbles:true})); await sleep(delay); }
+  $("#scene").classList.remove("typing");
+  await sleep(400);
+}
+async function choose(el, value){
+  await moveTo(el);
+  setNative(el,value); el.dispatchEvent(new (win().Event)("change",{bubbles:true}));
+  await sleep(700);
+}
+async function goto(path){
+  frame.src = path;
+  await new Promise(r=>{ frame.onload=()=>r(); });
+  await sleep(1200);
+  $("#url").textContent = "kalkurasa.app"+path;
+}
+async function say(text, ms){
+  $("#vo").textContent = text; $("#vo").classList.add("show");
+  if(ms) await sleep(ms);
+}
+const hush = ()=>$("#vo").classList.remove("show");
+
+async function openPopup(){
+  const s = SCREEN.w/POPUP_W;
+  popup.style.transition="none";
+  popup.style.transform=`translate(${SCREEN.x}px,${SCREEN.y}px) scale(${s})`;
+  void popup.offsetWidth; popup.style.transition="";
+  popup.classList.add("open");
+  $("#scene").classList.add("dim");
+  await sleep(50);
+  popup.style.transform=`translate(${FINAL.x}px,${FINAL.y}px) scale(1)`;
+  await sleep(1000);
+}
+async function closePopup(){
+  const s = SCREEN.w/POPUP_W;
+  cursor.style.opacity=0;
+  popup.style.transform=`translate(${SCREEN.x}px,${SCREEN.y}px) scale(${s})`;
+  $("#scene").classList.remove("dim");
+  await sleep(900);
+  popup.classList.remove("open");
+}
+
+/* ============ SKENARIO (sisi pelanggan: Dewi) ============ */
+// Teks `say(...)` adalah SARAN narasi (tampil kecil di bawah, bisa disembunyikan dengan H). Ganti sesuai voice over Anda.
+async function scenario(id){
+  const A=()=>alive(id);
+
+  // BAB 1. Perkenalan Dewi
+  $("#lower").classList.add("show");
+  await say("Perkenalkan Dewi, pemesan acara kantor. Hari ini ia ingin memesan nasi box.", 5000); A();
+  hush();
+
+  // BAB 2. Buka laptop -> website
+  await say("Dewi membuka laptopnya dan masuk ke KALKURASA.", 1800); A();
+  await openPopup(); A();
+  await goto("/login?reauth=1"); A();
+  hush();
+
+  // BAB 3. Login
+  const email = await waitFor(()=>doc().querySelector("#email")); A();
+  await say("Ia masuk dengan akun pelanggan.", 0);
+  await type(email, CUSTOMER.email); A();
+  await type(doc().querySelector("#password"), CUSTOMER.password, 90); A();
+  await click(doc().querySelector("form button[type=submit]")); A();
+  await waitFor(()=>win().location.pathname!=="/login", 25000); A();
+  await sleep(1200);
+
+  // BAB 4. Buka halaman pesan
+  await say("Dewi diarahkan ke halaman pemesanan.", 0);
+  await goto("/pesan"); A();
+  await waitFor(()=>doc().querySelector("select[name^='items']")); A();
+  await sleep(1500);
+
+  // BAB 5. Pilih produk & jumlah
+  await say("Langkah 1: ia memilih produk dan jumlah porsi.", 0);
+  const sel = doc().querySelector("select[name='items.0.product_id']");
+  const opt = [...sel.options].find(o=>/nasi/i.test(o.textContent)) || sel.options[1] || sel.options[0];
+  await choose(sel, opt.value); A();
+  await type(doc().querySelector("input[name='items.0.qty']"), "200", 120); A();
+  await sleep(900);
+
+  // BAB 6. Pilih tanggal (status ketersediaan realtime)
+  await say("Langkah 2: sistem langsung menampilkan tanggal yang tersedia, lengkap dengan beban dapur.", 0);
+  const radios = await waitFor(()=>{ const r=[...doc().querySelectorAll("button[role=radio]:not([disabled])")]; return r.length?r:null; }); A();
+  await moveTo(radios[0]); await sleep(1800); A();
+  const pick = radios[Math.min(2, radios.length-1)];
+  await click(pick); A();
+  await sleep(1200);
+
+  // BAB 7. Data pemesan
+  await say("Langkah 3: Dewi mengisi data diri dan kontak.", 0);
+  const nm = doc().querySelector("#customer_name");
+  if(!nm.value) await type(nm, CUSTOMER.name, 60); A();
+  const ct = doc().querySelector("#customer_contact");
+  if(!ct.value) await type(ct, CUSTOMER.contact, 60); A();
+  await sleep(600);
+
+  // BAB 8. Kirim -> evaluasi 4 gerbang
+  await say("Satu klik, dan pesanan langsung dievaluasi mesin 4 gerbang.", 0);
+  const submit = [...doc().querySelectorAll("button[type=submit]")].find(b=>/Kirim Pesanan/.test(b.textContent));
+  await click(submit); A();
+  await waitFor(()=>byText("button","Buat Pesanan Lain"), 40000); A();
+  await sleep(600);
+  doc().documentElement.scrollTo({top:0,behavior:"smooth"}); await sleep(1200);
+  await say("Hasilnya langsung terlihat: status, estimasi DP, dan kode pesanan untuk dilacak.", 6000); A();
+  const detail = doc().querySelector("main, body");
+  win().scrollTo({top:400,behavior:"smooth"}); await sleep(3500); A();
+  hush();
+
+  // BAB 9. Tutup
+  await closePopup(); A();
+  await say("Tanpa chat bolak-balik, Dewi mendapat kepastian dalam hitungan detik.", 5000); A();
+  hush();
+  $("#lower").classList.remove("show");
+}
+
+/* ============ KONTROL ============ */
+async function start(){
+  if(location.protocol==="file:"){ alert("Buka lewat https://kalkurasa-rouge.vercel.app/demo/index.html (atau localhost). File lokal (file://) tidak bisa memuat & mengontrol website."); return; }
+  run++; const id=run;
+  $("#title").classList.add("hide");
+  hideAll();
+  const c=$("#count"); c.style.display="grid";
+  for(const n of [3,2,1]){ c.textContent=n; await sleep(900); if(id!==run) return; }
+  c.style.display="none";
+  try{ await scenario(id); }catch(e){ if(e.message!=="cancel") console.error(e), say("Terhenti: "+e.message+" (cek server & akun demo)",0); }
+}
+function hideAll(){ popup.classList.remove("open"); cursor.style.opacity=0; $("#lower").classList.remove("show"); $("#scene").classList.remove("dim"); hush(); frame.removeAttribute("src"); }
+$("#startBtn").onclick=start;
+addEventListener("keydown",(e)=>{
+  if(e.key===" "||e.key==="Enter"){ e.preventDefault(); start(); }
+  if(e.key.toLowerCase()==="h") document.body.classList.toggle("novo");
+  if(e.key.toLowerCase()==="r"){ run++; hideAll(); $("#title").classList.remove("hide"); }
+});
+</script>
+</body>
+</html>
