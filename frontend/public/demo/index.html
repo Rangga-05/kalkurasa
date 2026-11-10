@@ -66,8 +66,12 @@
   #vo.show { opacity:1; }
   body.novo #vo { display:none !important; }
 
-  /* ---------- Toolbar Atas ---------- */
+  /* ---------- Toolbar Atas & Role Switcher ---------- */
   #topBar { position:absolute; top:20px; right:30px; display:flex; align-items:center; gap:10px; z-index:60; }
+  #roleNav { display:flex; align-items:center; gap:6px; background:#FFFDF9; padding:5px 8px; border:2.5px solid var(--ink); border-radius:999px; box-shadow:3px 3px 0 var(--ink); }
+  .role-pill { font:700 13px "Plus Jakarta Sans",sans-serif; text-decoration:none; color:var(--ink); padding:6px 14px; border-radius:999px; transition:all .15s; }
+  .role-pill:hover { background:var(--gold); }
+  .role-pill.active { background:var(--gold); border:2px solid var(--ink); font-weight:800; }
   #topBar button { font:700 14px "Plus Jakarta Sans",sans-serif; padding:9px 18px; border:2.5px solid var(--ink); background:#FFFDF9;
     border-radius:999px; box-shadow:3px 3px 0 var(--ink); cursor:pointer; transition:all .15s; }
   #topBar button:hover { background:var(--gold); transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); }
@@ -185,8 +189,14 @@
   <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2l7.5 19 2.7-7.8L21 10.5z" fill="#12100E" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
   <div id="vo"></div>
 
-  <!-- Floating Toolbar -->
+  <!-- Floating Toolbar & Role Switcher -->
   <div id="topBar">
+    <div id="roleNav">
+      <a href="index.html" class="role-pill active">👤 Pelanggan</a>
+      <a href="staff.html" class="role-pill">👨‍🍳 Staff</a>
+      <a href="manager.html" class="role-pill">👩‍💼 Manajer</a>
+      <a href="owner.html" class="role-pill">👑 Pemilik</a>
+    </div>
     <button id="audioBtn" class="on">🔊 Audio VO: Aktif (V)</button>
     <button id="subBtn" class="on">💬 Subtitle (H)</button>
     <button id="restartBtn">↺ Ulang (R)</button>

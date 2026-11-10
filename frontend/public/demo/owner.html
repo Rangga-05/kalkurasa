@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KALKURASA - Video Demo (Pemilik Usaha: Bu Sari)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#12100E; --cream:#FFF9F0; --gold:#FDE047; --accent:#D97706; --amber:#FEF3C7; --lime:#D9F99D; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; background:#1d1a17; overflow:hidden; font-family:"Plus Jakarta Sans",system-ui,sans-serif; }
+
+  #stage { position:absolute; left:50%; top:50%; width:1920px; height:1080px; overflow:hidden;
+    transform-origin:center center; background:var(--cream); }
+
+  /* ---------- Adegan Bu Sari di Kantor Eksekutif ---------- */
+  #scene { position:absolute; inset:0; width:100%; height:100%; display:block; transition:filter .8s ease; }
+  #scene.dim { filter:brightness(.52) blur(2px); }
+  #scene .breathe { animation:breathe 3.6s ease-in-out infinite; }
+  #scene #head { transform-origin:480px 640px; animation:headsway 6s ease-in-out infinite; }
+  #scene .blink { transform-origin:482px 458px; animation:blink 4.4s infinite; }
+  #scene .tap1, #scene .tap2 { transform-box:fill-box; transform-origin:center; }
+  #scene.typing .tap1 { animation:tap .28s ease-in-out infinite; }
+  #scene.typing .tap2 { animation:tap .4s ease-in-out infinite .1s; }
+  #scene .steam { animation:steam 3s ease-in-out infinite; }
+  #scene .sway { transform-origin:1680px 720px; animation:sway 5s ease-in-out infinite; }
+  @keyframes breathe { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  @keyframes headsway { 0%,100%{transform:rotate(-1.4deg)} 50%{transform:rotate(1.5deg)} }
+  @keyframes blink { 0%,92%,100%{transform:scaleY(1)} 95%{transform:scaleY(.08)} }
+  @keyframes tap { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+  @keyframes steam { 0%,100%{transform:translateY(0);opacity:.45} 50%{transform:translateY(-12px);opacity:.15} }
+  @keyframes sway { 0%,100%{transform:rotate(-2deg)} 50%{transform:rotate(2deg)} }
+
+  #lower { position:absolute; right:90px; top:90px; background:#FFFDF9; border:4px solid var(--ink); border-radius:22px;
+    box-shadow:8px 8px 0 var(--ink); padding:16px 30px; transform:translateX(160%); transition:transform .7s cubic-bezier(.16,1,.3,1); z-index:15; }
+  #lower.show { transform:none; }
+  #lower b { display:block; font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:44px; color:var(--ink); }
+  #lower span { font-weight:700; font-size:24px; color:#5C5046; }
+
+  /* ---------- Jendela laptop (popup) ---------- */
+  #popup { position:absolute; left:0; top:0; width:1500px; height:900px; transform-origin:0 0; opacity:0; pointer-events:none;
+    border:5px solid var(--ink); border-radius:24px; background:#fff; overflow:hidden; box-shadow:14px 14px 0 var(--ink);
+    transition:transform .9s cubic-bezier(.65,0,.35,1), opacity .4s; z-index:20; }
+  #popup.open { opacity:1; }
+  #chrome { height:48px; background:#FEF3C7; border-bottom:4px solid var(--ink); display:flex; align-items:center; gap:10px; padding:0 18px; }
+  #chrome i { width:14px; height:14px; border-radius:50%; border:2px solid var(--ink); display:block; }
+  #chrome i:nth-child(1){background:#fb7185} #chrome i:nth-child(2){background:#FDE047} #chrome i:nth-child(3){background:#84cc16}
+  #url { margin-left:14px; flex:1; max-width:760px; height:32px; background:#fff; border:2px solid var(--ink); border-radius:999px;
+    font:700 14px/28px "Plus Jakarta Sans"; padding:0 16px; color:#3d352e; white-space:nowrap; overflow:hidden; }
+  #frame { display:block; width:1490px; height:842px; border:0; background:#fff; }
+
+  /* ---------- Kursor ---------- */
+  #cursor { position:absolute; left:0; top:0; width:34px; height:34px; z-index:35; pointer-events:none; opacity:0;
+    transition:transform .85s cubic-bezier(.45,0,.2,1), opacity .3s; filter:drop-shadow(2px 3px 0 rgba(0,0,0,.35)); }
+  #ripple { position:absolute; width:60px; height:60px; margin:-30px 0 0 -30px; border:5px solid var(--accent); border-radius:50%;
+    z-index:34; pointer-events:none; opacity:0; }
+  #ripple.go { animation:rip .55s ease-out; }
+  @keyframes rip { 0%{opacity:1;transform:scale(.3)} 100%{opacity:0;transform:scale(1.5)} }
+
+  /* ---------- Teks Subtitle Visual (Tanpa VO) ---------- */
+  #vo { position:absolute; left:50%; bottom:28px; transform:translateX(-50%); max-width:1560px; text-align:center;
+    background:rgba(18,16,14,.92); color:#FFFDF9; font-weight:700; font-size:26px; line-height:1.45; padding:14px 34px; border-radius:18px;
+    border:2px solid rgba(255,255,255,.2); box-shadow:0 8px 24px rgba(0,0,0,.3);
+    opacity:0; transition:opacity .35s; z-index:50; pointer-events:none; }
+  #vo.show { opacity:1; }
+  body.novo #vo { display:none !important; }
+
+  /* ---------- Toolbar Atas & Role Switcher ---------- */
+  #topBar { position:absolute; top:20px; right:30px; display:flex; align-items:center; gap:10px; z-index:60; }
+  #roleNav { display:flex; align-items:center; gap:6px; background:#FFFDF9; padding:5px 8px; border:2.5px solid var(--ink); border-radius:999px; box-shadow:3px 3px 0 var(--ink); }
+  .role-pill { font:700 13px "Plus Jakarta Sans",sans-serif; text-decoration:none; color:var(--ink); padding:6px 14px; border-radius:999px; transition:all .15s; }
+  .role-pill:hover { background:var(--gold); }
+  .role-pill.active { background:var(--amber); border:2px solid var(--ink); font-weight:800; }
+  #topBar button { font:700 14px "Plus Jakarta Sans",sans-serif; padding:9px 18px; border:2.5px solid var(--ink); background:#FFFDF9;
+    border-radius:999px; box-shadow:3px 3px 0 var(--ink); cursor:pointer; transition:all .15s; }
+  #topBar button:hover { background:var(--gold); transform:translate(-1px,-1px); box-shadow:4px 4px 0 var(--ink); }
+  #topBar button.on { background:var(--lime); }
+
+  /* ---------- Judul & Hitung Mundur ---------- */
+  #title { position:absolute; inset:0; display:grid; place-items:center; background:var(--cream); z-index:70; text-align:center; transition:opacity .6s; }
+  #title.hide { opacity:0; pointer-events:none; }
+  #title h1 { font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:90px; letter-spacing:-2px; color:var(--ink); }
+  #title p { font-weight:700; font-size:28px; color:#5C5046; margin-top:10px; }
+  #title button { margin-top:36px; font:800 28px "Plus Jakarta Sans"; padding:16px 48px; border:4px solid var(--ink); border-radius:999px;
+    background:var(--gold); box-shadow:6px 6px 0 var(--ink); cursor:pointer; transition:transform .15s; }
+  #title button:hover { transform:scale(1.04); background:#facc15; }
+  #title small { display:block; margin-top:22px; font-weight:600; font-size:18px; color:#7a6c60; }
+
+  #count { position:absolute; inset:0; display:none; place-items:center; z-index:80; font:800 320px "Bricolage Grotesque"; color:var(--ink); background:rgba(255,249,240,.88); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- Karakter Vektor Bu Sari di Kantor Eksekutif -->
+  <svg id="scene" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" aria-label="Ilustrasi Bu Sari Pemilik Usaha">
+    <defs>
+      <pattern id="stripes" width="40" height="40" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="40" x2="40" y2="0" stroke="#E7E0D3" stroke-width="2"/>
+      </pattern>
+    </defs>
+    <rect width="1920" height="1080" fill="#FAF6F0"/>
+    <rect width="1920" height="1080" fill="url(#stripes)"/>
+    
+    <g stroke="#12100E" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+      <!-- Rak Arsip & Buku Resep Legendaris di Kanan Belakang -->
+      <rect x="1380" y="100" width="420" height="400" rx="16" fill="#854D0E"/>
+      <rect x="1400" y="120" width="380" height="80" rx="8" fill="#FEF3C7"/>
+      <!-- Buku-buku Mewah -->
+      <rect x="1420" y="130" width="28" height="60" fill="#B91C1C"/><rect x="1455" y="130" width="34" height="60" fill="#0369A1"/><rect x="1496" y="130" width="26" height="60" fill="#047857"/><rect x="1530" y="130" width="38" height="60" fill="#D97706"/>
+      <!-- Plakat Penghargaan GTNIC di Rak -->
+      <rect x="1400" y="230" width="380" height="240" rx="8" fill="#FFFDF9"/>
+      <circle cx="1590" cy="330" r="55" fill="#FDE047" stroke="#D97706" stroke-width="6"/>
+      <polygon points="1590,295 1605,325 1638,330 1614,352 1620,385 1590,368 1560,385 1566,352 1542,330 1575,325" fill="#B45309" stroke="none"/>
+      <text x="1590" y="420" text-anchor="middle" font-family="Bricolage Grotesque" font-weight="800" font-size="22" fill="#854D0E" stroke="none">EXCELLENCE IN CATERING</text>
+
+      <!-- Lukisan Seni Modern di Kiri -->
+      <rect x="960" y="120" width="320" height="220" rx="14" fill="#FEF3C7"/>
+      <path d="M980 280Q1060 180 1120 280Q1180 200 1260 280" fill="none" stroke="#D97706" stroke-width="8"/>
+      <circle cx="1120" cy="180" r="28" fill="#EA580C" stroke="none"/>
+
+      <!-- Kursi Eksekutif Bu Sari -->
+      <rect x="300" y="470" width="360" height="390" rx="64" fill="#78350F"/>
+
+      <!-- Karakter Bu Sari (Pemilik Usaha) -->
+      <g id="char" class="breathe">
+        <!-- Lengan Blouse Terakota -->
+        <path d="M625 655Q705 745 775 738" fill="none" stroke="#12100E" stroke-width="84"/>
+        <path d="M625 655Q705 745 775 738" fill="none" stroke="#C2410C" stroke-width="68"/>
+        <!-- Badan (Blouse Elegan & Syal Sutra) -->
+        <path d="M300 860V700Q300 600 400 582H560Q660 600 660 700V860Z" fill="#C2410C"/>
+        <!-- Syal Sutra Krem di Leher -->
+        <path d="M430 582Q480 660 530 582" fill="#FEF3C7" stroke="#12100E" stroke-width="5"/>
+        <path d="M465 630Q480 690 495 630" fill="#FEF3C7" stroke="#12100E" stroke-width="4"/>
+        <!-- Bros Emas -->
+        <circle cx="480" cy="650" r="10" fill="#FDE047" stroke="#B45309" stroke-width="3"/>
+
+        <!-- Kepala Bu Sari -->
+        <g id="head">
+          <!-- Rambut Berombak Anggun -->
+          <circle cx="480" cy="420" r="138" fill="#292524"/>
+          <path d="M340 450Q320 610 366 650Q480 690 594 650Q640 610 620 450Z" fill="#292524"/>
+          <!-- Wajah Bu Sari -->
+          <ellipse cx="480" cy="460" rx="86" ry="94" fill="#FCE7D4"/>
+          <!-- Telinga & Anting Mutiara Elegan -->
+          <ellipse cx="388" cy="460" rx="14" ry="22" fill="#FCE7D4"/>
+          <ellipse cx="572" cy="460" rx="14" ry="22" fill="#FCE7D4"/>
+          <circle cx="388" cy="480" r="9" fill="#FFFDF9" stroke="#B45309" stroke-width="3"/>
+          <circle cx="572" cy="480" r="9" fill="#FFFDF9" stroke="#B45309" stroke-width="3"/>
+
+          <!-- Garis Rambut Depan -->
+          <path d="M392 415Q440 370 480 380Q520 370 568 415" fill="none" stroke="#292524" stroke-width="12"/>
+          <!-- Alis Anggun -->
+          <path d="M424 426Q444 414 464 422M500 422Q520 414 540 426" fill="none" stroke-width="5"/>
+          
+          <!-- Mata Bijak & Ramah -->
+          <g class="blink" stroke="none">
+            <ellipse cx="446" cy="458" rx="9" ry="12" fill="#12100E"/>
+            <ellipse cx="518" cy="458" rx="9" ry="12" fill="#12100E"/>
+            <circle cx="449" cy="453" r="3" fill="#fff"/><circle cx="521" cy="453" r="3" fill="#fff"/>
+          </g>
+          <!-- Hidung & Senyum Hangat Pemilik -->
+          <path d="M482 468Q476 486 488 488" fill="none" stroke-width="4"/>
+          <path d="M450 514Q482 546 514 514" fill="none" stroke-width="5"/>
+          <!-- Rona Pipi Hangat -->
+          <ellipse cx="418" cy="494" rx="16" ry="10" fill="#F97316" opacity=".4" stroke="none"/>
+          <ellipse cx="548" cy="494" rx="16" ry="10" fill="#F97316" opacity=".4" stroke="none"/>
+        </g>
+      </g>
+
+      <!-- Meja Kantor Kayu Jati Solid -->
+      <rect x="-10" y="760" width="1940" height="340" fill="#A16207"/>
+      <rect x="-10" y="760" width="1940" height="40" fill="#78350F"/>
+      <line x1="0" y1="840" x2="1920" y2="840" stroke="#78350F" stroke-width="4"/>
+
+      <!-- Laptop Eksekutif Bu Sari -->
+      <rect x="740" y="290" width="640" height="410" rx="24" fill="#292524"/>
+      <rect x="760" y="320" width="600" height="360" rx="8" fill="#FEF3C7" stroke-width="0"/>
+      <text x="1060" y="512" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="800" font-size="44" fill="#92400E" stroke="none">KALKURASA · PEMILIK</text>
+      <circle cx="1060" cy="304" r="5" fill="#78350F" stroke="none"/>
+      <path d="M690 700H1430L1402 772H718Z" fill="#D6D3D1"/>
+      <rect x="990" y="702" width="140" height="12" rx="6" fill="#A8A29E" stroke-width="3"/>
+
+      <!-- Tangan Bu Sari Mengetik -->
+      <g>
+        <ellipse class="tap1" cx="810" cy="746" rx="30" ry="19" fill="#FCE7D4"/>
+        <ellipse class="tap2" cx="866" cy="752" rx="30" ry="19" fill="#FCE7D4"/>
+      </g>
+
+      <!-- Tanaman Calathea di Kanan Meja -->
+      <g class="sway">
+        <path d="M1680 720Q1630 630 1590 610Q1660 620 1690 710Z" fill="#047857"/>
+        <path d="M1696 720Q1715 630 1770 590Q1770 660 1720 720Z" fill="#065F46"/>
+        <path d="M1688 720Q1690 620 1700 540Q1735 620 1705 720Z" fill="#10B981"/>
+      </g>
+      <path d="M1630 720H1750L1734 790H1646Z" fill="#92400E"/>
+
+      <!-- Cangkir Teh Porselen Hangat di Kiri -->
+      <ellipse cx="210" cy="740" rx="46" ry="14" fill="#E2E8F0"/>
+      <rect x="180" y="670" width="60" height="65" rx="14" fill="#FFFDF9"/>
+      <path d="M240 685Q262 685 260 705Q258 720 240 720" fill="none" stroke="#B45309" stroke-width="5"/>
+      <path d="M210 655V630" stroke="#A8A29E" stroke-width="4" class="steam"/>
+    </g>
+  </svg>
+
+  <div id="lower"><b>Bu Sari</b><span>Pemilik Usaha (Owner)</span></div>
+
+  <!-- Pop-up Layar Laptop -->
+  <div id="popup">
+    <div id="chrome"><i></i><i></i><i></i><div id="url">kalkurasa-rouge.vercel.app/app/owner</div></div>
+    <iframe id="frame" title="KALKURASA Owner Dashboard"></iframe>
+  </div>
+
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2l7.5 19 2.7-7.8L21 10.5z" fill="#12100E" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+  <div id="vo"></div>
+
+  <!-- Floating Toolbar & Role Switcher -->
+  <div id="topBar">
+    <div id="roleNav">
+      <a href="index.html" class="role-pill">👤 Pelanggan</a>
+      <a href="staff.html" class="role-pill">👨‍🍳 Staff</a>
+      <a href="manager.html" class="role-pill">👩‍💼 Manajer</a>
+      <a href="owner.html" class="role-pill active">👑 Pemilik</a>
+    </div>
+    <button id="subBtn" class="on">💬 Subtitle (H)</button>
+    <button id="restartBtn">↺ Ulang (R)</button>
+  </div>
+
+  <div id="title">
+    <div style="max-width:840px; margin:0 auto; padding:0 24px;">
+      <h1>KALKURASA</h1>
+      <p>Video Demo · Sisi Pemilik Usaha (Bu Sari)</p>
+
+      <!-- Peringatan jika dibuka via file:// -->
+      <div id="fileNotice" style="display:none; margin:28px auto 0; padding:20px 24px; background:#FEF3C7; border:3px solid #12100E; border-radius:20px; box-shadow:5px 5px 0 #12100E; text-align:left; color:#12100E;">
+        <div style="font-size:18px; font-weight:800; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <span style="font-size:22px;">⚠️</span> Demo Otomatis Membutuhkan Web Server (Bukan file://)
+        </div>
+        <p style="font-size:15px; margin:0 0 16px; line-height:1.55; color:#78350F; font-weight:600;">
+          Browser memblokir kontrol otomatis iframe pada URL lokal <code>file:///</code> demi alasan keamanan (Same-Origin Policy). Silakan buka melalui server resmi atau localhost:
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <a href="https://kalkurasa-rouge.vercel.app/demo/owner.html" style="display:inline-flex; align-items:center; gap:8px; background:#D97706; color:#fff; font-weight:800; font-size:15px; padding:12px 24px; border-radius:999px; border:2.5px solid #12100E; text-decoration:none; box-shadow:3px 3px 0 #12100E;">
+            🌐 Buka Demo Pemilik di Vercel →
+          </a>
+          <a href="http://localhost:3000/demo/owner.html" style="display:inline-flex; align-items:center; gap:8px; background:#fff; color:#12100E; font-weight:800; font-size:15px; padding:12px 24px; border-radius:999px; border:2.5px solid #12100E; text-decoration:none; box-shadow:3px 3px 0 #12100E;">
+            💻 Buka Localhost:3000 →
+          </a>
+        </div>
+      </div>
+
+      <button id="startBtn">▶ Mulai Demo Pemilik (Spasi)</button>
+      <small>Cockpit 7 KPI · Proyeksi Arus Kas 14 Hari · Otorisasi Pesanan Besar · Audit Log</small>
+    </div>
+  </div>
+  <div id="count"></div>
+</div>
+
+<script>
+/* ============ KONFIGURASI ============ */
+const q = new URLSearchParams(location.search);
+const SCREEN = { x:+(q.get("sx")||760), y:+(q.get("sy")||320), w:+(q.get("sw")||600), h:+(q.get("sh")||360) };
+const FINAL = { x:210, y:90 };
+const POPUP_W = 1500, CHROME_H = 48+4;
+const OWNER = { email:"owner@demo.test", password:"demo12345", name:"Bu Sari", role:"Pemilik Usaha" };
+
+/* ============ UTIL & STATE ============ */
+const $ = (s)=>document.querySelector(s);
+const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+const stage=$("#stage"), popup=$("#popup"), frame=$("#frame"), cursor=$("#cursor"), ripple=$("#ripple");
+let run = 0;
+let subtitleActive = true;
+const alive = (id)=>{ if(id!==run) throw new Error("cancel"); };
+
+function fit(){ const s=Math.min(innerWidth/1920, innerHeight/1080); stage.style.transform=`translate(-50%,-50%) scale(${s})`; }
+addEventListener("resize",fit); fit();
+
+const doc = ()=>frame.contentDocument;
+const win = ()=>frame.contentWindow;
+
+async function waitFor(fn, timeout=35000){
+  const t0=Date.now();
+  while(Date.now()-t0<timeout){ try{ const v=fn(); if(v) return v; }catch(e){} await sleep(150); }
+  throw new Error("Timeout menunggu elemen/kondisi");
+}
+const byText = (sel,text)=>[...doc().querySelectorAll(sel)].find(e=>e.textContent.replace(/\s+/g," ").toLowerCase().includes(text.toLowerCase()));
+
+function stagePos(el){
+  const r = el.getBoundingClientRect();
+  return { x: FINAL.x + 5 + r.left + r.width/2, y: FINAL.y + 5 + CHROME_H + r.top + r.height/2 };
+}
+async function inView(el){
+  el.scrollIntoView({ behavior:"smooth", block:"center" });
+  await sleep(750);
+}
+async function moveTo(el, dur=750){
+  cursor.style.opacity = 1;
+  const p = stagePos(el);
+  cursor.style.transform = `translate(${p.x}px, ${p.y}px)`;
+  await sleep(dur);
+  return p;
+}
+async function click(el){
+  const p=await moveTo(el);
+  ripple.style.left=p.x+"px"; ripple.style.top=p.y+"px";
+  ripple.classList.remove("go"); void ripple.offsetWidth; ripple.classList.add("go");
+  await sleep(180);
+  el.click();
+  await sleep(500);
+}
+
+function setNative(el, value){
+  const proto = el.tagName==="SELECT"?win().HTMLSelectElement.prototype : el.tagName==="TEXTAREA"?win().HTMLTextAreaElement.prototype : win().HTMLInputElement.prototype;
+  const desc = Object.getOwnPropertyDescriptor(proto,"value");
+  if(desc && desc.set){ desc.set.call(el,value); } else { el.value = value; }
+  if(el._valueTracker){ el._valueTracker.setValue(""); }
+}
+
+async function type(el, text, delay=65){
+  await moveTo(el); el.focus();
+  $("#scene").classList.add("typing");
+  setNative(el,""); el.dispatchEvent(new (win().Event)("input",{bubbles:true}));
+  for(const ch of text){
+    setNative(el, el.value+ch);
+    el.dispatchEvent(new (win().Event)("input",{bubbles:true}));
+    await sleep(delay);
+  }
+  el.dispatchEvent(new (win().Event)("change",{bubbles:true}));
+  $("#scene").classList.remove("typing");
+  await sleep(400);
+}
+
+async function goto(path){
+  frame.src = path;
+  await new Promise(r=>{ frame.onload=()=>r(); });
+  await sleep(1100);
+  $("#url").textContent = "kalkurasa-rouge.vercel.app" + (path==="/"?"":path);
+}
+
+async function say(text, ms){
+  if(subtitleActive){
+    $("#vo").textContent = text;
+    $("#vo").classList.add("show");
+  }
+  if(ms) await sleep(ms);
+}
+const hush = ()=>{ $("#vo").classList.remove("show"); };
+
+async function openPopup(){
+  const s = SCREEN.w/POPUP_W;
+  popup.style.transition="none";
+  popup.style.transform=`translate(${SCREEN.x}px,${SCREEN.y}px) scale(${s})`;
+  void popup.offsetWidth; popup.style.transition="";
+  popup.classList.add("open");
+  $("#scene").classList.add("dim");
+  await sleep(50);
+  popup.style.transform=`translate(${FINAL.x}px,${FINAL.y}px) scale(1)`;
+  await sleep(950);
+}
+async function closePopup(){
+  const s = SCREEN.w/POPUP_W;
+  cursor.style.opacity=0;
+  popup.style.transform=`translate(${SCREEN.x}px,${SCREEN.y}px) scale(${s})`;
+  $("#scene").classList.remove("dim");
+  await sleep(850);
+  popup.classList.remove("open");
+}
+
+/* ============ SKENARIO DEMO PEMILIK USAHA (BU SARI) ============ */
+async function scenario(id){
+  const A=()=>alive(id);
+
+  // BAB 1: Perkenalan Bu Sari
+  $("#lower").classList.add("show");
+  await say("Halo! Ini Bu Sari, Pemilik Usaha Kalkurasa. Sebagai pemilik bisnis kuliner, Bu Sari memantau kesehatan kas, margin laba, dan pertumbuhan pesanan.", 6000); A();
+  hush();
+
+  // BAB 2: Buka Terminal Laptop Eksekutif
+  await say("Bu Sari membuka laptop eksekutif untuk meninjau cockpit performa bisnis hari ini.", 2500); A();
+  await openPopup(); A();
+  await goto("/login"); A();
+
+  // BAB 3: Masuk sebagai Pemilik Usaha (Owner)
+  await say("Bu Sari masuk ke sistem menggunakan akun Pemilik Usaha.", 2500); A();
+  
+  const ownerQuickBtn = byText("button, div", "owner@demo.test") || byText("button", "Bu Sari");
+  if(ownerQuickBtn){
+    await click(ownerQuickBtn); A();
+    await sleep(600);
+  } else {
+    const email = await waitFor(()=>doc().querySelector("#email")); A();
+    await type(email, OWNER.email, 50); A();
+    await type(doc().querySelector("#password"), OWNER.password, 65); A();
+  }
+
+  const submitLogin = doc().querySelector("form button[type=submit]");
+  if(submitLogin){
+    await click(submitLogin); A();
+  }
+
+  // Tunggu redirect ke dashboard owner
+  await waitFor(()=>win().location.pathname.includes("/owner") || win().location.pathname.includes("/app"), 25000); A();
+  if(!win().location.pathname.includes("/owner")){
+    await goto("/app/owner"); A();
+  }
+  await sleep(1400);
+
+  // BAB 4: Eksplorasi Cockpit 7 KPI Finansial & Operasional
+  await say("Dashboard Pemilik Usaha menyajikan Cockpit 7 KPI: Proyeksi Omzet, Rata-rata Margin, Arus Kas Bersih, dan Rasio Penerimaan Pesanan.", 5500); A();
+  win().scrollTo({top: 140, behavior:"smooth"});
+  await sleep(2400); A();
+
+  // BAB 5: Beralih ke Grafik Proyeksi Arus Kas 14 Hari
+  await say("Bu Sari membuka tab Arus Kas & Margin untuk meninjau grafik proyeksi arus kas harian 14 hari ke depan.", 4500); A();
+  const cashTab = byText("button", "Arus Kas & Margin") || byText("button", "Arus Kas") || byText("a[href*='kas']", "Kas");
+  if(cashTab){
+    await click(cashTab); A();
+    await sleep(1500);
+  } else {
+    await goto("/app/kas"); A();
+  }
+
+  await say("Grafik memetakan penerimaan DP pelanggan versus pengeluaran belanja bahan, memastikan saldo selalu berada di atas ambang batas aman kas.", 6000); A();
+  win().scrollTo({top: 260, behavior:"smooth"});
+  await sleep(2800); A();
+
+  // BAB 6: Otorisasi & Keputusan Pesanan Bernilai Besar
+  await say("Bu Sari memeriksa Antrean Pesanan Bernilai Besar yang memerlukan persetujuan pemilik usaha.", 4500); A();
+  if(win().location.pathname!=="/app/owner"){
+    await goto("/app/owner"); A();
+  }
+  const decisionTab = byText("button", "Keputusan & Pesanan") || byText("button", "Keputusan");
+  if(decisionTab){
+    await click(decisionTab); A();
+    await sleep(1200);
+  }
+  win().scrollTo({top: 320, behavior:"smooth"});
+  await sleep(2500); A();
+
+  // BAB 7: Rekam Jejak Audit Log Transparan
+  await say("Untuk memastikan akuntabilitas, Bu Sari membuka menu Audit Log Transaksi.", 3500); A();
+  await goto("/app/audit"); A();
+
+  await say("Setiap transaksi, keputusan mesin 4 gerbang, dan tindakan override tercatat secara abadi dan tidak dapat diubah (immutable).", 5500); A();
+  win().scrollTo({top: 220, behavior:"smooth"});
+  await sleep(2800); A();
+
+  // BAB 8: Selesai & Penutup
+  hush();
+  await closePopup(); A();
+  await say("Dengan visibilitas finansial dan kendali menyeluruh, Kalkurasa memberikan ketenangan pikiran dan pertumbuhan bisnis yang pasti bagi pemilik usaha!", 6000); A();
+  hush();
+  $("#lower").classList.remove("show");
+}
+
+/* ============ KONTROL ============ */
+if(location.protocol==="file:"){
+  const fn = $("#fileNotice");
+  if(fn) fn.style.display="block";
+  const startBtn = $("#startBtn");
+  if(startBtn){
+    startBtn.textContent = "🌐 Buka Demo di Vercel (Produksi) →";
+    startBtn.onclick = () => {
+      window.open("https://kalkurasa-rouge.vercel.app/demo/owner.html", "_blank");
+    };
+  }
+}
+
+async function start(){
+  if(location.protocol==="file:"){
+    window.open("https://kalkurasa-rouge.vercel.app/demo/owner.html", "_blank");
+    return;
+  }
+  run++; const id=run;
+  $("#title").classList.add("hide");
+  hideAll();
+
+  const c=$("#count"); c.style.display="grid";
+  for(const n of [3,2,1]){ c.textContent=n; await sleep(900); if(id!==run) return; }
+  c.style.display="none";
+  try{
+    await scenario(id);
+  }catch(e){
+    if(e.message!=="cancel"){
+      console.error(e);
+      say("Terhenti: "+e.message+" (cek koneksi & server)", 0);
+    }
+  }
+}
+
+function hideAll(){
+  popup.classList.remove("open");
+  cursor.style.opacity=0;
+  $("#lower").classList.remove("show");
+  $("#scene").classList.remove("dim");
+  hush();
+  frame.removeAttribute("src");
+}
+
+$("#startBtn").onclick=start;
+
+// Toggle Subtitle
+$("#subBtn").onclick = ()=>{
+  subtitleActive = !subtitleActive;
+  $("#subBtn").textContent = subtitleActive ? "💬 Subtitle (H)" : "🚫 Subtitle Mati (H)";
+  $("#subBtn").classList.toggle("on", subtitleActive);
+  document.body.classList.toggle("novo", !subtitleActive);
+};
+
+$("#restartBtn").onclick = ()=>{
+  run++; hideAll(); $("#title").classList.remove("hide");
+};
+
+addEventListener("keydown",(e)=>{
+  if(e.key===" "||e.key==="Enter"){
+    if(!$("#title").classList.contains("hide")){
+      e.preventDefault(); start();
+    }
+  }
+  if(e.key.toLowerCase()==="h"){
+    $("#subBtn").click();
+  }
+  if(e.key.toLowerCase()==="r"){
+    $("#restartBtn").click();
+  }
+});
+</script>
+</body>
+</html>
+
