@@ -86,6 +86,7 @@ func (g *Guard) Authenticate() gin.HandlerFunc {
 
 		if fromCookie && isUnsafeMethod(c.Request.Method) {
 			if origin := c.GetHeader("Origin"); origin != "" && !httpx.OriginAllowed(origin, g.AllowedOrigins) {
+				log.Printf("WARN CSRF origin mismatch: received Origin %q, allowed %v", origin, g.AllowedOrigins)
 				httpx.Forbidden(c, "Permintaan ditolak: asal permintaan tidak diizinkan.")
 				return
 			}
